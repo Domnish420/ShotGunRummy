@@ -36,6 +36,10 @@ const DEFS := {
 	"switcheroo": {"name": "Switcheroo", "icon": "🔄", "text": "Swap your whole hand with another player's.", "copies": 1, "needs": "player"},
 	"bad_trade": {"name": "Bad Trade", "icon": "🤝", "text": "Swap 2 random cards with another player.", "copies": 1, "needs": "player"},
 	"chaos": {"name": "Chaos", "icon": "🌀", "text": "Everyone passes a random card to the player on their left.", "copies": 1, "needs": ""},
+	"spotlight": {"name": "Spotlight", "icon": "🔦", "text": "A player's whole hand is shown to everyone until their next turn ends.", "copies": 1, "needs": "player"},
+	"flashbang": {"name": "Flashbang", "icon": "💥", "text": "Every other player shows 2 random cards until their next turn ends.", "copies": 1, "needs": ""},
+	"revolver": {"name": "Revolver", "icon": "🔫", "text": "A player must put cards down on their next turn, or play Russian roulette (1 in 6: lose 2 health).", "copies": 1, "needs": "player"},
+	"double_down": {"name": "Double Down", "icon": "🎲", "text": "A player must draw 2 cards on their next turn, from either pile.", "copies": 1, "needs": "player"},
 	# the table
 	"sticky_fingers": {"name": "Sticky Fingers", "icon": "✋", "text": "Steal a card from a meld. A meld left with 2 cards goes to the discard pile.", "copies": 2, "needs": "meld_card"},
 	"dumpster_dive": {"name": "Dumpster Dive", "icon": "🗑️", "text": "Take the top 3 cards of the discard pile.", "copies": 1, "needs": ""},

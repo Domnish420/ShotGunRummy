@@ -32,6 +32,8 @@ extends RefCounted
 ##  - Nobody can put cards down (meld, lay off, swap) on their first turn of a
 ##    round.
 ##  - Trump cards can't be discarded (unless you hold nothing but trumps).
+##  - Russian roulette (the Revolver item): 1 live round in 6; a hit costs 2
+##    health.
 ##
 ## Shotgun:
 ##  - Everyone has 4 health.
@@ -46,7 +48,7 @@ extends RefCounted
 const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
 
-## kind: round_start, trump_changed, turn_start, turn_skipped, draw, meld, layoff, swap, discard,
+## kind: round_start, trump_changed, roulette, turn_start, turn_skipped, draw, meld, layoff, swap, discard,
 ## item_used, heal, damage, eliminated, stock_reshuffled, round_end, shot,
 ## gun_empty, match_end.
 signal event(kind: String, data: Dictionary)
@@ -66,6 +68,9 @@ class Player:
 	var score: int = 0
 	var rounds_won: int = 0
 	var turns_taken: int = 0 # this round
+	var exposed: bool = false # Spotlight: whole hand face up until their turn ends
+	var ultimatum: bool = false # Revolver: put cards down next turn or play roulette
+	var extra_draws: int = 0 # Double Down: cards still to draw on top of the usual 1
 
 	func _init(p_seat: int, p_name: String) -> void:
 		seat = p_seat
@@ -85,6 +90,8 @@ var options := {
 	"trump_cards": true,
 	"no_placing_first_turn": true,
 	"no_discarding_trumps": true,
+	"roulette_chambers": 6,
+	"roulette_damage": 2,
 }
 var rng := RandomNumberGenerator.new()
 var players: Array = []
@@ -103,6 +110,7 @@ var winner := -1
 var trump_rank := 0 # this round's wild rank, 0 = none
 var drawn_from_discard := ""
 var items_used_this_turn := 0
+var placed_this_turn := false
 
 var _melded_at_turn_start := false
 var _reshuffles := 0
@@ -285,6 +293,9 @@ func start_round() -> Dictionary:
 		p.has_melded = false
 		p.turns_taken = 0
 		p.cuffed = false
+		p.exposed = false
+		p.ultimatum = false
+		p.extra_draws = 0
 
 	var order := _seats_from(next_alive(dealer))
 	var deck := _shuffle(Cards.create_deck())
@@ -333,8 +344,16 @@ func _begin_turn() -> void:
 	drawn_from_discard = ""
 	items_used_this_turn = 0
 	_melded_at_turn_start = current().has_melded
+	placed_this_turn = false
 	current().turns_taken += 1
 	_emit("turn_start", {"seat": turn})
+
+
+## Spotlight and Flashbang wear off when the revealed player's turn ends.
+func _end_reveals(p: Player) -> void:
+	p.exposed = false
+	for c in p.hand:
+		c.erase("shown")
 
 
 ## Joker Paint wears off at the end of the turn, unless the card was melded.
@@ -364,6 +383,7 @@ func _place_guard(seat: int) -> String:
 
 
 func _next_turn() -> void:
+	_end_reveals(current())
 	for i in range(players.size()):
 		turn = next_alive(turn)
 		var p: Player = players[turn]
@@ -402,10 +422,21 @@ func draw_stock(seat: int) -> Dictionary:
 		_emit("draw", {"seat": seat, "source": "stock", "item": true})
 		return _ok({"card": card, "item": true})
 	current().hand.append(card)
-	phase = "play"
+	var again := _after_draw()
 	# which card you drew stays secret
-	_emit("draw", {"seat": seat, "source": "stock", "item": false})
-	return _ok({"card": card, "item": false})
+	_emit("draw", {"seat": seat, "source": "stock", "item": false, "again": again})
+	return _ok({"card": card, "item": false, "again": again})
+
+
+## After a playing card is drawn: on to playing, unless Double Down means
+## drawing another. Returns true if there's another draw to make.
+func _after_draw() -> bool:
+	var p := current()
+	if p.extra_draws > 0:
+		p.extra_draws -= 1
+		return true
+	phase = "play"
+	return false
 
 
 func draw_discard(seat: int) -> Dictionary:
@@ -417,9 +448,9 @@ func draw_discard(seat: int) -> Dictionary:
 	var card: Dictionary = discard_pile.pop_back()
 	current().hand.append(card)
 	drawn_from_discard = card["id"]
-	phase = "play"
-	_emit("draw", {"seat": seat, "source": "discard", "card": card})
-	return _ok({"card": card})
+	var again := _after_draw()
+	_emit("draw", {"seat": seat, "source": "discard", "card": card, "again": again})
+	return _ok({"card": card, "again": again})
 
 
 func _reshuffle_stock() -> bool:
@@ -449,6 +480,7 @@ func meld(seat: int, card_ids: Array) -> Dictionary:
 	var m := {"id": "m%d" % _meld_counter, "type": kind, "cards": Cards.sorted_meld(cards, kind, trump_rank), "owner": seat}
 	melds.append(m)
 	p.has_melded = true
+	placed_this_turn = true
 	_emit("meld", {"seat": seat, "meld": m})
 	_check_gone_out(p)
 	return _ok({"meld": m})
@@ -472,6 +504,7 @@ func lay_off(seat: int, card_ids: Array, meld_id: String) -> Dictionary:
 	m["type"] = kind
 	m["cards"] = Cards.sorted_meld(m["cards"] + cards, kind, trump_rank)
 	p.has_melded = true
+	placed_this_turn = true
 	_emit("layoff", {"seat": seat, "meld": m, "cards": cards})
 	_check_gone_out(p)
 	return _ok({"meld": m})
@@ -554,6 +587,7 @@ func swap_trump(seat: int, meld_id: String, natural_id: String, trump_id: String
 	var fresh := {"id": "m%d" % _meld_counter, "type": new_kind, "cards": Cards.sorted_meld(rest + [trump], new_kind, trump_rank), "owner": seat}
 	melds.append(fresh)
 	p.has_melded = true
+	placed_this_turn = true
 	_emit("swap", {"seat": seat, "meld": m, "natural": natural, "trump": trump, "new_meld": fresh})
 	_check_gone_out(p)
 	return _ok({"meld": fresh})
@@ -580,9 +614,26 @@ func discard(seat: int, card_id: String) -> Dictionary:
 	_remove_cards(p, cards)
 	discard_pile.append(cards[0])
 	_emit("discard", {"seat": seat, "card": cards[0]})
-	if not _check_gone_out(p):
-		_next_turn()
+	if _check_gone_out(p):
+		return _ok({"card": cards[0]})
+	if p.ultimatum and can_place(seat):
+		p.ultimatum = false
+		if not placed_this_turn and _russian_roulette(p):
+			return _ok({"card": cards[0]}) # they didn't survive it
+	_next_turn()
 	return _ok({"card": cards[0]})
+
+
+## Revolver: one live round in six. Returns true if the player was knocked
+## out (their turn has already moved on).
+func _russian_roulette(p: Player) -> bool:
+	var chambers := int(options["roulette_chambers"])
+	var hit := rng.randi_range(1, chambers) == 1
+	var dmg := int(options["roulette_damage"]) if hit else 0
+	_emit("roulette", {"seat": p.seat, "hit": hit, "damage": dmg})
+	if hit:
+		damage(p.seat, dmg, "roulette")
+	return not p.alive or phase == "match_over"
 
 
 func _cards_from(pool: Array, ids: Array) -> Array:
@@ -669,6 +720,15 @@ func item_targets(seat: int, item_id: String) -> Array:
 			"shakedown":
 				# never strip someone's last card: that would hand them the round
 				if p.hand.size() >= 2:
+					out.append(p.seat)
+			"spotlight":
+				if not p.exposed and not p.hand.is_empty():
+					out.append(p.seat)
+			"revolver":
+				if not p.ultimatum:
+					out.append(p.seat)
+			"double_down":
+				if p.extra_draws == 0:
 					out.append(p.seat)
 			_:
 				out.append(p.seat)
@@ -757,6 +817,13 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 		"tarot":
 			if trump_rank <= 0:
 				return "There's no trump this round."
+		"flashbang":
+			var anyone := false
+			for o in others(seat):
+				if not o.hand.is_empty():
+					anyone = true
+			if not anyone:
+				return "Nobody has any cards to show."
 	return ""
 
 
@@ -933,6 +1000,28 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 			trump_rank = trump_rank % 13 + 1
 			_emit("trump_changed", {"from": old, "to": trump_rank})
 			return {"text": "%s turns a tarot card: trumps are now %s" % [p.name, Cards.rank_label(trump_rank)]}
+		"spotlight":
+			var lit: Player = players[target]
+			lit.exposed = true
+			return {"text": "%s shines a spotlight on %s's hand: %s" % [p.name, lit.name, Cards.cards_text(lit.hand)]}
+		"flashbang":
+			var shown := []
+			for o in others(p.seat):
+				var pool: Array = o.hand.duplicate()
+				for i in range(mini(2, pool.size())):
+					var c: Dictionary = _random_card(pool)
+					pool.erase(c)
+					c["shown"] = true
+					shown.append("%s: %s" % [o.name, Cards.card_name(c)])
+			return {"text": "%s sets off a flashbang. %s" % [p.name, ", ".join(shown)]}
+		"revolver":
+			var marked: Player = players[target]
+			marked.ultimatum = true
+			return {"text": "%s slides the revolver to %s: put cards down next turn, or spin it" % [p.name, marked.name]}
+		"double_down":
+			var loaded: Player = players[target]
+			loaded.extra_draws = 1
+			return {"text": "%s doubles down on %s: they draw 2 cards next turn" % [p.name, loaded.name]}
 		"joker_paint":
 			for c in p.hand:
 				if c["id"] == choice:
@@ -1033,7 +1122,8 @@ func snapshot(view_seat: int) -> Dictionary:
 			"seat": p.seat, "name": p.name, "hp": p.hp, "max_hp": p.max_hp, "alive": p.alive,
 			"cuffed": p.cuffed, "sawed": p.sawed, "has_melded": p.has_melded,
 			"score": p.score, "rounds_won": p.rounds_won, "turns_taken": p.turns_taken,
-			"hand": p.hand.duplicate(true) if mine else _hidden(p.hand.size(), "h%d" % p.seat),
+			"hand": p.hand.duplicate(true) if mine or p.exposed else _hidden_hand(p),
+			"exposed": p.exposed, "ultimatum": p.ultimatum, "extra_draws": p.extra_draws,
 			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
 		})
 	return {
@@ -1043,6 +1133,7 @@ func snapshot(view_seat: int) -> Dictionary:
 		"burned": _hidden(burned.size(), "b"), "gun": gun.duplicate() if gun != null else null,
 		"last_result": last_result.duplicate(true), "winner": winner, "trump_rank": trump_rank,
 		"drawn_from_discard": drawn_from_discard, "items_used_this_turn": items_used_this_turn,
+		"placed_this_turn": placed_this_turn,
 		"melded_at_turn_start": _melded_at_turn_start,
 	}
 
@@ -1063,6 +1154,9 @@ func load_snapshot(d: Dictionary) -> void:
 		p.score = pd["score"]
 		p.rounds_won = pd["rounds_won"]
 		p.turns_taken = pd["turns_taken"]
+		p.exposed = pd["exposed"]
+		p.ultimatum = pd["ultimatum"]
+		p.extra_draws = pd["extra_draws"]
 		p.hand = pd["hand"]
 		p.items = pd["items"]
 		players.append(p)
@@ -1080,7 +1174,18 @@ func load_snapshot(d: Dictionary) -> void:
 	trump_rank = d["trump_rank"]
 	drawn_from_discard = d["drawn_from_discard"]
 	items_used_this_turn = d["items_used_this_turn"]
+	placed_this_turn = d["placed_this_turn"]
 	_melded_at_turn_start = d["melded_at_turn_start"]
+
+
+## Someone else's hand: face-down placeholders, except cards a Flashbang
+## turned face up.
+func _hidden_hand(p: Player) -> Array:
+	var out := _hidden(p.hand.size(), "h%d" % p.seat)
+	for i in range(p.hand.size()):
+		if p.hand[i].get("shown", false):
+			out[i] = p.hand[i].duplicate()
+	return out
 
 
 func _hidden(count: int, tag: String) -> Array:

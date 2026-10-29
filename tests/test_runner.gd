@@ -17,7 +17,8 @@ func _init() -> void:
 		"test_deck", "test_points", "test_trump_rotation", "test_trump_runs", "test_trump_sets",
 		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_no_discarding_trumps",
 		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
-		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day",
+		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -349,6 +350,75 @@ func test_garbage_day() -> void:
 	check(g.players[1].hand.size() == before + 4, "they took the lot")
 	check(g.discard_pile.is_empty(), "pile is empty")
 	check(g.item_blocker(0, _give_item(g, 0, "garbage_day", 8)) != "", "can't use it on an empty pile")
+
+
+func test_spotlight() -> void:
+	var g := new_game(2)
+	g.use_item(0, _give_item(g, 0, "spotlight"), 1)
+	check(g.players[1].exposed, "their hand is on show")
+	var view := g.snapshot(0)
+	check(not view["players"][1]["hand"][0].get("hidden", false), "and visible to everyone else")
+	draw_playing_card(g, 0)
+	g.discard(0, g.players[0].hand[0]["id"])
+	check(g.players[1].exposed, "still on show during their turn")
+	draw_playing_card(g, 1)
+	g.discard(1, g.players[1].hand[0]["id"])
+	check(not g.players[1].exposed, "hidden again once their turn ends")
+
+
+func test_flashbang() -> void:
+	var g := new_game(3)
+	g.use_item(0, _give_item(g, 0, "flashbang"))
+	for seat in [1, 2]:
+		var shown := 0
+		for c in g.snapshot(0)["players"][seat]["hand"]:
+			if not c.get("hidden", false):
+				shown += 1
+		check(shown == 2, "seat %d shows exactly 2 cards (%d)" % [seat + 1, shown])
+	var mine := 0
+	for c in g.players[0].hand:
+		if c.get("shown", false):
+			mine += 1
+	check(mine == 0, "yours stay hidden")
+
+
+func test_revolver() -> void:
+	var g := new_game(2, 7)
+	past_first_turn(g)
+	g.options["roulette_chambers"] = 1 # always the live round, for the test
+	g.use_item(0, _give_item(g, 0, "revolver"), 1)
+	check(g.players[1].ultimatum, "seat 2 has the revolver")
+	draw_playing_card(g, 0)
+	g.discard(0, g.players[0].hand[0]["id"])
+	# seat 2 puts nothing down
+	draw_playing_card(g, 1)
+	g.discard(1, g.players[1].hand[0]["id"])
+	check(g.players[1].hp == 2, "bang: 4 - 2 = 2 health (got %d)" % g.players[1].hp)
+	check(not g.players[1].ultimatum, "only for that one turn")
+	# putting cards down means no roulette
+	g.use_item(0, _give_item(g, 0, "revolver", 8), 1)
+	draw_playing_card(g, 0)
+	g.discard(0, g.players[0].hand[0]["id"])
+	g.players[1].hand = cards("5H 6H 7H KD")
+	g.stock.append(Cards.parse("QS"))
+	g.draw_stock(1)
+	g.meld(1, ["5H", "6H", "7H"])
+	g.discard(1, "QS")
+	check(g.players[1].hp == 2, "melded, so no roulette")
+
+
+func test_double_down() -> void:
+	var g := new_game(2)
+	g.use_item(0, _give_item(g, 0, "double_down"), 1)
+	draw_playing_card(g, 0)
+	g.discard(0, g.players[0].hand[0]["id"])
+	var before: int = g.players[1].hand.size()
+	g.stock.append(Cards.parse("KD"))
+	var r := g.draw_stock(1)
+	check(r["again"] and g.phase == "draw", "after one card they must draw again")
+	var r2 := g.draw_discard(1)
+	check(r2["ok"] and not r2["again"] and g.phase == "play", "second card from the discard pile, then play")
+	check(g.players[1].hand.size() == before + 2, "2 cards drawn")
 
 
 # ------------------------------------------------------------------ table

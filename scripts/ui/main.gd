@@ -32,6 +32,7 @@ var _overlay_kind := ""
 var _last_shot_text := ""
 var _hand_hidden := false # pass-and-play: your cards stay face down until you take the phone
 var _waiting_for_deal := false
+var _drawing_again := false # Double Down: first of the two cards is drawn
 var _ip_edit: LineEdit
 var _name_edit: LineEdit
 
@@ -174,6 +175,10 @@ func _flags(p) -> String:
 		f += " ⛓️"
 	if p.sawed:
 		f += " 🪚"
+	if p.ultimatum:
+		f += " 🔫"
+	if p.extra_draws > 0:
+		f += " 🎲"
 	return f
 
 
@@ -598,6 +603,16 @@ func _ignore_result(_res: Dictionary) -> void:
 
 func _on_game_event(kind: String, d: Dictionary) -> void:
 	match kind:
+		"roulette":
+			var who := _name(d["seat"])
+			if d["hit"]:
+				_log("%s spins the revolver... BANG. -%d health." % [who, d["damage"]])
+				world.announce("BANG!\n%s LOSES %d" % [who, d["damage"]])
+				_flash(Palette.RED)
+				_shake()
+			else:
+				_log("%s spins the revolver... click. They live." % who)
+				world.announce("CLICK.\n%s LIVES" % who)
 		"trump_changed":
 			var to_name := trump_name(int(d["to"]))
 			_log("The trump changes: %s are wild now." % to_name.to_lower().capitalize())
@@ -685,6 +700,7 @@ func _after_action() -> void:
 				selected_item = ""
 				lit_card = ""
 				message = ""
+				_drawing_again = false
 				if hide_hands:
 					_hand_hidden = true
 					_refresh()
@@ -708,6 +724,7 @@ func _after_action_online() -> void:
 				selected_item = ""
 				lit_card = ""
 				message = ""
+				_drawing_again = false
 				if _my_turn():
 					Input.vibrate_handheld(60)
 		"shoot", "round_over":
@@ -963,12 +980,19 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 			var blocker := game.item_blocker(seat, selected_item)
 			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
 	var first := not game.can_place(seat)
+	var me = game.players[seat]
+	if game.phase == "draw" and me.extra_draws > 0:
+		return "DOUBLE DOWN: DRAW 2 CARDS THIS TURN"
+	if game.phase == "draw" and _drawing_again:
+		return "DOUBLE DOWN: DRAW 1 MORE CARD"
 	if game.phase == "draw":
 		if first:
 			return "%s, YOUR FIRST TURN: DRAW, THEN DISCARD (NO MELDING YET)" % _name(seat)
 		return "%s, DRAW: TAP THE STOCK OR THE DISCARD PILE" % _name(seat)
 	if first:
 		return "FIRST TURN: NO MELDING YET. DISCARD 1 CARD TO END YOUR TURN" if sel_cards.size() != 1 else "PRESS DISCARD TO END YOUR TURN"
+	if sel_cards.is_empty() and me.ultimatum and not game.placed_this_turn:
+		return "REVOLVER: PUT CARDS DOWN THIS TURN OR SPIN THE CYLINDER"
 	if sel_cards.is_empty():
 		return "MELD, LAY OFF, USE ITEMS, THEN DISCARD 1 CARD"
 	if valid_meld:
@@ -1010,6 +1034,7 @@ func _after_draw_stock(res: Dictionary) -> void:
 		_after_action()
 		return
 	var card: Dictionary = res["card"]
+	_drawing_again = res.get("again", _drawing_again) # items don't use up a Double Down draw
 	_refresh()
 	if res["item"]:
 		var text := "%s It's yours. Now draw again: the stock or the discard pile." % Items.def(card["item"])["text"]
@@ -1027,6 +1052,7 @@ func _draw_discard() -> void:
 
 func _after_draw_discard(res: Dictionary) -> void:
 	if _handle(res):
+		_drawing_again = res.get("again", false)
 		lit_card = res["card"]["id"]
 		_after_action()
 

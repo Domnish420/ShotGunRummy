@@ -352,6 +352,12 @@ func _sync_figures(game, viewer: int) -> void:
 				flags.append("CUFFED")
 			if p.sawed:
 				flags.append("SAWN-OFF")
+			if p.exposed:
+				flags.append("EXPOSED")
+			if p.ultimatum:
+				flags.append("REVOLVER")
+			if p.extra_draws > 0:
+				flags.append("DRAWS 2")
 			if not flags.is_empty():
 				lines.append(" ".join(flags))
 		else:
@@ -494,8 +500,10 @@ func sync(s: Dictionary) -> void:
 		for i in range(hand.size()):
 			var pos := center + side * ((i - (hand.size() - 1) * 0.5) * 0.035)
 			pos.y = TABLE_TOP + 0.002 + 0.001 * i
-			var xf := _flat(pos, yaw + (i - hand.size() * 0.5) * 0.06, false)
-			_place(seen, hand[i]["id"], hand[i], OPP_CARD, xf, false, true, "", "", "", false, stock_xf)
+			# Spotlight / Flashbang: revealed cards lie face up
+			var shown: bool = p.exposed or hand[i].get("shown", false)
+			var xf := _flat(pos, yaw + (i - hand.size() * 0.5) * 0.06, shown)
+			_place(seen, hand[i]["id"], hand[i], OPP_CARD, xf, shown, true, "", "", "", game.is_trump(hand[i]) if shown else false, stock_xf)
 		var items: Array = p.items
 		for i in range(items.size()):
 			var pos := _toward_center(seat_pos, 0.2) + side * (0.22 + i * 0.06)

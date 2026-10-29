@@ -105,6 +105,10 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | ✋ Sticky Fingers (2) | Steal a card from a meld (it must stay a meld). A meld left with 2 cards goes to the discard pile. |
 | 🗑️ Dumpster Dive (1) | Take the top 3 cards of the discard pile. |
 | 🚮 Garbage Day (1) | A player of your choice takes the whole discard pile. |
+| 🔦 Spotlight (1) | A player's whole hand is shown to everyone until their next turn ends. |
+| 💥 Flashbang (1) | Every other player shows 2 random cards until their next turn ends. |
+| 🔫 Revolver (1) | A player must put cards down on their next turn, or play Russian roulette (1 in 6: lose 2 health). |
+| 🎲 Double Down (1) | A player must draw 2 cards on their next turn, from either pile. |
 | 🔮 Tarot Card (1) | The trump moves to the next rank for the rest of the round. Melds on the table keep their trumps. |
 | 🎭 Joker Paint (2) | A card in your hand is a trump until your turn ends. Meld it to keep it wild. |
 
