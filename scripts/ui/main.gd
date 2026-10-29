@@ -604,6 +604,7 @@ func _ignore_result(_res: Dictionary) -> void:
 func _on_game_event(kind: String, d: Dictionary) -> void:
 	match kind:
 		"roulette":
+			world.roulette(d["seat"], d["hit"])
 			var who := _name(d["seat"])
 			if d["hit"]:
 				_log("%s spins the revolver... BANG. -%d health." % [who, d["damage"]])
@@ -644,6 +645,9 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s discards %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
 		"item_used":
 			_log(str(d["text"]) + ".")
+			world.play_item(d["item"], d["seat"], d["target"])
+			if d["item"] == "flashbang":
+				get_tree().create_timer(0.95).timeout.connect(_flash.bind(Color.WHITE))
 		"damage":
 			_log("%s is down to %d health." % [_name(d["seat"]), d["hp"]])
 		"eliminated":
@@ -868,7 +872,7 @@ func _build_table() -> void:
 func _on_table_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if game == null or overlay_layer.get_child_count() > 0 or world.dealing:
+	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(event.position)
 	match hit.get("kind", ""):
@@ -1152,6 +1156,10 @@ func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
 	if shown.is_empty():
 		shown = item
 	_refresh()
+	# let the item's animation play before the pop-up
+	await get_tree().create_timer(1.4).timeout
+	if game == null:
+		return
 	_show_reveal("%s USES %s" % [_name(_me()), str(Items.def(item["item"])["name"]).to_upper()], shown, text, _after_action)
 
 

@@ -54,6 +54,8 @@ var dealing := false # shuffle/deal animation running; taps should wait
 var _round_seen := 0
 var _deal := {} # while dealing: { "deck": Transform3D, "order": { id: n }, "start": seconds }
 var _resync := false
+var fx_busy := false # an item animation is playing
+var _spots := {} # seat -> SpotLight3D over players whose hand is exposed
 
 
 func _ready() -> void:
@@ -253,6 +255,9 @@ func set_menu_mode(on: bool) -> void:
 		_round_seen = 0
 		_deal = {}
 		dealing = false
+		for k in _spots:
+			_spots[k].queue_free()
+		_spots.clear()
 		for id in _cards:
 			_cards[id].queue_free()
 		_cards.clear()
@@ -551,6 +556,191 @@ func sync(s: Dictionary) -> void:
 			_cards.erase(id)
 
 	_sync_gun(game, viewer)
+	_sync_spots(game, viewer)
+
+
+## A beam of light over anyone whose hand is in the Spotlight.
+func _sync_spots(game, viewer: int) -> void:
+	var n: int = game.players.size()
+	for p in game.players:
+		var want: bool = p.exposed and p.seat != viewer and p.alive
+		if want and not _spots.has(p.seat):
+			var beam := SpotLight3D.new()
+			beam.light_color = Color(1.0, 0.95, 0.8)
+			beam.light_energy = 0.0
+			beam.spot_range = 3.5
+			beam.spot_angle = 16.0
+			add_child(beam)
+			var pos := seat_position(p.seat, viewer, n)
+			beam.look_at_from_position(pos * 0.8 + Vector3(0, 2.4, 0), pos * 0.75, Vector3.FORWARD)
+			beam.create_tween().tween_property(beam, "light_energy", 9.0, 0.4)
+			_spots[p.seat] = beam
+		elif not want and _spots.has(p.seat):
+			_spots[p.seat].queue_free()
+			_spots.erase(p.seat)
+
+
+# ================================================================ items
+
+const ITEM_COLORS := {
+	"cigarettes": Color(0.6, 1.0, 0.6), "medicine": Color(0.5, 1.0, 0.7), "saw": Color(1.0, 0.75, 0.3),
+	"beer": Color(1.0, 0.7, 0.2), "magnifier": Color(0.6, 0.85, 1.0), "phone": Color(0.5, 0.8, 1.0),
+	"handcuffs": Color(0.8, 0.85, 1.0), "adrenaline": Color(1.0, 0.4, 0.4), "shakedown": Color(1.0, 0.35, 0.25),
+	"switcheroo": Color(0.7, 0.6, 1.0), "bad_trade": Color(0.7, 0.6, 1.0), "chaos": Color(0.85, 0.4, 1.0),
+	"sticky_fingers": Color(1.0, 0.6, 0.9), "dumpster_dive": Color(0.6, 0.9, 0.4), "garbage_day": Color(0.6, 0.9, 0.4),
+	"tarot": Color(1.0, 0.8, 0.25), "joker_paint": Color(1.0, 0.8, 0.25), "spotlight": Color(1.0, 0.97, 0.85),
+	"flashbang": Color(1, 1, 1), "revolver": Color(1.0, 0.25, 0.2), "double_down": Color(1.0, 0.85, 0.5),
+}
+const SPINNERS := ["tarot", "joker_paint", "chaos"]
+
+
+## Where a player's things are: your item row, or in front of their seat.
+func _seat_spot(seat: int, height: float = 0.1) -> Vector3:
+	if seat == _viewer:
+		return _cam_home * Vector3(0, -0.13, -0.64)
+	var n: int = _last["game"].players.size() if not _last.is_empty() else 2
+	var pos := _toward_center(seat_position(seat, _viewer, n), 0.25)
+	pos.y = TABLE_TOP + height
+	return pos
+
+
+## A point over the table in front of a seat, for effects.
+func _table_spot(seat: int, height: float) -> Vector3:
+	if seat == _viewer:
+		return Vector3(0, TABLE_TOP + height, 0.8)
+	return _seat_spot(seat, height)
+
+
+## Plays an item: its card rises to the middle of the table, glows, then
+## shoots off at the target (or bursts in place), with a little extra for
+## some items.
+func play_item(item_id: String, user: int, target: int = -1) -> void:
+	fx_busy = true
+	var color: Color = ITEM_COLORS.get(item_id, Palette.PURPLE)
+	var card := Card3D.new()
+	add_child(card)
+	card.setup(Vector2(0.15, 0.2), _back_mat)
+	var key := "item:" + item_id
+	card.set_face(key, textures.material(key, false))
+	card.set_pickable("", "")
+	card.set_shadows(false)
+	var light := OmniLight3D.new()
+	light.light_color = color
+	light.omni_range = 0.7
+	light.light_energy = 0.0
+	light.position = Vector3(0, 0, 0.08)
+	card.add_child(light)
+
+	var start := _seat_spot(user)
+	var center := Vector3(0, 0.72, 0.45)
+	# face the camera (a card's face is its +Z side)
+	var facing := Basis.looking_at(_cam_home.origin - center, Vector3.UP) * Basis(Vector3.UP, PI)
+	card.transform = Transform3D(facing.scaled(Vector3(0.4, 0.4, 0.4)), start)
+	var big := Transform3D(facing.scaled(Vector3(1.9, 1.9, 1.9)), center)
+
+	var t := card.create_tween()
+	t.tween_property(card, "transform", big, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(light, "light_energy", 1.5, 0.4)
+	if SPINNERS.has(item_id):
+		t.tween_method(func(a: float) -> void: card.transform = Transform3D(big.basis * Basis(Vector3.UP, a), center), 0.0, TAU * 2.0, 0.7)
+	else:
+		t.tween_interval(0.55)
+	t.tween_callback(_item_extra.bind(item_id, user, target, color))
+	if target >= 0:
+		var to := _head_of(target) if target != _viewer else _cam_home * Vector3(0, -0.05, -0.5)
+		t.tween_property(card, "transform", Transform3D(facing.scaled(Vector3(0.2, 0.2, 0.2)), to), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		t.tween_callback(_pulse.bind(to, color, 2.5))
+	else:
+		t.tween_property(card, "transform", Transform3D(facing.scaled(Vector3(2.4, 2.4, 2.4)), center), 0.15)
+		t.parallel().tween_property(light, "light_energy", 3.0, 0.15)
+		t.tween_property(card, "transform", Transform3D(facing.scaled(Vector3(0.01, 0.01, 0.01)), center), 0.2)
+	t.tween_callback(card.queue_free)
+	t.tween_callback(func() -> void: fx_busy = false)
+
+
+## A quick flash of coloured light at a spot.
+func _pulse(at: Vector3, color: Color, energy: float = 3.0, time: float = 0.45) -> void:
+	var l := OmniLight3D.new()
+	l.light_color = color
+	l.omni_range = 0.9
+	l.light_energy = energy
+	l.position = at
+	add_child(l)
+	var t := l.create_tween()
+	t.tween_property(l, "light_energy", 0.0, time)
+	t.tween_callback(l.queue_free)
+
+
+## Little glowing blobs that drift up and fade, e.g. smoke or sparks.
+func _puffs(at: Vector3, color: Color, count: int = 6, size: float = 0.05, rise: float = 0.35, glowing: bool = true) -> void:
+	for i in range(count):
+		var sphere := SphereMesh.new()
+		sphere.radius = size
+		sphere.height = size * 2.0
+		var m := _glow(color, 1.5) if glowing else _mat(Color(color, 0.55), 1.0)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		if not glowing:
+			m.albedo_color = Color(color, 0.5)
+		var mi := _mesh(sphere, m, at + Vector3(randf_range(-0.05, 0.05), 0, randf_range(-0.05, 0.05)))
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		var drift := Vector3(randf_range(-0.12, 0.12), rise + randf_range(0, 0.15), randf_range(-0.12, 0.12))
+		var t := mi.create_tween()
+		t.tween_interval(i * 0.06)
+		t.tween_property(mi, "position", mi.position + drift, 0.8)
+		t.parallel().tween_property(mi, "scale", Vector3.ONE * 2.2, 0.8)
+		t.parallel().tween_property(m, "albedo_color:a", 0.0, 0.8)
+		t.tween_callback(mi.queue_free)
+
+
+## The extra bit of each item's animation.
+func _item_extra(item_id: String, user: int, target: int, color: Color) -> void:
+	var stock_top := Vector3(-0.2, TABLE_TOP + 0.06, -0.02)
+	var discard_top := Vector3(0.2, TABLE_TOP + 0.06, -0.02)
+	match item_id:
+		"cigarettes":
+			_puffs(_table_spot(user, 0.25), Color(0.7, 0.7, 0.68), 8, 0.035, 0.5, false)
+		"medicine":
+			_puffs(_table_spot(user, 0.2), color, 6, 0.02, 0.4)
+		"saw":
+			_puffs(shotgun.global_position, Color(1.0, 0.8, 0.4), 10, 0.015, 0.25)
+			_pulse(shotgun.global_position, color, 2.0)
+		"beer":
+			_puffs(stock_top, Color(1.0, 0.5, 0.15), 10, 0.03, 0.45)
+			_pulse(stock_top, color, 2.5)
+		"magnifier":
+			_pulse(stock_top, color, 2.0, 0.9)
+		"dumpster_dive", "garbage_day":
+			_puffs(discard_top, color, 6, 0.03, 0.3)
+		"sticky_fingers":
+			_pulse(Vector3(0, TABLE_TOP + 0.1, 0.2), color, 2.0)
+		"tarot":
+			_pulse(Vector3(0, TABLE_TOP + 0.1, 0.23), Palette.GOLD, 3.0, 0.9)
+		"flashbang":
+			_pulse(Vector3(0, 0.6, 0), Color.WHITE, 30.0, 0.6)
+		"chaos":
+			_puffs(Vector3(0, TABLE_TOP + 0.1, 0), color, 12, 0.03, 0.3)
+		"shakedown", "revolver":
+			if target >= 0 and _figures.has(target):
+				var node: Node3D = _figures[target]["node"]
+				var home := node.transform
+				var tj := node.create_tween()
+				for i in range(4):
+					tj.tween_property(node, "transform", home.translated(Vector3(randf_range(-0.04, 0.04), 0, randf_range(-0.04, 0.04))), 0.05)
+				tj.tween_property(node, "transform", home, 0.08)
+			elif target == _viewer:
+				shake(0.02)
+
+
+## Russian roulette: a red or dull flash at the player.
+func roulette(seat: int, hit: bool) -> void:
+	var at := _head_of(seat) if seat != _viewer else _cam_home * Vector3(0, 0, -0.6)
+	if hit:
+		_pulse(at, Color(1, 0.3, 0.15), 14.0, 0.5)
+		if seat == _viewer:
+			shake(0.07)
+	else:
+		_pulse(at, Color(0.6, 0.6, 0.6), 1.5, 0.3)
 
 
 # ================================================================ dealing
