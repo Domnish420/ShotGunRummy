@@ -18,6 +18,7 @@ const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
 
 const TABLE_TOP := 0.03
+const FLOOR_Y := -0.78
 const TABLE_RX := 0.95 # the table is an oval
 const TABLE_RZ := 1.25
 const TABLE_CARD := Vector2(0.15, 0.215)
@@ -282,10 +283,11 @@ func _toward_center(seat_pos: Vector3, t: float) -> Vector3:
 
 
 func _figure(seat: int, color: Color) -> Dictionary:
-	var built: Dictionary = Props.build_figure(self, color, [0, 1, 2, 1, 0, 2][seat % 6])
+	var built: Dictionary = Props.build_character(self, Props.CHARACTERS[seat % Props.CHARACTERS.size()], FLOOR_Y)
 	var node: Node3D = built["node"]
 	var head: Node3D = built["head"]
 	var eyes: Array = built["eyes"]
+	var anim: AnimationPlayer = built.get("anim", null)
 	var label := Label3D.new()
 	label.font = _font
 	label.font_size = 34
@@ -294,10 +296,10 @@ func _figure(seat: int, color: Color) -> Dictionary:
 	label.outline_modulate = Color(0, 0, 0, 0.9)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
-	label.position = Vector3(0, 1.0, 0)
+	label.position = Vector3(0, 0.95, 0.12)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	node.add_child(label)
-	return {"node": node, "head": head, "eyes": eyes, "label": label, "slumped": false, "seat": seat}
+	return {"node": node, "head": head, "eyes": eyes, "label": label, "anim": anim, "dead": false, "seat": seat}
 
 
 func _sync_figures(game, viewer: int) -> void:
@@ -316,10 +318,18 @@ func _sync_figures(game, viewer: int) -> void:
 		var node: Node3D = f["node"]
 		var pos := seat_position(p.seat, viewer, n)
 		var target := Transform3D(Basis.looking_at(-pos.normalized(), Vector3.UP), pos)
-		if not p.alive:
-			# slumped over in the chair
+		var anim: AnimationPlayer = f.get("anim", null)
+		if not p.alive and anim == null:
+			# no animations: slump over in the chair
 			target.basis = target.basis * Basis(Vector3.RIGHT, -0.9)
 			target.origin.y -= 0.18
+		if not p.alive and not f["dead"]:
+			f["dead"] = true
+			if anim != null and anim.has_animation("Death_A"):
+				anim.play("Death_A")
+		elif p.alive and f["dead"]:
+			f["dead"] = false
+			_sit(anim)
 		_tween(node, "transform", target)
 		for e in f["eyes"]:
 			e.visible = p.alive
@@ -705,6 +715,27 @@ func _item_extra(item_id: String, user: int, target: int, color: Color) -> void:
 				tj.tween_property(node, "transform", home, 0.08)
 			elif target == _viewer:
 				shake(0.02)
+
+
+## Back to sitting and breathing.
+func _sit(anim: AnimationPlayer) -> void:
+	if anim != null and anim.has_animation("Sit_Chair_Idle"):
+		anim.clear_queue()
+		anim.play("Sit_Chair_Idle", 0.3)
+
+
+## The round winner stands up, cheers, and sits back down.
+func cheer(seat: int) -> void:
+	if not _figures.has(seat):
+		return
+	var anim: AnimationPlayer = _figures[seat].get("anim", null)
+	if anim == null or _figures[seat]["dead"]:
+		return
+	anim.clear_queue()
+	anim.play("Sit_Chair_StandUp", 0.2)
+	anim.queue("Cheer")
+	anim.queue("Sit_Chair_Down")
+	anim.queue("Sit_Chair_Idle")
 
 
 ## Russian roulette: a red or dull flash at the player.

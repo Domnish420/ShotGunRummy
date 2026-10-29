@@ -611,6 +611,9 @@ func _on_net_update(events: Array, result: Dictionary) -> void:
 ## Does `action` for this screen's player: straight on the game for
 ## pass-and-play, or as a request to the host online. `then` gets the result.
 func _act(action: String, args: Array, then: Callable) -> void:
+	if world.dealing or world.fx_busy:
+		if action != "next_round" and action != "shoot" and action != "play_again":
+			return # wait for the animation
 	if _online():
 		if _pending_cb.is_valid():
 			return # still waiting on the last one
@@ -681,6 +684,8 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 		"stock_reshuffled":
 			_log("The discard pile is shuffled into a new stock.")
 		"round_end":
+			if d["winner"] >= 0:
+				world.cheer(d["winner"])
 			if d["winner"] < 0:
 				_log("The deck ran dry. Nobody scores.")
 			else:
@@ -718,6 +723,14 @@ func _after_action() -> void:
 				shown_result_round = game.round_num
 				_refresh()
 				_show_round_result()
+				return
+			if overlay_layer.get_child_count() == 0:
+				# something closed the results: bring back what's next
+				_refresh()
+				if game.gun != null:
+					_show_gun(_last_shot_text)
+				else:
+					_show_round_result()
 				return
 		"match_over":
 			_refresh()
@@ -765,9 +778,12 @@ func _after_action_online() -> void:
 				_refresh()
 				_show_round_result()
 				return
-			elif _overlay_kind == "gun":
+			elif _overlay_kind == "gun" or overlay_layer.get_child_count() == 0:
 				_refresh()
-				_show_gun(_last_shot_text)
+				if game.gun != null or _overlay_kind == "gun":
+					_show_gun(_last_shot_text)
+				else:
+					_show_round_result()
 				return
 		"match_over":
 			if not busy_overlay:
@@ -1185,6 +1201,9 @@ func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
 	# let the item's animation play before the pop-up
 	await get_tree().create_timer(1.4).timeout
 	if game == null:
+		return
+	if overlay_layer.get_child_count() > 0 or not (game.phase == "draw" or game.phase == "play"):
+		_after_action() # the round moved on while the animation played
 		return
 	_show_reveal("%s USES %s" % [_name(_me()), str(Items.def(item["item"])["name"]).to_upper()], shown, text, _after_action)
 

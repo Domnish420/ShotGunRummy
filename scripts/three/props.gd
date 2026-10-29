@@ -270,6 +270,67 @@ static func build_figure(parent: Node3D, color: Color, style: int) -> Dictionary
 	return {"node": node, "head": head, "eyes": eyes}
 
 
+## The character models (KayKit, CC0), by name. Seats get them in this order
+## for now; character customisation will let players pick.
+const CHARACTERS := ["Barbarian", "Skeleton_Warrior", "Rogue_Hooded", "Skeleton_Mage", "Knight", "Mage", "Skeleton_Rogue", "Rogue", "Skeleton_Minion"]
+const CHAR_SCALE := 0.62
+const SEAT_HEIGHT := 0.6 # hips above the floor
+const WEAPON_WORDS := ["sword", "shield", "axe", "mug", "staff", "wand", "book", "dagger", "knife", "crossbow", "blade", "quiver", "arrow", "bow", "smoke"]
+
+
+## A seated character in a chair, looking down -Z at the table. Returns
+## { node, head (follows the head bone), anim (AnimationPlayer), eyes: [] }.
+static func build_character(parent: Node3D, character: String, floor_y: float) -> Dictionary:
+	var node := Node3D.new()
+	parent.add_child(node)
+	var scene = load("res://models/characters/%s.glb" % character)
+	if not (scene is PackedScene):
+		var fallback := build_figure(parent, Color(0.2, 0.18, 0.16), 0)
+		node.queue_free()
+		return fallback
+	var model: Node3D = scene.instantiate()
+	model.rotation.y = PI # the models face +Z; the table is at -Z
+	model.scale = Vector3.ONE * CHAR_SCALE
+	# seated: hips just behind the seat point, a chair's height off the floor
+	# (in the sitting pose the hips are 0.48 up and 0.4 back, in model units)
+	var hips_y := floor_y + SEAT_HEIGHT
+	var hips_z := 0.14
+	model.position = Vector3(0, hips_y - 0.48 * CHAR_SCALE, hips_z - 0.4 * CHAR_SCALE)
+	node.add_child(model)
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var lower := str(mi.name).to_lower()
+		for w in WEAPON_WORDS:
+			if lower.contains(w):
+				mi.visible = false
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	# a chair under them
+	var chair := tex_mat("wood", Color(0.45, 0.36, 0.28), 2.0)
+	box(node, Vector3(0.5, 0.05, 0.46), chair, Vector3(0, hips_y - 0.07, hips_z))
+	box(node, Vector3(0.48, 0.7, 0.05), chair, Vector3(0, hips_y + 0.28, hips_z + 0.24), Vector3(-0.08, 0, 0))
+	for corner in [Vector3(-0.22, 0, -0.2), Vector3(0.22, 0, -0.2), Vector3(-0.22, 0, 0.2), Vector3(0.22, 0, 0.2)]:
+		box(node, Vector3(0.04, hips_y - 0.07 - floor_y, 0.04), chair, Vector3(corner.x, (hips_y - 0.07 + floor_y) * 0.5, hips_z + corner.z))
+	# follow the head bone, for aiming the shotgun and placing labels
+	var head := Node3D.new()
+	var skeleton: Skeleton3D = model.find_child("Skeleton3D", true, false)
+	if skeleton != null and skeleton.find_bone("head") >= 0:
+		var att := BoneAttachment3D.new()
+		att.bone_name = "head"
+		skeleton.add_child(att)
+		att.add_child(head)
+	else:
+		head.position = Vector3(0, 0.55, 0.15)
+		node.add_child(head)
+	var anim: AnimationPlayer = model.find_child("AnimationPlayer", true, false)
+	if anim != null:
+		for loop_name in ["Sit_Chair_Idle", "Idle"]:
+			if anim.has_animation(loop_name):
+				anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
+		if anim.has_animation("Sit_Chair_Idle"):
+			anim.play("Sit_Chair_Idle")
+			anim.seek(randf() * anim.current_animation_length, true)
+	return {"node": node, "head": head, "anim": anim, "eyes": []}
+
+
 # ================================================================ the shotgun
 
 ## Barrels point down -Z; the muzzle is at about z = -0.66.

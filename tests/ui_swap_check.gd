@@ -13,6 +13,8 @@ func _initialize() -> void:
 	main.hide_hands = false
 	main._start_from_setup()
 	await process_frame
+	if main.world.dealing:
+		await main.world.deal_finished
 	var g = main.game
 	for p in g.players:
 		p.turns_taken = 2

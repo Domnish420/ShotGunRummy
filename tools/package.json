@@ -1,0 +1,10 @@
+{
+  "name": "shotgun-rummy-tools",
+  "private": true,
+  "type": "module",
+  "description": "Helper scripts for preparing game assets.",
+  "dependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/functions": "4.1.1"
+  }
+}
