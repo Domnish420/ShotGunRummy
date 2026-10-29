@@ -598,6 +598,10 @@ func _ignore_result(_res: Dictionary) -> void:
 
 func _on_game_event(kind: String, d: Dictionary) -> void:
 	match kind:
+		"trump_changed":
+			var to_name := trump_name(int(d["to"]))
+			_log("The trump changes: %s are wild now." % to_name.to_lower().capitalize())
+			world.announce("TRUMP CHANGES\nTO %s" % to_name)
 		"round_start":
 			if d["round"] == 1 and _online():
 				_reset_match_view()
@@ -1086,14 +1090,17 @@ func _use_selected_item() -> void:
 	var item := game.find_item(_me(), selected_item)
 	if item.is_empty():
 		return
-	if Items.needs_target(item["item"]):
-		_show_target_picker(item)
-	else:
-		_use_item(item, -1)
+	match Items.needs(item["item"]):
+		"player":
+			_show_target_picker(item)
+		"meld_card", "hand_card":
+			_show_card_picker(item)
+		_:
+			_use_item(item, -1)
 
 
-func _use_item(item: Dictionary, target: int) -> void:
-	_act("use_item", [item["id"], target], _after_use_item.bind(item, target))
+func _use_item(item: Dictionary, target: int, choice: String = "") -> void:
+	_act("use_item", [item["id"], target, choice], _after_use_item.bind(item, target))
 
 
 func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
@@ -1112,6 +1119,10 @@ func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
 			text = "%s is holding:" % _name(target)
 		"adrenaline":
 			text = "You stole:"
+		"joker_paint":
+			text = "Wild until your turn ends. Meld it to keep it wild."
+		"sticky_fingers":
+			text = str(res["text"]) + ". It's in your hand."
 	if shown.is_empty():
 		shown = item
 	_refresh()
@@ -1253,6 +1264,46 @@ func _show_target_picker(item: Dictionary) -> void:
 	for target in game.item_targets(_me(), item["item"]):
 		box.add_child(_button(_name(target), _closing(_use_item.bind(item, target))))
 	box.add_child(_button("CANCEL", _closing(_after_action)))
+
+
+## Pick a card for Sticky Fingers (from a meld) or Joker Paint (from your hand).
+func _show_card_picker(item: Dictionary) -> void:
+	var def := Items.def(item["item"])
+	var box := _open_overlay(0.94, true, "target")
+	box.add_child(_title(str(def["name"]).to_upper(), Palette.PURPLE.lightened(0.3)))
+	box.add_child(_label(def["text"], 26, Palette.INK, true))
+	var choices: Array = game.item_choices(_me(), item["item"])
+	if Items.needs(item["item"]) == "meld_card":
+		box.add_child(_label("WHICH CARD?", 26, Palette.DIM, true))
+		for m in game.melds:
+			var mine := []
+			for c in m["cards"]:
+				if choices.has(c["id"]):
+					mine.append(c)
+			if mine.is_empty():
+				continue
+			var note := " (falls apart)" if m["cards"].size() <= 3 else ""
+			box.add_child(_label("%s'S MELD: %s%s" % [_name(m["owner"]), Cards.cards_text(m["cards"]), note], 22, Palette.DIM))
+			box.add_child(_card_buttons(mine, item))
+	else:
+		box.add_child(_label("WHICH CARD BECOMES A TRUMP?", 26, Palette.DIM, true))
+		var cards := []
+		for c in game.players[_me()].hand:
+			if choices.has(c["id"]):
+				cards.append(c)
+		box.add_child(_card_buttons(cards, item))
+	box.add_child(_button("CANCEL", _closing(_after_action)))
+
+
+func _card_buttons(cards: Array, item: Dictionary) -> HFlowContainer:
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 8)
+	flow.add_theme_constant_override("v_separation", 8)
+	for c in cards:
+		var b := _button(Cards.card_name(c), _closing(_use_item.bind(item, -1, c["id"])))
+		b.custom_minimum_size = Vector2(110, 64)
+		flow.add_child(b)
+	return flow
 
 
 func _show_round_result() -> void:

@@ -46,7 +46,7 @@ extends RefCounted
 const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
 
-## kind: round_start, turn_start, turn_skipped, draw, meld, layoff, swap, discard,
+## kind: round_start, trump_changed, turn_start, turn_skipped, draw, meld, layoff, swap, discard,
 ## item_used, heal, damage, eliminated, stock_reshuffled, round_end, shot,
 ## gun_empty, match_end.
 signal event(kind: String, data: Dictionary)
@@ -107,6 +107,7 @@ var items_used_this_turn := 0
 var _melded_at_turn_start := false
 var _reshuffles := 0
 var _meld_counter := 0
+var _temp_wild: Array = [] # cards painted wild this turn (Joker Paint)
 
 
 func setup(names: Array, opts: Dictionary = {}, rng_seed: int = -1) -> void:
@@ -327,12 +328,25 @@ func _seats_from(start: int) -> Array:
 
 
 func _begin_turn() -> void:
+	_clear_temp_wild()
 	phase = "draw"
 	drawn_from_discard = ""
 	items_used_this_turn = 0
 	_melded_at_turn_start = current().has_melded
 	current().turns_taken += 1
 	_emit("turn_start", {"seat": turn})
+
+
+## Joker Paint wears off at the end of the turn, unless the card was melded.
+func _clear_temp_wild() -> void:
+	for c in _temp_wild:
+		var melded := false
+		for m in melds:
+			if m["cards"].has(c):
+				melded = true
+		if not melded:
+			c.erase("wild")
+	_temp_wild = []
 
 
 ## May `seat` put cards on the table this turn? Not on their first turn.
@@ -646,20 +660,57 @@ func item_targets(seat: int, item_id: String) -> Array:
 			"handcuffs":
 				if not p.cuffed:
 					out.append(p.seat)
-			"phone":
+			"phone", "switcheroo", "bad_trade":
 				if not p.hand.is_empty():
 					out.append(p.seat)
 			"adrenaline":
 				if not p.items.is_empty():
+					out.append(p.seat)
+			"shakedown":
+				# never strip someone's last card: that would hand them the round
+				if p.hand.size() >= 2:
 					out.append(p.seat)
 			_:
 				out.append(p.seat)
 	return out
 
 
+## Card ids that `item_id` can be used on, for items that need a card picked:
+## a meld card (Sticky Fingers) or a card in your hand (Joker Paint).
+func item_choices(seat: int, item_id: String) -> Array:
+	var out := []
+	match item_id:
+		"sticky_fingers":
+			for m in melds:
+				for c in m["cards"]:
+					if _can_steal(m, c):
+						out.append(c["id"])
+		"joker_paint":
+			for c in players[seat].hand:
+				if not Cards.is_wild(c, trump_rank):
+					out.append(c["id"])
+	return out
+
+
+## A card can be stolen from a meld if what's left is still a meld, or is
+## down to 2 cards (which then go to the discard pile).
+func _can_steal(m: Dictionary, card: Dictionary) -> bool:
+	var rest: Array = m["cards"].duplicate()
+	rest.erase(card)
+	return rest.size() <= 2 or Cards.meld_type(rest, trump_rank) != ""
+
+
+func _meld_with_card(card_id: String) -> Dictionary:
+	for m in melds:
+		for c in m["cards"]:
+			if c["id"] == card_id:
+				return m
+	return {}
+
+
 ## Why this item can't be used right now, or "" if it can.
-## Leave `target` at -1 to ask "could I use this on anyone?".
-func item_blocker(seat: int, item_card_id: String, target: int = -1) -> String:
+## Leave `target` / `choice` empty to ask "could I use this at all?".
+func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
 	var err := _guard(seat)
 	if err != "":
 		return err
@@ -671,13 +722,19 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1) -> String:
 		return "You've already used an item this turn."
 	var item_id: String = card["item"]
 	var p: Player = players[seat]
-	if Items.needs_target(item_id):
-		var targets := item_targets(seat, item_id)
-		if targets.is_empty():
-			return "Nobody to use it on."
-		if target >= 0 and not targets.has(target):
-			return "You can't use it on them."
-		return ""
+	match Items.needs(item_id):
+		"player":
+			var targets := item_targets(seat, item_id)
+			if targets.is_empty():
+				return "Nobody to use it on."
+			if target >= 0 and not targets.has(target):
+				return "You can't use it on them."
+		"meld_card", "hand_card":
+			var choices := item_choices(seat, item_id)
+			if choices.is_empty():
+				return "Nothing to use it on." if item_id == "joker_paint" else "There's nothing on the table you can take."
+			if choice != "" and not choices.has(choice):
+				return "You can't use it on that card."
 	match item_id:
 		"cigarettes":
 			if p.hp >= p.max_hp:
@@ -691,24 +748,36 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1) -> String:
 		"saw":
 			if p.sawed:
 				return "The barrel is already sawn off."
+		"dumpster_dive", "garbage_day":
+			if discard_pile.is_empty():
+				return "The discard pile is empty."
+		"bad_trade":
+			if p.hand.is_empty():
+				return "You have no cards to trade."
+		"tarot":
+			if trump_rank <= 0:
+				return "There's no trump this round."
 	return ""
 
 
 ## Uses an item. The result has "text" (public), plus "reveal" (a card) and
 ## "private" (true if only this player may see it) when something is revealed.
-func use_item(seat: int, item_card_id: String, target: int = -1) -> Dictionary:
-	var blocker := item_blocker(seat, item_card_id, target)
+func use_item(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> Dictionary:
+	var blocker := item_blocker(seat, item_card_id, target, choice)
 	if blocker != "":
 		return _fail(blocker)
 	var card := find_item(seat, item_card_id)
 	var item_id: String = card["item"]
-	if Items.needs_target(item_id) and target < 0:
+	var needs: String = Items.needs(item_id)
+	if needs == "player" and target < 0:
 		return _fail("Pick a player to use it on.")
+	if (needs == "meld_card" or needs == "hand_card") and choice == "":
+		return _fail("Pick a card to use it on.")
 	var p := current()
 	p.items.erase(card)
 	items_used_this_turn += 1
 
-	var fx := _apply_item(p, item_id, target)
+	var fx := _apply_item(p, item_id, target, choice)
 	var public := {"seat": seat, "item": item_id, "target": target, "text": fx["text"]}
 	if fx.has("reveal") and not fx.get("private", false):
 		public["reveal"] = fx["reveal"]
@@ -728,7 +797,11 @@ func use_item(seat: int, item_card_id: String, target: int = -1) -> Dictionary:
 	return result
 
 
-func _apply_item(p: Player, item_id: String, target: int) -> Dictionary:
+func _random_card(cards: Array) -> Dictionary:
+	return cards[rng.randi_range(0, cards.size() - 1)]
+
+
+func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dictionary:
 	match item_id:
 		"cigarettes":
 			return {"text": "%s lights a cigarette. +1 health" % p.name, "hp_delta": 1}
@@ -746,11 +819,10 @@ func _apply_item(p: Player, item_id: String, target: int) -> Dictionary:
 			return {"text": "%s saws off the barrel. Their next shell hits for 2" % p.name}
 		"phone":
 			var called: Player = players[target]
-			var seen: Dictionary = called.hand[rng.randi_range(0, called.hand.size() - 1)]
-			return {"text": "%s makes a call about %s's hand" % [p.name, called.name], "reveal": seen, "private": true}
+			return {"text": "%s makes a call about %s's hand" % [p.name, called.name], "reveal": _random_card(called.hand), "private": true}
 		"adrenaline":
 			var victim: Player = players[target]
-			var stolen: Dictionary = victim.items[rng.randi_range(0, victim.items.size() - 1)]
+			var stolen: Dictionary = _random_card(victim.items)
 			victim.items.erase(stolen)
 			p.items.append(stolen)
 			return {"text": "%s steals an item from %s" % [p.name, victim.name], "reveal": stolen, "private": true}
@@ -758,6 +830,115 @@ func _apply_item(p: Player, item_id: String, target: int) -> Dictionary:
 			if rng.randf() < 0.5:
 				return {"text": "%s swallows the expired meds. +2 health" % p.name, "hp_delta": 2}
 			return {"text": "%s swallows the expired meds. Bad batch. -1 health" % p.name, "hp_delta": -1}
+		"shakedown":
+			var mark: Player = players[target]
+			# a random card that isn't a trump, if they have one
+			var pool := []
+			for c in mark.hand:
+				if not Cards.is_wild(c, trump_rank):
+					pool.append(c)
+			if pool.is_empty():
+				pool = mark.hand
+			var dropped: Dictionary = _random_card(pool)
+			mark.hand.erase(dropped)
+			discard_pile.append(dropped)
+			return {"text": "%s shakes down %s, who drops %s on the discard pile" % [p.name, mark.name, Cards.card_name(dropped)], "reveal": dropped, "private": false}
+		"switcheroo":
+			var other: Player = players[target]
+			var mine := p.hand
+			p.hand = other.hand
+			other.hand = mine
+			drawn_from_discard = ""
+			return {"text": "%s swaps hands with %s" % [p.name, other.name]}
+		"bad_trade":
+			var partner: Player = players[target]
+			var n := mini(2, mini(p.hand.size(), partner.hand.size()))
+			var give := []
+			var take := []
+			var mine_left: Array = p.hand.duplicate()
+			var theirs_left: Array = partner.hand.duplicate()
+			for i in range(n):
+				var g: Dictionary = _random_card(mine_left)
+				mine_left.erase(g)
+				give.append(g)
+				var t: Dictionary = _random_card(theirs_left)
+				theirs_left.erase(t)
+				take.append(t)
+			for c in give:
+				p.hand.erase(c)
+				partner.hand.append(c)
+			for c in take:
+				partner.hand.erase(c)
+				p.hand.append(c)
+			if give.any(func(c): return c["id"] == drawn_from_discard):
+				drawn_from_discard = ""
+			return {"text": "%s trades %d random card%s with %s" % [p.name, n, "" if n == 1 else "s", partner.name]}
+		"chaos":
+			var passing := []
+			for q in alive_players():
+				passing.append(_random_card(q.hand) if not q.hand.is_empty() else {})
+			var alive := alive_players()
+			for i in range(alive.size()):
+				var c: Dictionary = passing[i]
+				if c.is_empty():
+					continue
+				var from_p: Player = alive[i]
+				var to_p: Player = players[next_alive(from_p.seat)]
+				from_p.hand.erase(c)
+				to_p.hand.append(c)
+				if c["id"] == drawn_from_discard:
+					drawn_from_discard = ""
+			return {"text": "%s causes chaos: everyone passes a random card to their left" % p.name}
+		"sticky_fingers":
+			var m := _meld_with_card(choice)
+			var taken := {}
+			for c in m["cards"]:
+				if c["id"] == choice:
+					taken = c
+			m["cards"].erase(taken)
+			taken.erase("wild")
+			p.hand.append(taken)
+			var owner_name: String = players[m["owner"]].name
+			var text := "%s steals %s from %s's meld" % [p.name, Cards.card_name(taken), owner_name]
+			if m["cards"].size() <= 2:
+				for c in m["cards"]:
+					c.erase("wild")
+					discard_pile.append(c)
+				melds.erase(m)
+				text += ". The meld falls apart onto the discard pile"
+			else:
+				m["type"] = Cards.meld_type(m["cards"], trump_rank)
+				m["cards"] = Cards.sorted_meld(m["cards"], m["type"], trump_rank)
+			return {"text": text, "reveal": taken, "private": false}
+		"dumpster_dive":
+			var n := mini(3, discard_pile.size())
+			var grabbed := []
+			for i in range(n):
+				grabbed.append(discard_pile.pop_back())
+			p.hand.append_array(grabbed)
+			return {"text": "%s digs %s out of the discard pile" % [p.name, Cards.cards_text(grabbed)]}
+		"garbage_day":
+			var dumped_on: Player = players[target]
+			var n := discard_pile.size()
+			dumped_on.hand.append_array(discard_pile)
+			discard_pile = []
+			return {"text": "%s makes %s take the whole discard pile (%d card%s)" % [p.name, dumped_on.name, n, "" if n == 1 else "s"]}
+		"tarot":
+			# melds on the table keep their trumps wild
+			for m in melds:
+				for c in m["cards"]:
+					if Cards.is_wild(c, trump_rank):
+						c["wild"] = true
+			var old := trump_rank
+			trump_rank = trump_rank % 13 + 1
+			_emit("trump_changed", {"from": old, "to": trump_rank})
+			return {"text": "%s turns a tarot card: trumps are now %s" % [p.name, Cards.rank_label(trump_rank)]}
+		"joker_paint":
+			for c in p.hand:
+				if c["id"] == choice:
+					c["wild"] = true
+					_temp_wild.append(c)
+					return {"text": "%s paints a card wild for this turn" % p.name, "reveal": c, "private": true}
 	return {"text": "%s uses %s" % [p.name, item_id]}
 
 

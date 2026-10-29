@@ -15,13 +15,20 @@ static func play_turn(game) -> void:
 	for card in me.items.duplicate():
 		var item_id: String = card["item"]
 		var target := -1
-		if Items.needs_target(item_id):
-			var targets: Array = game.item_targets(seat, item_id)
-			if targets.is_empty():
-				continue
-			target = targets[0]
-		if game.item_blocker(seat, card["id"], target) == "":
-			game.use_item(seat, card["id"], target)
+		var choice := ""
+		match Items.needs(item_id):
+			"player":
+				var targets: Array = game.item_targets(seat, item_id)
+				if targets.is_empty():
+					continue
+				target = targets[0]
+			"meld_card", "hand_card":
+				var choices: Array = game.item_choices(seat, item_id)
+				if choices.is_empty():
+					continue
+				choice = choices[0]
+		if game.item_blocker(seat, card["id"], target, choice) == "":
+			game.use_item(seat, card["id"], target, choice)
 			break
 	if not game.is_turn_of(seat):
 		return

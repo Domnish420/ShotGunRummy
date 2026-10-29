@@ -350,8 +350,8 @@ static func perform(g: Game, seat: int, action: String, args: Array, by_host: bo
 			if args.size() == 1 and args[0] is String:
 				return g.discard(seat, args[0])
 		"use_item":
-			if args.size() == 2 and args[0] is String and args[1] is int:
-				return g.use_item(seat, args[0], args[1])
+			if args.size() == 3 and args[0] is String and args[1] is int and args[2] is String:
+				return g.use_item(seat, args[0], args[1], args[2])
 		"shoot":
 			if args.size() == 1 and args[0] is int:
 				return g.shoot(seat, args[0])

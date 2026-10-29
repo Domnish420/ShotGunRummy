@@ -649,6 +649,11 @@ func _shuffle_show(deck: Transform3D, start: float) -> void:
 			t.tween_callback(c.queue_free)
 
 
+## Shows a big message over the middle of the table for a few seconds.
+func announce(text: String) -> void:
+	_banner(text, Vector3(0, 0.55, -0.15), 2.5)
+
+
 ## Big floating text over the table, e.g. the round's trump.
 func _banner(text: String, pos: Vector3, seconds: float) -> void:
 	var l := Label3D.new()

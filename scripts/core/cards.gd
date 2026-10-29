@@ -126,8 +126,26 @@ static func _less_by_rank(a: Dictionary, b: Dictionary) -> bool:
 # `trump` is this round's wild rank (1 = aces ... 13 = kings, 0 = none).
 # A trump card can stand in for any card, of any suit, in any set or run.
 
+## Is this card wild? Either it's this round's trump rank, or it was made wild
+## ("wild": true) by an item, or by being melded as a trump before the trump
+## changed.
 static func is_wild(card: Dictionary, trump: int) -> bool:
+	if card.get("wild", false):
+		return true
 	return trump > 0 and int(card["rank"]) == trump
+
+
+## Copies of `cards` without the "wild" marks, to check them as plain cards.
+static func plain(cards: Array) -> Array:
+	var out := []
+	for c in cards:
+		if c.get("wild", false):
+			var d: Dictionary = c.duplicate()
+			d.erase("wild")
+			out.append(d)
+		else:
+			out.append(c)
+	return out
 
 
 static func is_set(cards: Array, trump: int = 0) -> bool:
@@ -190,7 +208,7 @@ static func meld_type(cards: Array, trump: int = 0) -> String:
 ## Cards in display order. In runs, trump cards sit in the gaps they fill.
 static func sorted_meld(cards: Array, type: String, trump: int = 0) -> Array:
 	var out := cards.duplicate()
-	if type == "run" and is_run(cards, 0):
+	if type == "run" and is_run(plain(cards), 0):
 		# a natural run, even if some of it happens to be trump
 		sort_by_rank(out)
 		return out

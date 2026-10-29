@@ -15,7 +15,9 @@ var _test := ""
 func _init() -> void:
 	for t in [
 		"test_deck", "test_points", "test_trump_rotation", "test_trump_runs", "test_trump_sets",
-		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_no_discarding_trumps", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_no_discarding_trumps",
+		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
+		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -234,6 +236,119 @@ func test_no_discarding_trumps() -> void:
 	g.stock.append(Cards.parse("AC"))
 	g.draw_stock(1)
 	check(g.can_discard(1, "AH"), "all trumps: discarding one is allowed")
+
+
+func test_sticky_fingers() -> void:
+	var g := new_game(2)
+	g.melds.append({"id": "mr", "type": "run", "cards": cards("4C 5C 6C 7C"), "owner": 1})
+	g.melds.append({"id": "ms", "type": "set", "cards": cards("9S 9H 9D"), "owner": 1})
+	var id := _give_item(g, 0, "sticky_fingers")
+	var choices := g.item_choices(0, "sticky_fingers")
+	check(choices.has("4C") and choices.has("7C"), "run ends can be stolen")
+	check(not choices.has("5C"), "the middle of a run can't (it would break it)")
+	check(choices.has("9H"), "any card from a set of 3")
+	var r := g.use_item(0, id, -1, "7C")
+	check(r["ok"] and g.players[0].hand.has(r["reveal"]), "stolen card is in your hand")
+	check(Cards.ids_of(g.find_meld("mr")["cards"]) == ["4C", "5C", "6C"], "run is now 4 5 6")
+	var pile_before: int = g.discard_pile.size()
+	g.use_item(0, _give_item(g, 0, "sticky_fingers", 8), -1, "9H")
+	check(g.find_meld("ms").is_empty(), "set down to 2 cards is gone")
+	check(g.discard_pile.size() == pile_before + 2, "its 2 cards went to the discard pile")
+
+
+func test_tarot() -> void:
+	var g := new_game(2)
+	g.melds.append({"id": "mx", "type": "run", "cards": cards("2C 3C AD"), "owner": 1})
+	g.players[0].hand = cards("AS 2H 9C")
+	check(g.trump_rank == 1, "aces to start")
+	check(g.use_item(0, _give_item(g, 0, "tarot"))["ok"], "turn the tarot card")
+	check(g.trump_rank == 2, "twos are trump now")
+	check(Cards.is_wild(g.find_meld("mx")["cards"][2], g.trump_rank), "the ace in the meld stays wild")
+	check(not g.is_trump(g.players[0].hand[0]), "the ace in your hand isn't any more")
+	check(g.is_trump(g.players[0].hand[1]), "the 2 in your hand is")
+	g.trump_rank = 13
+	g.use_item(0, _give_item(g, 0, "tarot", 8))
+	check(g.trump_rank == 1, "kings wrap round to aces")
+
+
+func test_joker_paint() -> void:
+	var g := new_game(2)
+	past_first_turn(g)
+	g.players[0].hand = cards("7H 8H KS QD")
+	g.stock.append(Cards.parse("2S"))
+	g.draw_stock(0)
+	check(g.use_item(0, _give_item(g, 0, "joker_paint"), -1, "KS")["ok"], "paint the king")
+	check(g.is_trump(g.players[0].hand[2]), "the king is wild")
+	check(g.meld(0, ["7H", "8H", "KS"])["ok"], "7 8 K(wild) of hearts is a run")
+	check(g.discard(0, "QD")["ok"], "end the turn")
+	check(Cards.is_wild(g.melds[0]["cards"][2], g.trump_rank), "it stays wild in the meld")
+	# painted but not melded: wears off
+	var g2 := new_game(2)
+	g2.players[0].hand = cards("KS 9D")
+	g2.use_item(0, _give_item(g2, 0, "joker_paint"), -1, "KS")
+	draw_playing_card(g2, 0)
+	g2.discard(0, "9D")
+	check(not g2.players[0].hand[0].get("wild", false), "wears off at the end of the turn")
+
+
+func test_shakedown() -> void:
+	var g := new_game(2)
+	g.players[1].hand = cards("AS 9H")
+	var before: int = g.discard_pile.size()
+	var r := g.use_item(0, _give_item(g, 0, "shakedown"), 1)
+	check(r["ok"] and Cards.ids_of(g.players[1].hand) == ["AS"], "they drop the non-trump (aces are trump)")
+	check(g.discard_pile.size() == before + 1 and g.top_discard()["id"] == "9H", "onto the discard pile")
+	check(g.item_targets(0, "shakedown").is_empty(), "can't take someone's last card")
+
+
+func test_switcheroo() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("2S 3S")
+	g.players[1].hand = cards("KH QH JH")
+	g.use_item(0, _give_item(g, 0, "switcheroo"), 1)
+	check(Cards.ids_of(g.players[0].hand) == ["KH", "QH", "JH"], "you have their hand")
+	check(Cards.ids_of(g.players[1].hand) == ["2S", "3S"], "they have yours")
+
+
+func test_bad_trade() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("2S 3S 4S")
+	g.players[1].hand = cards("KH QH JH")
+	g.use_item(0, _give_item(g, 0, "bad_trade"), 1)
+	var hearts := 0
+	for c in g.players[0].hand:
+		if c["suit"] == "H":
+			hearts += 1
+	check(hearts == 2 and g.players[0].hand.size() == 3, "2 of their cards for 2 of yours")
+
+
+func test_chaos() -> void:
+	var g := new_game(3)
+	g.players[0].hand = cards("2S")
+	g.players[1].hand = cards("3H")
+	g.players[2].hand = cards("4D")
+	g.use_item(0, _give_item(g, 0, "chaos"))
+	check(Cards.ids_of(g.players[1].hand) == ["2S"], "seat 1's card went left to seat 2")
+	check(Cards.ids_of(g.players[0].hand) == ["4D"], "and the last seat's came round to seat 1")
+
+
+func test_dumpster_dive() -> void:
+	var g := new_game(2)
+	g.discard_pile = cards("2S 3S 4S 5S")
+	var before: int = g.players[0].hand.size()
+	g.use_item(0, _give_item(g, 0, "dumpster_dive"))
+	check(g.players[0].hand.size() == before + 3, "took 3")
+	check(Cards.ids_of(g.discard_pile) == ["2S"], "the bottom one is left")
+
+
+func test_garbage_day() -> void:
+	var g := new_game(2)
+	g.discard_pile = cards("2S 3S 4S 5S")
+	var before: int = g.players[1].hand.size()
+	g.use_item(0, _give_item(g, 0, "garbage_day"), 1)
+	check(g.players[1].hand.size() == before + 4, "they took the lot")
+	check(g.discard_pile.is_empty(), "pile is empty")
+	check(g.item_blocker(0, _give_item(g, 0, "garbage_day", 8)) != "", "can't use it on an empty pile")
 
 
 # ------------------------------------------------------------------ table

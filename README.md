@@ -84,16 +84,29 @@ the game ends for everyone. When exporting an app for Android, tick the
 
 ### Items
 
+Everyone is dealt 2 items each round; the rest are shuffled into the stock.
+Use as many as you like on your turn. Copies are in brackets; tune them in
+`scripts/core/items.gd`.
+
 | Item | What it does |
 | --- | --- |
-| 🚬 Cigarettes | Gain 1 health. |
-| 🍺 Beer | Burn the top card of the stock. Everyone sees it. |
-| 🔍 Magnifier | Secretly look at the top card of the stock. |
-| ⛓️ Handcuffs | A player of your choice skips their next turn. |
-| 🪚 Hand Saw | Your next shotgun shell deals double damage. |
-| 📱 Burner Phone | See a random card in another player's hand. |
-| 💉 Adrenaline | Steal a random item from another player. |
-| 💊 Expired Meds | 50%: gain 2 health. Otherwise lose 1. |
+| 🚬 Cigarettes (2) | Gain 1 health. |
+| 💊 Expired Meds (1) | 50%: gain 2 health. Otherwise lose 1. |
+| 🪚 Hand Saw (2) | Your next shotgun shell deals double damage. |
+| 🍺 Beer (2) | Burn the top card of the stock. Everyone sees it. |
+| 🔍 Magnifier (2) | Secretly look at the top card of the stock. |
+| 📱 Burner Phone (1) | See a random card in another player's hand. |
+| ⛓️ Handcuffs (2) | A player of your choice skips their next turn. |
+| 💉 Adrenaline (1) | Steal a random item from another player. |
+| 👊 Shakedown (1) | A player of your choice discards a random card (never their last). |
+| 🔄 Switcheroo (1) | Swap your whole hand with another player's. |
+| 🤝 Bad Trade (1) | Swap 2 random cards with another player. |
+| 🌀 Chaos (1) | Everyone passes a random card to the player on their left. |
+| ✋ Sticky Fingers (2) | Steal a card from a meld (it must stay a meld). A meld left with 2 cards goes to the discard pile. |
+| 🗑️ Dumpster Dive (1) | Take the top 3 cards of the discard pile. |
+| 🚮 Garbage Day (1) | A player of your choice takes the whole discard pile. |
+| 🔮 Tarot Card (1) | The trump moves to the next rank for the rest of the round. Melds on the table keep their trumps. |
+| 🎭 Joker Paint (2) | A card in your hand is a trump until your turn ends. Meld it to keep it wild. |
 
 ## Code layout
 
