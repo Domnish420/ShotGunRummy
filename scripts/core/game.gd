@@ -15,7 +15,9 @@ extends RefCounted
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
 ##    the table, then discard 1 card. You can't discard the card you just took
 ##    from the discard pile.
-##  - You may also use 1 item per turn, at any point in your turn.
+##  - Drawing an item from the stock: keep it and draw again, until you get a
+##    playing card.
+##  - Use as many items as you like, at any point in your turn.
 ##  - Empty your hand of playing cards to win the round (items don't count). You score the cards left in everyone
 ##    else's hand: A = 1, 2-10 = face value, J/Q/K = 10. Going out in one turn
 ##    without having melded before ("rummy") doubles it.
@@ -63,7 +65,7 @@ var options := {
 	"items_dealt": 2,
 	"items_in_stock": true,
 	"max_hp": 4,
-	"items_per_turn": 1,
+	"items_per_turn": 0, # 0 = no limit
 	"rummy_bonus": true,
 	"max_reshuffles": 3,
 	"max_shells": 3,
@@ -284,19 +286,24 @@ func draw_stock(seat: int) -> Dictionary:
 	var err := _guard(seat, "draw")
 	if err != "":
 		return _fail(err)
-	if stock.is_empty() and not _reshuffle_stock():
-		_end_round(-1, "The deck ran dry.")
-		return _ok({"round_over": true})
-	var card: Dictionary = stock.pop_back()
-	var is_item := card.has("item")
-	if is_item:
-		current().items.append(card)
-	else:
+	# items you draw are yours to keep, and you draw again until you get a
+	# playing card
+	var items_drawn := []
+	while true:
+		if stock.is_empty() and not _reshuffle_stock():
+			_end_round(-1, "The deck ran dry.")
+			return _ok({"round_over": true, "items_drawn": items_drawn})
+		var card: Dictionary = stock.pop_back()
+		if card.has("item"):
+			current().items.append(card)
+			items_drawn.append(card)
+			continue
 		current().hand.append(card)
-	phase = "play"
-	# what was drawn stays secret, even whether it was an item
-	_emit("draw", {"seat": seat, "source": "stock"})
-	return _ok({"card": card, "item": is_item})
+		phase = "play"
+		# what was drawn stays secret; everyone can see how many items you got
+		_emit("draw", {"seat": seat, "source": "stock", "items": items_drawn.size()})
+		return _ok({"card": card, "items_drawn": items_drawn})
+	return _fail("unreachable")
 
 
 func draw_discard(seat: int) -> Dictionary:
@@ -486,7 +493,8 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1) -> String:
 	var card := find_item(seat, item_card_id)
 	if card.is_empty():
 		return "That item isn't yours."
-	if items_used_this_turn >= int(options["items_per_turn"]):
+	var limit := int(options["items_per_turn"])
+	if limit > 0 and items_used_this_turn >= limit:
 		return "You've already used an item this turn."
 	var item_id: String = card["item"]
 	var p: Player = players[seat]

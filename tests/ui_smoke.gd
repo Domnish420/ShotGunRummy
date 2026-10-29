@@ -70,7 +70,7 @@ func _run() -> void:
 
 	var steps := 0
 	var used_item := false
-	while steps < 3000:
+	while steps < 20000:
 		steps += 1
 		await _frames(1)
 		var game = main.game
@@ -147,5 +147,6 @@ func _run() -> void:
 				await _shot("03c_table_with_melds")
 			main.selected = [Bot.choose_discard(game, seat)]
 			main._discard_selected()
-	push_error("smoke test did not finish")
+	var g = main.game
+	push_error("smoke test did not finish: round %d, phase %s, turn %d, overlay %d [%s], status '%s'" % [g.round_num, g.phase, g.turn, main.overlay_layer.get_child_count(), _overlay_text(), main.status_label.text])
 	quit(1)

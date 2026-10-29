@@ -334,7 +334,11 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			if d["source"] == "discard":
 				_log("%s takes %s from the discard pile." % [_name(d["seat"]), Cards.card_name(d["card"])])
 			else:
-				_log("%s draws from the stock." % _name(d["seat"]))
+				var n: int = d.get("items", 0)
+				if n == 0:
+					_log("%s draws from the stock." % _name(d["seat"]))
+				else:
+					_log("%s draws %d item%s from the stock, then a card." % [_name(d["seat"]), n, "" if n == 1 else "s"])
 		"meld":
 			_log("%s melds %s." % [_name(d["seat"]), Cards.cards_text(d["meld"]["cards"])])
 		"layoff":
@@ -632,7 +636,7 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if game.phase == "draw":
 		return "%s, DRAW: TAP THE STOCK OR THE DISCARD PILE" % _name(seat)
 	if sel_cards.is_empty():
-		return "MELD, LAY OFF, USE AN ITEM, THEN DISCARD 1 CARD"
+		return "MELD, LAY OFF, USE ITEMS, THEN DISCARD 1 CARD"
 	if valid_meld:
 		return "VALID MELD. PRESS MELD"
 	for m in game.melds:
@@ -682,11 +686,23 @@ func _draw_stock() -> void:
 	var res := game.draw_stock(game.turn)
 	if not _handle(res):
 		return
-	if res.get("item", false):
-		_refresh()
-		_show_reveal("YOU DREW AN ITEM", res["card"], Items.def(res["card"]["item"])["text"], _after_action)
+	var drawn: Array = res.get("items_drawn", [])
+	if drawn.is_empty():
+		_after_action()
 		return
-	_after_action()
+	_refresh()
+	_show_drawn_items(drawn, 0)
+
+
+## Shows each item pulled from the stock, one after another.
+func _show_drawn_items(drawn: Array, i: int) -> void:
+	if i >= drawn.size():
+		_after_action()
+		return
+	var item: Dictionary = drawn[i]
+	var title := "YOU DREW AN ITEM" if drawn.size() == 1 else "ITEM %d OF %d" % [i + 1, drawn.size()]
+	var text := "%s Keep it and draw again until you get a playing card." % Items.def(item["item"])["text"]
+	_show_reveal(title, item, text, _show_drawn_items.bind(drawn, i + 1))
 
 
 func _draw_discard() -> void:
@@ -1008,7 +1024,7 @@ func _show_rules() -> void:
 	var lines := [
 		"THE TABLE. 2 to 6 players pass one phone around. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
 		"THE DEAL. Everyone gets 7 playing cards and 2 item cards. The other item cards are shuffled into the stock, so a draw from it can give you an item instead of a playing card.",
-		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. Meld and lay off as much as you like, use up to 1 item, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
+		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
 		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
 		"LAYING OFF. Add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
 		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
@@ -1017,7 +1033,7 @@ func _show_rules() -> void:
 	]
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))
-	box.add_child(_label("ITEMS (use 1 per turn, at any point in your turn)", 28, Palette.PURPLE.lightened(0.3)))
+	box.add_child(_label("ITEMS (use as many as you like, any time in your turn)", 28, Palette.PURPLE.lightened(0.3)))
 	for id in Items.DEFS:
 		var d: Dictionary = Items.DEFS[id]
 		box.add_child(_label("%s %s ×%d: %s" % [d["icon"], d["name"], d["copies"], d["text"]], 24, Palette.INK))

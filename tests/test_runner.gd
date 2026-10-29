@@ -16,7 +16,7 @@ func _init() -> void:
 	for t in [
 		"test_deck", "test_points", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
-		"test_one_item_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
+		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches",
 	]:
@@ -113,16 +113,19 @@ func test_deal() -> void:
 
 func test_drawing_an_item() -> void:
 	var g := new_game(2)
-	var item := {"id": "I-beer-99", "item": "beer"}
-	g.stock.append(item)
+	var card := Cards.parse("KD")
+	var beer := {"id": "I-beer-99", "item": "beer"}
+	var saw := {"id": "I-saw-99", "item": "saw"}
+	g.stock.append(card)
+	g.stock.append(saw)
+	g.stock.append(beer)
 	var hand_before: int = g.players[0].hand.size()
 	var r := g.draw_stock(0)
-	check(r["ok"] and r["item"], "drew an item")
-	check(g.players[0].items.has(item), "it goes with your items")
-	check(g.players[0].hand.size() == hand_before, "not into your hand")
-	check(g.phase == "play", "you still discard to end the turn")
-	check(g.discard(0, g.players[0].hand[0]["id"])["ok"], "discard ends the turn")
-	check(g.turn == 1, "next player")
+	check(r["ok"] and r["items_drawn"].size() == 2, "drew two items")
+	check(r["card"] == card, "kept drawing until a playing card")
+	check(g.players[0].items.has(beer) and g.players[0].items.has(saw), "items go with your items")
+	check(g.players[0].hand.size() == hand_before + 1, "the playing card goes in your hand")
+	check(g.phase == "play", "then you discard to end the turn")
 
 
 func test_beer_can_burn_an_item() -> void:
@@ -171,15 +174,17 @@ func _give_item(g: Game, seat: int, item_id: String, n: int = 9) -> String:
 	return id
 
 
-func test_one_item_per_turn() -> void:
+func test_many_items_per_turn() -> void:
 	var g := new_game(2)
 	g.players[0].hp = 2
 	var a := _give_item(g, 0, "cigarettes", 8)
 	var b := _give_item(g, 0, "cigarettes", 9)
 	check(g.use_item(0, a)["ok"], "use before drawing")
-	check(g.players[0].hp == 3, "+1 health")
-	check(not g.use_item(0, b)["ok"], "second item is blocked")
+	check(g.use_item(0, b)["ok"], "and another")
+	check(g.players[0].hp == 4, "+2 health")
 	check(g.phase == "draw", "still need to draw")
+	g.draw_stock(0)
+	check(g.use_item(0, _give_item(g, 0, "magnifier"))["ok"], "and after drawing")
 
 
 func test_handcuffs() -> void:
@@ -209,7 +214,6 @@ func test_magnifier_and_beer() -> void:
 	var top: Dictionary = g.stock.back()
 	var r := g.use_item(0, _give_item(g, 0, "magnifier"))
 	check(r["reveal"] == top and r["private"], "magnifier peeks privately")
-	g.items_used_this_turn = 0
 	r = g.use_item(0, _give_item(g, 0, "beer"))
 	check(r["reveal"] == top and not r["private"], "beer burns it publicly")
 	check(g.stock.back() != top, "it's gone")

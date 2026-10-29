@@ -35,8 +35,9 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
 - **The deal.** Everyone gets 7 playing cards and 2 item cards. The other item
   cards are shuffled into the stock, so a draw can give you an item instead.
 - **Your turn.** Draw 1 card (from the stock or the top of the discard pile),
-  meld and lay off as much as you like, use up to **1 item** (any time in your turn), then **discard 1
-  card**. You can't discard the card you just took from the discard pile.
+  meld, lay off and use items as much as you like, then **discard 1 card**.
+  If the stock gives you an item, keep it and draw again until you get a
+  playing card. You can't discard the card you just took from the discard pile.
 - **Melds.** A set is 3–4 cards of the same rank. A run is 3+ cards in a row of
   one suit. Aces are low (A-2-3 counts, Q-K-A doesn't). You can lay off onto
   anyone's meld.
