@@ -32,14 +32,15 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
 - **The table.** One player deals each round and the player to their left goes
   first. Next round the deal moves one seat to the right, so whoever dealt last
   round goes first.
-- **The deal.** Everyone gets 7 playing cards and 2 item cards.
+- **The deal.** Everyone gets 7 playing cards and 2 item cards. The other item
+  cards are shuffled into the stock, so a draw can give you an item instead.
 - **Your turn.** Draw 1 card (from the stock or the top of the discard pile),
-  meld and lay off as much as you like, use up to **1 item**, then **discard 1
+  meld and lay off as much as you like, use up to **1 item** (any time in your turn), then **discard 1
   card**. You can't discard the card you just took from the discard pile.
 - **Melds.** A set is 3–4 cards of the same rank. A run is 3+ cards in a row of
   one suit. Aces are low (A-2-3 counts, Q-K-A doesn't). You can lay off onto
   anyone's meld.
-- **Going out.** Empty your hand to win the round. You score the cards everyone
+- **Going out.** Empty your hand of playing cards to win the round (items don't count). You score the cards everyone
   else is still holding (A = 1, 2–10 = face value, J/Q/K = 10). Going out in one
   turn without having melded before is **Rummy** and doubles it.
 - **The shotgun.** The winner gets 1 shell, +1 for every 10 points (max 3), and
@@ -78,6 +79,13 @@ the top of `game.gd`.
 ```
 godot --headless --path . --import
 godot --headless --path . -s tests/test_runner.gd
+```
+
+`tests/ui_smoke.gd` plays a whole 3-player match through the real screens and
+can save screenshots (needs a window, so leave off `--headless`):
+
+```
+godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 ```
 
 ## Roadmap

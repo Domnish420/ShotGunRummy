@@ -5,6 +5,7 @@ extends SceneTree
 const Cards = preload("res://scripts/core/cards.gd")
 const Game = preload("res://scripts/core/game.gd")
 const Bot = preload("res://scripts/core/bot.gd")
+const Items = preload("res://scripts/core/items.gd")
 
 var _failures := 0
 var _checks := 0
@@ -14,7 +15,7 @@ var _test := ""
 func _init() -> void:
 	for t in [
 		"test_deck", "test_points", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
-		"test_deal", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
+		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_one_item_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches",
@@ -98,7 +99,38 @@ func test_deal() -> void:
 	for p in g.players:
 		check(p.hand.size() == 7, "7 cards each")
 		check(p.items.size() == 2, "2 items each")
-	check(g.stock.size() == 52 - 28 - 1, "rest is the stock")
+	var playing := 0
+	var items := 0
+	for c in g.stock:
+		if c.has("item"):
+			items += 1
+		else:
+			playing += 1
+	check(playing == 52 - 28 - 1, "the rest of the playing cards are the stock")
+	check(items == Items.create_item_deck().size() - 8, "leftover items are shuffled into the stock")
+	check(not g.top_discard().has("item"), "the discard pile starts with a playing card")
+
+
+func test_drawing_an_item() -> void:
+	var g := new_game(2)
+	var item := {"id": "I-beer-99", "item": "beer"}
+	g.stock.append(item)
+	var hand_before: int = g.players[0].hand.size()
+	var r := g.draw_stock(0)
+	check(r["ok"] and r["item"], "drew an item")
+	check(g.players[0].items.has(item), "it goes with your items")
+	check(g.players[0].hand.size() == hand_before, "not into your hand")
+	check(g.phase == "play", "you still discard to end the turn")
+	check(g.discard(0, g.players[0].hand[0]["id"])["ok"], "discard ends the turn")
+	check(g.turn == 1, "next player")
+
+
+func test_beer_can_burn_an_item() -> void:
+	var g := new_game(2)
+	g.stock.append({"id": "I-saw-99", "item": "saw"})
+	var r := g.use_item(0, _give_item(g, 0, "beer"))
+	check(r["ok"] and r["reveal"]["item"] == "saw", "burned the saw")
+	check(str(r["text"]).contains("Hand Saw"), "log names the item")
 
 
 func test_dealer_rotation() -> void:
@@ -245,7 +277,10 @@ func test_bot_matches() -> void:
 				else:
 					Bot.play_turn(g)
 					if g.phase == "draw" or g.phase == "play":
-						var total: int = g.stock.size() + g.discard_pile.size() + g.burned.size()
+						var total: int = g.discard_pile.size()
+						for c in g.stock + g.burned:
+							if not c.has("item"):
+								total += 1
 						for m in g.melds:
 							total += m["cards"].size()
 						for p in g.players:

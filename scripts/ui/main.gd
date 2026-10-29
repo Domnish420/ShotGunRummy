@@ -679,8 +679,14 @@ func _selected_cards() -> Array:
 func _draw_stock() -> void:
 	if game.phase != "draw":
 		return
-	if _handle(game.draw_stock(game.turn)):
-		_after_action()
+	var res := game.draw_stock(game.turn)
+	if not _handle(res):
+		return
+	if res.get("item", false):
+		_refresh()
+		_show_reveal("YOU DREW AN ITEM", res["card"], Items.def(res["card"]["item"])["text"], _after_action)
+		return
+	_after_action()
 
 
 func _draw_discard() -> void:
@@ -1001,17 +1007,17 @@ func _show_rules() -> void:
 	box.add_child(_title("RULES"))
 	var lines := [
 		"THE TABLE. 2 to 6 players pass one phone around. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
-		"THE DEAL. Everyone gets 7 playing cards and 2 item cards.",
+		"THE DEAL. Everyone gets 7 playing cards and 2 item cards. The other item cards are shuffled into the stock, so a draw from it can give you an item instead of a playing card.",
 		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. Meld and lay off as much as you like, use up to 1 item, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
 		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
 		"LAYING OFF. Add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
-		"GOING OUT. Empty your hand to win the round. You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
+		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
 		"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for every 10 points scored (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
 		"HINTS. Underlined cards are part of your best melds. DEADWOOD is what you'd be caught holding if someone went out now.",
 	]
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))
-	box.add_child(_label("ITEMS (1 per turn, before or after drawing)", 28, Palette.PURPLE.lightened(0.3)))
+	box.add_child(_label("ITEMS (use 1 per turn, at any point in your turn)", 28, Palette.PURPLE.lightened(0.3)))
 	for id in Items.DEFS:
 		var d: Dictionary = Items.DEFS[id]
 		box.add_child(_label("%s %s ×%d: %s" % [d["icon"], d["name"], d["copies"], d["text"]], 24, Palette.INK))

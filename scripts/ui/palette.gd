@@ -58,8 +58,10 @@ static func make_theme() -> Theme:
 	t.set_color("font_hover_pressed_color", "Button", AMBER)
 	t.set_color("font_disabled_color", "Button", Color(0.3, 0.29, 0.26))
 
-	t.set_stylebox("normal", "LineEdit", box(Color(0, 0, 0, 0), CARD_INK, 0, 0, 6))
-	t.set_stylebox("focus", "LineEdit", box(Color(0, 0, 0, 0.06), CARD_INK, 0, 0, 6))
+	t.set_stylebox("normal", "LineEdit", _underline(Color(0, 0, 0, 0)))
+	t.set_stylebox("focus", "LineEdit", _underline(Color(0, 0, 0, 0.06)))
+	for state in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+		t.set_stylebox(state, "CheckBox", StyleBoxEmpty.new())
 	t.set_color("font_color", "LineEdit", CARD_INK)
 	t.set_color("font_placeholder_color", "LineEdit", Color(0.35, 0.32, 0.27))
 	t.set_color("caret_color", "LineEdit", CARD_INK)
@@ -67,6 +69,12 @@ static func make_theme() -> Theme:
 
 	t.set_stylebox("panel", "PanelContainer", box(Color(0, 0, 0, 0)))
 	return t
+
+
+static func _underline(bg: Color) -> StyleBoxFlat:
+	var sb := box(bg, CARD_INK, 0, 0, 6)
+	sb.border_width_bottom = 3
+	return sb
 
 
 ## A coloured button style, e.g. red for DISCARD.

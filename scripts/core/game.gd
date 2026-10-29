@@ -9,13 +9,14 @@ extends RefCounted
 ##    round goes first.
 ##
 ## Rummy (the classic card game):
-##  - Everyone gets 7 playing cards and 2 item cards.
+##  - Everyone gets 7 playing cards and 2 item cards. The leftover item cards
+##    are shuffled into the stock, so drawing from it can give you an item.
 ##  - Your turn: draw 1 card (stock or top of the discard pile), meld sets
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
 ##    the table, then discard 1 card. You can't discard the card you just took
 ##    from the discard pile.
-##  - You may also use 1 item per turn, before or after drawing.
-##  - Empty your hand to win the round. You score the cards left in everyone
+##  - You may also use 1 item per turn, at any point in your turn.
+##  - Empty your hand of playing cards to win the round (items don't count). You score the cards left in everyone
 ##    else's hand: A = 1, 2-10 = face value, J/Q/K = 10. Going out in one turn
 ##    without having melded before ("rummy") doubles it.
 ##
@@ -60,6 +61,7 @@ class Player:
 var options := {
 	"hand_size": 7,
 	"items_dealt": 2,
+	"items_in_stock": true,
 	"max_hp": 4,
 	"items_per_turn": 1,
 	"rummy_bonus": true,
@@ -217,8 +219,14 @@ func start_round() -> Dictionary:
 				players[s].items.append(items.pop_back())
 
 	discard_pile = [deck.pop_back()]
-	stock = deck
-	item_deck = items
+	# the rest of the item cards are shuffled into the stock, so a draw can
+	# give you either a playing card or an item
+	if options["items_in_stock"]:
+		stock = _shuffle(deck + items)
+		item_deck = []
+	else:
+		stock = deck
+		item_deck = items
 	melds = []
 	burned = []
 	gun = null
@@ -280,10 +288,15 @@ func draw_stock(seat: int) -> Dictionary:
 		_end_round(-1, "The deck ran dry.")
 		return _ok({"round_over": true})
 	var card: Dictionary = stock.pop_back()
-	current().hand.append(card)
+	var is_item := card.has("item")
+	if is_item:
+		current().items.append(card)
+	else:
+		current().hand.append(card)
 	phase = "play"
+	# what was drawn stays secret, even whether it was an item
 	_emit("draw", {"seat": seat, "source": "stock"})
-	return _ok({"card": card})
+	return _ok({"card": card, "item": is_item})
 
 
 func draw_discard(seat: int) -> Dictionary:
@@ -540,7 +553,7 @@ func _apply_item(p: Player, item_id: String, target: int) -> Dictionary:
 			return {"text": "%s lights a cigarette. +1 health" % p.name, "hp_delta": 1}
 		"beer":
 			var burnt := _burn_top()
-			return {"text": "%s cracks a beer and burns %s off the stock" % [p.name, Cards.card_name(burnt)], "reveal": burnt, "private": false}
+			return {"text": "%s cracks a beer and burns %s off the stock" % [p.name, card_label(burnt)], "reveal": burnt, "private": false}
 		"magnifier":
 			return {"text": "%s peeks at the top of the stock" % p.name, "reveal": stock.back(), "private": true}
 		"handcuffs":
@@ -565,6 +578,15 @@ func _apply_item(p: Player, item_id: String, target: int) -> Dictionary:
 				return {"text": "%s swallows the expired meds. +2 health" % p.name, "hp_delta": 2}
 			return {"text": "%s swallows the expired meds. Bad batch. -1 health" % p.name, "hp_delta": -1}
 	return {"text": "%s uses %s" % [p.name, item_id]}
+
+
+## Display name for a playing card or an item card.
+static func card_label(card: Dictionary) -> String:
+	if card.is_empty():
+		return "nothing"
+	if card.has("item"):
+		return Items.item_name(card)
+	return Cards.card_name(card)
 
 
 func _burn_top() -> Dictionary:
