@@ -15,7 +15,7 @@ var _test := ""
 func _init() -> void:
 	for t in [
 		"test_deck", "test_points", "test_trump_rotation", "test_trump_runs", "test_trump_sets",
-		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -38,6 +38,12 @@ func check(cond: bool, what: String) -> void:
 func draw_playing_card(g: Game, seat: int) -> void:
 	while g.is_turn_of(seat) and g.phase == "draw":
 		g.draw_stock(seat)
+
+
+## Lets everyone put cards down (they're past their first turn).
+func past_first_turn(g: Game) -> void:
+	for p in g.players:
+		p.turns_taken = 2
 
 
 func cards(ids: String) -> Array:
@@ -143,6 +149,7 @@ func test_trump_lay_off() -> void:
 
 func test_trump_in_game() -> void:
 	var g := new_game(2)
+	past_first_turn(g)
 	g.players[0].hand = cards("2C 3C AD 5C 9H 9S")
 	g.stock.append(Cards.parse("KH"))
 	g.draw_stock(0)
@@ -159,6 +166,7 @@ func test_trump_partition() -> void:
 
 func test_go_out_check() -> void:
 	var g := new_game(2)
+	past_first_turn(g)
 	g.players[0].hand = cards("2C 3C 4C")
 	g.stock.append(Cards.parse("KH"))
 	g.draw_stock(0)
@@ -167,6 +175,50 @@ func test_go_out_check() -> void:
 	check(chk["rummy"], "and it's rummy: nothing melded before")
 	g.players[0].hand = cards("2C 3C 4C KH QS")
 	check(not g.go_out_check(0)["can"], "two loose cards: can't go out")
+
+
+func test_no_placing_first_turn() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("2C 3C 4C 9H")
+	g.stock.append(Cards.parse("KH"))
+	g.draw_stock(0)
+	check(not g.can_place(0), "first turn: no placing")
+	check(not g.meld(0, ["2C", "3C", "4C"])["ok"], "can't meld on your first turn")
+	check(not g.go_out_check(0)["can"], "so you can't go out either")
+	check(g.discard(0, "KH")["ok"], "but you can discard")
+	g.players[1].hand.append(Cards.parse("QS"))
+	g.stock.append(Cards.parse("JS"))
+	g.draw_stock(1)
+	g.discard(1, "JS")
+	g.stock.append(Cards.parse("5C"))
+	g.draw_stock(0)
+	check(g.can_place(0), "second turn: placing allowed")
+	check(g.meld(0, ["2C", "3C", "4C"])["ok"], "now you can meld")
+
+
+func test_trump_swap() -> void:
+	# round 1, aces are trump; the table has 2C 3C [A] 5C with the ace as the 4
+	var g := new_game(2)
+	past_first_turn(g)
+	g.melds.append({"id": "mx", "type": "run", "cards": cards("2C 3C AD 5C"), "owner": 1})
+	g.players[0].hand = cards("4C 9H 9S KD")
+	g.stock.append(Cards.parse("QD"))
+	g.draw_stock(0)
+	var found := g.find_swap(0, "mx", ["4C", "9H", "9S"])
+	check(found.get("natural", "") == "4C" and found.get("trump", "") == "AD", "4C swaps for the ace (%s)" % [found])
+	check(g.find_swap(0, "mx", ["4C", "9H", "KD"]).is_empty(), "9H KD + ace isn't a meld, so no swap")
+	check(g.find_swap(0, "mx", ["4C", "9H"]).is_empty(), "needs 2 cards to meld the ace with")
+	check(g.find_swap(0, "mx", ["9H", "9S", "KD"]).is_empty(), "needs the card the ace stands for")
+	check(not g.swap_trump(0, "mx", "9H", "AD", ["9S", "KD"])["ok"], "wrong card can't replace the ace")
+	var r := g.swap_trump(0, "mx", "4C", "AD", ["9H", "9S"])
+	check(r["ok"], "swap: %s" % r.get("error", ""))
+	check(Cards.ids_of(g.find_meld("mx")["cards"]) == ["2C", "3C", "4C", "5C"], "the run is natural now")
+	check(r["ok"] and Cards.ids_of(r["meld"]["cards"]).has("AD"), "the ace is in your new meld")
+	check(Cards.ids_of(g.players[0].hand) == ["KD", "QD"], "4C 9H 9S left your hand")
+	# sets work too: 7S 7H [A] and you hold 7D
+	g.melds.append({"id": "my", "type": "set", "cards": cards("7S 7H AS"), "owner": 1})
+	g.players[0].hand = cards("7D 5H 6H KD")
+	check(g.swap_trump(0, "my", "7D", "AS", ["5H", "6H"])["ok"], "swap into a set; ace makes 5 6 A of hearts")
 
 
 # ------------------------------------------------------------------ table
@@ -315,6 +367,7 @@ func test_adrenaline() -> void:
 
 func test_going_out_scores_everyone() -> void:
 	var g := new_game(3)
+	past_first_turn(g)
 	g.players[0].hand = cards("2S 3S 4S")
 	g.players[1].hand = cards("KH 5C")
 	g.players[2].hand = cards("QD")

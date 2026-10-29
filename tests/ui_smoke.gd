@@ -141,7 +141,7 @@ func _run() -> void:
 		if game.phase == "play":
 			if game.go_out_check(seat)["can"]:
 				await _shot("03d_can_go_out")
-			var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
+			var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank) if game.can_place(seat) else {"melds": []}
 			if not best["melds"].is_empty():
 				main.selected = Cards.ids_of(best["melds"][0])
 				main._refresh()
@@ -150,7 +150,7 @@ func _run() -> void:
 				main._meld_selected()
 				continue
 			var laid := false
-			for c in me.hand:
+			for c in (me.hand if game.can_place(seat) else []):
 				for m in game.melds:
 					if Cards.can_lay_off(m, [c], game.trump_rank):
 						main.selected = [c["id"]]

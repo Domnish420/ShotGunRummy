@@ -26,6 +26,11 @@ extends RefCounted
 ##  - Each round one rank is trump: aces in round 1, 2s in round 2 ... kings in
 ##    round 13, then back to aces. A trump card can stand in for any card, of
 ##    any suit, in any set or run (in round 1, 2♣ 3♣ A♦ 5♣ is a run).
+##  - Swapping: if you hold the real card a trump on the table stands in for,
+##    you can put it in that meld and take the trump, but only to use it
+##    straight away in a new meld with 2+ cards from your hand.
+##  - Nobody can put cards down (meld, lay off, swap) on their first turn of a
+##    round.
 ##
 ## Shotgun:
 ##  - Everyone has 4 health.
@@ -40,7 +45,7 @@ extends RefCounted
 const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
 
-## kind: round_start, turn_start, turn_skipped, draw, meld, layoff, discard,
+## kind: round_start, turn_start, turn_skipped, draw, meld, layoff, swap, discard,
 ## item_used, heal, damage, eliminated, stock_reshuffled, round_end, shot,
 ## gun_empty, match_end.
 signal event(kind: String, data: Dictionary)
@@ -59,6 +64,7 @@ class Player:
 	var has_melded: bool = false
 	var score: int = 0
 	var rounds_won: int = 0
+	var turns_taken: int = 0 # this round
 
 	func _init(p_seat: int, p_name: String) -> void:
 		seat = p_seat
@@ -76,6 +82,7 @@ var options := {
 	"max_shells": 3,
 	"points_per_shell": 10,
 	"trump_cards": true,
+	"no_placing_first_turn": true,
 }
 var rng := RandomNumberGenerator.new()
 var players: Array = []
@@ -195,7 +202,7 @@ func is_trump(card: Dictionary) -> bool:
 ## Could the current player go out this turn with the cards they hold?
 ## { "can": bool, "rummy": bool (going out now would score double) }
 func go_out_check(seat: int) -> Dictionary:
-	if not is_turn_of(seat) or phase != "play":
+	if not is_turn_of(seat) or phase != "play" or not can_place(seat):
 		return {"can": false, "rummy": false}
 	var best: Dictionary = Cards.best_partition(players[seat].hand, trump_rank)
 	var table := []
@@ -255,6 +262,7 @@ func start_round() -> Dictionary:
 		p.hand = []
 		p.items = []
 		p.has_melded = false
+		p.turns_taken = 0
 		p.cuffed = false
 
 	var order := _seats_from(next_alive(dealer))
@@ -303,7 +311,22 @@ func _begin_turn() -> void:
 	drawn_from_discard = ""
 	items_used_this_turn = 0
 	_melded_at_turn_start = current().has_melded
+	current().turns_taken += 1
 	_emit("turn_start", {"seat": turn})
+
+
+## May `seat` put cards on the table this turn? Not on their first turn.
+func can_place(seat: int) -> bool:
+	return not (options["no_placing_first_turn"] and players[seat].turns_taken <= 1)
+
+
+func _place_guard(seat: int) -> String:
+	var err := _guard(seat, "play")
+	if err != "":
+		return err
+	if not can_place(seat):
+		return "No putting cards down on your first turn. Draw and discard."
+	return ""
 
 
 func _next_turn() -> void:
@@ -377,7 +400,7 @@ func _reshuffle_stock() -> bool:
 
 
 func meld(seat: int, card_ids: Array) -> Dictionary:
-	var err := _guard(seat, "play")
+	var err := _place_guard(seat)
 	if err != "":
 		return _fail(err)
 	var p := current()
@@ -398,7 +421,7 @@ func meld(seat: int, card_ids: Array) -> Dictionary:
 
 
 func lay_off(seat: int, card_ids: Array, meld_id: String) -> Dictionary:
-	var err := _guard(seat, "play")
+	var err := _place_guard(seat)
 	if err != "":
 		return _fail(err)
 	var p := current()
@@ -418,6 +441,88 @@ func lay_off(seat: int, card_ids: Array, meld_id: String) -> Dictionary:
 	_emit("layoff", {"seat": seat, "meld": m, "cards": cards})
 	_check_gone_out(p)
 	return _ok({"meld": m})
+
+
+## Finds a trump swap in `card_ids` (cards selected from the hand) for the
+## table meld `meld_id`: one card replaces a trump in that meld, and the rest
+## make a new meld with the trump. Returns { natural, trump, rest } as ids,
+## or {} if there's no swap.
+func find_swap(seat: int, meld_id: String, card_ids: Array) -> Dictionary:
+	if trump_rank <= 0 or card_ids.size() < 3:
+		return {}
+	var m := find_meld(meld_id)
+	var cards := _cards_from(players[seat].hand, card_ids)
+	if m.is_empty() or cards.is_empty():
+		return {}
+	for t in m["cards"]:
+		if not Cards.is_wild(t, trump_rank):
+			continue
+		for natural in cards:
+			if Cards.is_wild(natural, trump_rank):
+				continue
+			var rest := cards.duplicate()
+			rest.erase(natural)
+			if _swap_meld_type(m, t, natural) != "" and Cards.meld_type(rest + [t], trump_rank) != "":
+				return {"natural": natural["id"], "trump": t["id"], "rest": Cards.ids_of(rest)}
+	return {}
+
+
+## The table meld's type with `trump` replaced by `natural`, or "".
+func _swap_meld_type(m: Dictionary, trump: Dictionary, natural: Dictionary) -> String:
+	var swapped: Array = m["cards"].duplicate()
+	swapped.erase(trump)
+	swapped.append(natural)
+	var kind: String = Cards.meld_type(swapped, trump_rank)
+	var was: String = m["type"]
+	if kind == "":
+		return ""
+	if was == "any":
+		return kind
+	if kind == "any" or kind == was:
+		return was
+	return ""
+
+
+## Swaps `natural_id` from your hand into `meld_id` for its trump `trump_id`,
+## then melds that trump with `rest_ids` from your hand, all in one go.
+func swap_trump(seat: int, meld_id: String, natural_id: String, trump_id: String, rest_ids: Array) -> Dictionary:
+	var err := _place_guard(seat)
+	if err != "":
+		return _fail(err)
+	var p := current()
+	var m := find_meld(meld_id)
+	if m.is_empty():
+		return _fail("That meld doesn't exist.")
+	var naturals := _cards_from(p.hand, [natural_id])
+	var rest := _cards_from(p.hand, rest_ids)
+	if naturals.is_empty() or rest.size() < 2 or rest_ids.has(natural_id):
+		return _fail("Pick the card to swap in plus 2 or more cards to meld with the trump.")
+	var natural: Dictionary = naturals[0]
+	var trump := {}
+	for c in m["cards"]:
+		if c["id"] == trump_id and Cards.is_wild(c, trump_rank):
+			trump = c
+	if trump.is_empty() or Cards.is_wild(natural, trump_rank):
+		return _fail("There's no trump to swap there.")
+	var table_kind := _swap_meld_type(m, trump, natural)
+	if table_kind == "":
+		return _fail("%s doesn't take the trump's place in that meld." % Cards.card_name(natural))
+	var new_kind: String = Cards.meld_type(rest + [trump], trump_rank)
+	if new_kind == "":
+		return _fail("You have to meld the trump straight away with 2 or more of your cards.")
+	_remove_cards(p, naturals + rest)
+	var swapped: Array = m["cards"].duplicate()
+	swapped.erase(trump)
+	swapped.append(natural)
+	m["type"] = table_kind
+	m["cards"] = Cards.sorted_meld(swapped, table_kind, trump_rank)
+	_meld_counter += 1
+	var fresh := {"id": "m%d" % _meld_counter, "type": new_kind, "cards": Cards.sorted_meld(rest + [trump], new_kind, trump_rank), "owner": seat}
+	melds.append(fresh)
+	p.has_melded = true
+	_emit("swap", {"seat": seat, "meld": m, "natural": natural, "trump": trump, "new_meld": fresh})
+	_check_gone_out(p)
+	return _ok({"meld": fresh})
 
 
 func find_meld(meld_id: String) -> Dictionary:
@@ -725,7 +830,7 @@ func snapshot(view_seat: int) -> Dictionary:
 		ps.append({
 			"seat": p.seat, "name": p.name, "hp": p.hp, "max_hp": p.max_hp, "alive": p.alive,
 			"cuffed": p.cuffed, "sawed": p.sawed, "has_melded": p.has_melded,
-			"score": p.score, "rounds_won": p.rounds_won,
+			"score": p.score, "rounds_won": p.rounds_won, "turns_taken": p.turns_taken,
 			"hand": p.hand.duplicate(true) if mine else _hidden(p.hand.size(), "h%d" % p.seat),
 			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
 		})
@@ -755,6 +860,7 @@ func load_snapshot(d: Dictionary) -> void:
 		p.has_melded = pd["has_melded"]
 		p.score = pd["score"]
 		p.rounds_won = pd["rounds_won"]
+		p.turns_taken = pd["turns_taken"]
 		p.hand = pd["hand"]
 		p.items = pd["items"]
 		players.append(p)

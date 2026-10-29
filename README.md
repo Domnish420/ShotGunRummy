@@ -63,6 +63,10 @@ the game ends for everyone. When exporting an app for Android, tick the
   and so on up to kings in round 13, then back to aces. A trump card (gold star)
   can stand in for any card of any suit in any set or run, so in round 1
   2♣ 3♣ A♦ 5♣ is a run.
+- **Swapping a trump.** If a meld on the table has a trump in it and you hold
+  the real card it stands for, swap it in and take the trump, but only if you
+  meld the trump straight away with 2+ of your own cards.
+- **First turn.** Nobody can put cards down on their first turn of a round.
 - **Hints.** A gold outline means a card makes a meld in your hand, a gold
   underline means it fits a meld on the table, and a gold banner tells you when
   you can go out (and when it would be Rummy). Turn them off with HINTS.

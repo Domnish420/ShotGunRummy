@@ -343,6 +343,9 @@ static func perform(g: Game, seat: int, action: String, args: Array, by_host: bo
 		"lay_off":
 			if args.size() == 2 and args[0] is Array and args[1] is String:
 				return g.lay_off(seat, args[0], args[1])
+		"swap":
+			if args.size() == 4 and args[0] is String and args[1] is String and args[2] is String and args[3] is Array:
+				return g.swap_trump(seat, args[0], args[1], args[2], args[3])
 		"discard":
 			if args.size() == 1 and args[0] is String:
 				return g.discard(seat, args[0])

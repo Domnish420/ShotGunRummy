@@ -194,12 +194,12 @@ func _drive(main) -> void:
 		else:
 			main._draw_stock()
 		return
-	var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
+	var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank) if game.can_place(seat) else {"melds": []}
 	if not best["melds"].is_empty():
 		main.selected = Cards.ids_of(best["melds"][0])
 		main._meld_selected()
 		return
-	for c in me.hand:
+	for c in (me.hand if game.can_place(seat) else []):
 		for m in game.melds:
 			if Cards.can_lay_off(m, [c], game.trump_rank):
 				main.selected = [c["id"]]

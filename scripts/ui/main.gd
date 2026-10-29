@@ -614,6 +614,8 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s melds %s." % [_name(d["seat"]), Cards.cards_text(d["meld"]["cards"])])
 		"layoff":
 			_log("%s lays off %s." % [_name(d["seat"]), Cards.cards_text(d["cards"])])
+		"swap":
+			_log("%s swaps %s in for the trump %s and melds %s." % [_name(d["seat"]), Cards.card_name(d["natural"]), Cards.card_name(d["trump"]), Cards.cards_text(d["new_meld"]["cards"])])
 		"discard":
 			_log("%s discards %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
 		"item_used":
@@ -890,7 +892,8 @@ func _refresh() -> void:
 	_clear(meld_flow)
 	for m in game.melds:
 		var mv := MeldView.new()
-		mv.setup(m, _name(m["owner"]), can_play and not sel_cards.is_empty() and Cards.can_lay_off(m, sel_cards, game.trump_rank), game.trump_rank)
+		var fits := Cards.can_lay_off(m, sel_cards, game.trump_rank) or not game.find_swap(seat, m["id"], selected).is_empty()
+		mv.setup(m, _name(m["owner"]), can_play and game.can_place(seat) and not sel_cards.is_empty() and fits, game.trump_rank)
 		mv.tapped.connect(_lay_off_on)
 		meld_flow.add_child(mv)
 
@@ -948,7 +951,7 @@ func _refresh() -> void:
 		hand_row.add_child(cv)
 
 	# buttons
-	var valid_meld := can_play and sel_cards.size() >= 3 and Cards.meld_type(sel_cards, game.trump_rank) != ""
+	var valid_meld := can_play and game.can_place(seat) and sel_cards.size() >= 3 and Cards.meld_type(sel_cards, game.trump_rank) != ""
 	meld_btn.disabled = not valid_meld
 	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
 	discard_btn.disabled = not (can_play and sel_cards.size() == 1 and game.can_discard(seat, sel_cards[0]["id"]))
@@ -987,8 +990,13 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 			var def := Items.def(item["item"])
 			var blocker := game.item_blocker(seat, selected_item)
 			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
+	var first := not game.can_place(seat)
 	if game.phase == "draw":
+		if first:
+			return "%s, YOUR FIRST TURN: DRAW, THEN DISCARD (NO MELDING YET)" % _name(seat)
 		return "%s, DRAW: TAP THE STOCK OR THE DISCARD PILE" % _name(seat)
+	if first:
+		return "FIRST TURN: NO MELDING YET. DISCARD 1 CARD TO END YOUR TURN" if sel_cards.size() != 1 else "PRESS DISCARD TO END YOUR TURN"
 	if sel_cards.is_empty():
 		return "MELD, LAY OFF, USE ITEMS, THEN DISCARD 1 CARD"
 	if valid_meld:
@@ -996,6 +1004,9 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	for m in game.melds:
 		if Cards.can_lay_off(m, sel_cards, game.trump_rank):
 			return "TAP A GLOWING MELD TO LAY OFF"
+	for m in game.melds:
+		if not game.find_swap(seat, m["id"], selected).is_empty():
+			return "TAP THE GLOWING MELD TO SWAP FOR ITS TRUMP AND MELD IT"
 	if sel_cards.size() == 1:
 		return "PRESS DISCARD TO END YOUR TURN"
 	return "NOT A VALID MELD"
@@ -1105,6 +1116,12 @@ func _meld_selected() -> void:
 func _lay_off_on(meld_id: String) -> void:
 	if not _my_turn() or game.phase != "play" or selected.is_empty():
 		return
+	var m := game.find_meld(meld_id)
+	if not m.is_empty() and not Cards.can_lay_off(m, _selected_cards(), game.trump_rank):
+		var swap := game.find_swap(_me(), meld_id, selected)
+		if not swap.is_empty():
+			_act("swap", [meld_id, swap["natural"], swap["trump"], swap["rest"]], _after_simple)
+			return
 	_act("lay_off", [selected.duplicate(), meld_id], _after_simple)
 
 
@@ -1446,6 +1463,8 @@ func _show_rules() -> void:
 		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
 		"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for every 10 points scored (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
 		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
+		"SWAPPING A TRUMP. If a meld on the table has a trump in it and you hold the real card it stands for, you can swap that card in and take the trump, but only if you meld the trump straight away with 2 or more of your own cards. Select the real card plus the cards for your new meld, then tap the glowing meld.",
+		"FIRST TURN. Nobody can put cards down on their first turn of a round: just draw and discard.",
 		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
 	]
 	for line in lines:
