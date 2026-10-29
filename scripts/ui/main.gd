@@ -13,19 +13,15 @@ const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
 const Palette = preload("res://scripts/ui/palette.gd")
 const CardView = preload("res://scripts/ui/card_view.gd")
-const MeldView = preload("res://scripts/ui/meld_view.gd")
-const ShotgunView = preload("res://scripts/ui/shotgun_view.gd")
+const World3DScene = preload("res://scripts/three/world3d.gd")
 const Session = preload("res://scripts/net/session.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
 const MAX_PLAYERS := 6
-const CARD_SIZE := Vector2(80, 116)
-const ITEM_SIZE := Vector2(86, 112)
-const PILE_SIZE := Vector2(76, 110)
-const LIFT := 18.0
 
 var game: Game
+var world: World3DScene
 var session: Session
 var profile_name := ""
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
@@ -55,20 +51,14 @@ var overlay_layer: Control
 var flash_rect: ColorRect
 
 # table widgets
+var hud: Control
 var round_label: Label
 var trump_label: Label
 var go_out_label: Label
-var opponents_box: VBoxContainer
-var stock_view: CardView
-var stock_label: Label
-var discard_view: CardView
-var meld_flow: HFlowContainer
 var me_name: Label
 var me_hp: HBoxContainer
 var deadwood_label: Label
 var status_label: Label
-var items_row: HBoxContainer
-var hand_row: HBoxContainer
 var meld_btn: Button
 var use_btn: Button
 var discard_btn: Button
@@ -78,12 +68,12 @@ var hint_btn: Button
 
 func _ready() -> void:
 	theme = Palette.make_theme()
-	var bg := ColorRect.new()
-	bg.color = Palette.BG
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_full(bg))
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	world = World3DScene.new()
+	add_child(world)
 
 	screen = _full(Control.new())
+	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(screen)
 
 	var vignette := _vignette()
@@ -108,7 +98,19 @@ func _ready() -> void:
 	session.ended.connect(_on_session_ended)
 
 	_load_settings()
+	get_tree().root.size_changed.connect(_fit_window)
+	_fit_window()
 	show_menu()
+
+
+## Phones in portrait lay out at 720x1280; wide screens (PC, a phone on its
+## side) at 1280x720 so buttons and text stay a sensible size.
+func _fit_window() -> void:
+	var win := get_tree().root
+	var s := win.size
+	var want := Vector2i(1280, 720) if s.x > s.y else Vector2i(720, 1280)
+	if win.content_scale_size != want:
+		win.content_scale_size = want
 
 
 # ================================================================ helpers
@@ -207,10 +209,7 @@ func _flash(color: Color) -> void:
 
 
 func _shake() -> void:
-	var t := create_tween()
-	for i in range(6):
-		t.tween_property(screen, "position", Vector2(randf_range(-14, 14), randf_range(-10, 10)), 0.04)
-	t.tween_property(screen, "position", Vector2.ZERO, 0.05)
+	world.shake()
 	Input.vibrate_handheld(250)
 
 
@@ -266,6 +265,7 @@ func show_menu() -> void:
 	session.stop_scan()
 	game = null
 	round_label = null
+	world.set_menu_mode(true)
 	var box := _paper()
 	box.add_child(_label("SHOTGUN\nRUMMY", 76, Color(0.36, 0.06, 0.05), true))
 	if menu_message != "":
@@ -635,6 +635,7 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s shoots %s." % [_name(d["shooter"]), _name(d["target"])])
 			if _online():
 				# every phone feels it; the target's phone most of all
+				world.fire(d["shooter"], d["target"])
 				if d["target"] == _me():
 					_flash(Palette.RED)
 					_shake()
@@ -742,18 +743,30 @@ func _handle(res: Dictionary) -> bool:
 func _build_table() -> void:
 	_close_overlay()
 	_clear(screen)
+	world.set_menu_mode(false)
+
+	# taps that don't land on a button go to the 3D table
+	var catcher := _full(Control.new())
+	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	catcher.gui_input.connect(_on_table_input)
+	screen.add_child(catcher)
+
 	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_theme_constant_override("margin_left", 16)
 	margin.add_theme_constant_override("margin_right", 16)
 	margin.add_theme_constant_override("margin_top", 36)
 	margin.add_theme_constant_override("margin_bottom", 20)
 	screen.add_child(_full(margin))
+	hud = margin
 	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 8)
 	margin.add_child(col)
 
 	# top bar
 	var top := HBoxContainer.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	round_label = _label("", 24, Palette.DIM)
 	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -766,49 +779,32 @@ func _build_table() -> void:
 		top.add_child(b)
 	col.add_child(top)
 
-	opponents_box = VBoxContainer.new()
-	opponents_box.add_theme_constant_override("separation", 4)
-	col.add_child(opponents_box)
+	status_label = _label("", 26, Palette.AMBER, true)
+	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	status_label.add_theme_constant_override("outline_size", 8)
+	status_label.custom_minimum_size = Vector2(0, 62)
+	col.add_child(status_label)
 
-	# felt: piles + melds
-	var felt := PanelContainer.new()
-	felt.add_theme_stylebox_override("panel", Palette.box(Palette.FELT, Palette.WOOD, 8, 18, 12))
-	felt.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(felt)
-	var felt_row := HBoxContainer.new()
-	felt_row.add_theme_constant_override("separation", 12)
-	felt.add_child(felt_row)
-	var piles := VBoxContainer.new()
-	piles.add_theme_constant_override("separation", 4)
-	felt_row.add_child(piles)
-	stock_view = CardView.new()
-	stock_view.setup({}, PILE_SIZE, 0.0, true)
-	stock_view.tapped.connect(func(_id: String) -> void: _draw_stock())
-	piles.add_child(stock_view)
-	stock_label = _label("STOCK", 18, Palette.DIM, true)
-	piles.add_child(stock_label)
-	discard_view = CardView.new()
-	discard_view.setup({}, PILE_SIZE)
-	discard_view.tapped.connect(func(_id: String) -> void: _draw_discard())
-	piles.add_child(discard_view)
-	piles.add_child(_label("DISCARD", 18, Palette.DIM, true))
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	felt_row.add_child(scroll)
-	meld_flow = HFlowContainer.new()
-	meld_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	meld_flow.add_theme_constant_override("h_separation", 8)
-	meld_flow.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(meld_flow)
+	go_out_label = _label("", 30, Palette.GOLD, true)
+	go_out_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	go_out_label.add_theme_constant_override("outline_size", 8)
+	go_out_label.visible = false
+	col.add_child(go_out_label)
 
-	# current player
+	# the 3D table, your items and your hand show through here
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+
 	var me_row := HBoxContainer.new()
+	me_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	me_row.add_theme_constant_override("separation", 12)
 	me_name = _label("", 30)
 	me_name.autowrap_mode = TextServer.AUTOWRAP_OFF
 	me_row.add_child(me_name)
 	me_hp = HBoxContainer.new()
+	me_hp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	me_row.add_child(me_hp)
 	deadwood_label = _label("", 22, Palette.DIM)
 	deadwood_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -816,25 +812,8 @@ func _build_table() -> void:
 	me_row.add_child(deadwood_label)
 	col.add_child(me_row)
 
-	status_label = _label("", 26, Palette.AMBER, true)
-	status_label.custom_minimum_size = Vector2(0, 62)
-	col.add_child(status_label)
-
-	go_out_label = _label("", 30, Palette.GOLD, true)
-	go_out_label.visible = false
-	col.add_child(go_out_label)
-
-	items_row = HBoxContainer.new()
-	items_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	items_row.add_theme_constant_override("separation", 10)
-	col.add_child(items_row)
-
-	hand_row = HBoxContainer.new()
-	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	hand_row.custom_minimum_size = Vector2(0, CARD_SIZE.y + LIFT)
-	col.add_child(hand_row)
-
 	var buttons := HBoxContainer.new()
+	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buttons.add_theme_constant_override("separation", 8)
 	meld_btn = _button("MELD", _meld_selected)
 	use_btn = _button("USE ITEM", _use_selected_item)
@@ -847,6 +826,7 @@ func _build_table() -> void:
 	col.add_child(buttons)
 
 	var minor := HBoxContainer.new()
+	minor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	minor.alignment = BoxContainer.ALIGNMENT_CENTER
 	minor.add_theme_constant_override("separation", 16)
 	sort_btn = _button("SORT: SUIT", _toggle_sort, 22)
@@ -855,6 +835,30 @@ func _build_table() -> void:
 		b.custom_minimum_size = Vector2(200, 46)
 		minor.add_child(b)
 	col.add_child(minor)
+
+
+## A tap on the table: find the card under it in 3D.
+func _on_table_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if game == null or overlay_layer.get_child_count() > 0:
+		return
+	var hit: Dictionary = world.pick(event.position)
+	match hit.get("kind", ""):
+		"hand":
+			_toggle_card(hit["id"])
+		"item":
+			_toggle_item(hit["id"])
+		"stock":
+			_draw_stock()
+		"discard":
+			_draw_discard()
+		"meld":
+			if selected.is_empty():
+				message = "Select cards from your hand first, then tap the meld."
+				_refresh()
+			else:
+				_lay_off_on(hit["id"])
 
 
 func _refresh() -> void:
@@ -867,35 +871,9 @@ func _refresh() -> void:
 	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
 	trump_label.text = "TRUMP: %s  " % trump_name(game.trump_rank) if game.trump_rank > 0 else ""
 
-	# other players, in turn order after the current one
-	_clear(opponents_box)
-	for i in range(game.players.size()):
-		var p = game.players[(seat + 1 + i) % game.players.size()]
-		if p.seat == seat:
-			continue
-		opponents_box.add_child(_opponent_row(p))
-
-	# piles
 	var can_draw := my_turn and game.phase == "draw"
-	stock_view.glow = can_draw
-	stock_view.face_down = not game.stock.is_empty()
-	stock_view.queue_redraw()
-	stock_label.text = "STOCK %d" % game.stock.size() if not game.stock.is_empty() else "SHUFFLE"
-	discard_view.card = game.top_discard()
-	discard_view.trump = not discard_view.card.is_empty() and game.is_trump(discard_view.card)
-	discard_view.glow = can_draw and not game.discard_pile.is_empty()
-	discard_view.queue_redraw()
-
-	# melds
 	var sel_cards := _selected_cards()
 	var can_play := my_turn and game.phase == "play"
-	_clear(meld_flow)
-	for m in game.melds:
-		var mv := MeldView.new()
-		var fits := Cards.can_lay_off(m, sel_cards, game.trump_rank) or not game.find_swap(seat, m["id"], selected).is_empty()
-		mv.setup(m, _name(m["owner"]), can_play and game.can_place(seat) and not sel_cards.is_empty() and fits, game.trump_rank)
-		mv.tapped.connect(_lay_off_on)
-		meld_flow.add_child(mv)
 
 	# current player
 	me_name.text = me.name + _flags(me)
@@ -904,51 +882,32 @@ func _refresh() -> void:
 	var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
 	deadwood_label.text = "DEADWOOD %d" % best["points"]
 
-	_clear(items_row)
-	if me.items.is_empty():
-		items_row.add_child(_tag("NO ITEMS", 20, Palette.DIM))
-	for item in me.items:
-		var iv := CardView.new()
-		iv.setup(item, ITEM_SIZE, 0.0)
-		iv.selected = item["id"] == selected_item
-		iv.locked = my_turn and game.item_blocker(seat, item["id"]) != ""
-		iv.tapped.connect(_toggle_item)
-		items_row.add_child(iv)
-
-	_clear(hand_row)
 	var hand: Array = me.hand.duplicate()
 	if sort_by_rank:
 		Cards.sort_by_rank(hand)
 	else:
 		Cards.sort_by_suit(hand)
-	# hints: gold outline = makes a meld in your hand, gold underline = fits
-	# a meld already on the table
+	# hints: gold outline = makes a meld in your hand, gold + = fits a meld
+	# already on the table
 	var meld_ids := {}
 	var lay_ids := {}
-	for meld_cards in best["melds"]:
-		for c in meld_cards:
-			meld_ids[c["id"]] = true
-	for c in best["deadwood"]:
+	if hints:
+		for meld_cards in best["melds"]:
+			for c in meld_cards:
+				meld_ids[c["id"]] = true
+		for c in best["deadwood"]:
+			for m in game.melds:
+				if Cards.can_lay_off(m, [c], game.trump_rank):
+					lay_ids[c["id"]] = true
+	var targets := {}
+	if can_play and game.can_place(seat) and not sel_cards.is_empty():
 		for m in game.melds:
-			if Cards.can_lay_off(m, [c], game.trump_rank):
-				lay_ids[c["id"]] = true
-	var avail := get_viewport_rect().size.x - 32.0
-	var n := hand.size()
-	var sep := 6
-	if n > 1:
-		sep = mini(6, int((avail - n * CARD_SIZE.x) / (n - 1)))
-	hand_row.add_theme_constant_override("separation", sep)
-	for c in hand:
-		var cv := CardView.new()
-		cv.setup(c, CARD_SIZE, LIFT)
-		cv.selected = selected.has(c["id"])
-		cv.hint = hints and meld_ids.has(c["id"])
-		cv.lay_hint = hints and lay_ids.has(c["id"])
-		cv.trump = game.is_trump(c)
-		cv.glow = c["id"] == lit_card
-		cv.locked = can_play and not game.can_discard(seat, c["id"])
-		cv.tapped.connect(_toggle_card)
-		hand_row.add_child(cv)
+			if Cards.can_lay_off(m, sel_cards, game.trump_rank) or not game.find_swap(seat, m["id"], selected).is_empty():
+				targets[m["id"]] = true
+	world.sync({
+		"game": game, "viewer": seat, "hand": hand, "selected": selected, "selected_item": selected_item,
+		"meld_hints": meld_ids, "lay_hints": lay_ids, "lit": lit_card, "can_draw": can_draw, "targets": targets,
+	})
 
 	# buttons
 	var valid_meld := can_play and game.can_place(seat) and sel_cards.size() >= 3 and Cards.meld_type(sel_cards, game.trump_rank) != ""
@@ -1010,27 +969,6 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if sel_cards.size() == 1:
 		return "PRESS DISCARD TO END YOUR TURN"
 	return "NOT A VALID MELD"
-
-
-func _opponent_row(p) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var tag := "D " if p.seat == game.dealer else "  "
-	var name_label := _label(tag + p.name + _flags(p), 26, Palette.INK if p.alive else Palette.DIM)
-	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	name_label.custom_minimum_size = Vector2(250, 0)
-	name_label.clip_text = true
-	row.add_child(name_label)
-	if not p.alive:
-		row.add_child(_tag("OUT", 24, Palette.RED))
-		return row
-	row.add_child(_hp_bar(p, Vector2(20, 12)))
-	var counts := _label("%d CARDS · %d ITEMS" % [p.hand.size(), p.items.size()], 22, Palette.DIM)
-	counts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	counts.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	counts.autowrap_mode = TextServer.AUTOWRAP_OFF
-	row.add_child(counts)
-	return row
 
 
 func _selected_cards() -> Array:
@@ -1184,9 +1122,11 @@ func _toggle_hints() -> void:
 
 ## Opens a full-screen overlay. Returns the content box; add buttons with
 ## _overlay_buttons. Scrolls when the content is long.
-func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "") -> VBoxContainer:
+func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "", bottom: bool = false) -> VBoxContainer:
 	_close_overlay()
 	_overlay_kind = kind
+	if hud != null and is_instance_valid(hud):
+		hud.visible = not bottom
 	var bg := ColorRect.new()
 	bg.color = Color(0, 0, 0, opacity)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1205,6 +1145,11 @@ func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "
 		margin.add_child(sc)
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sc.add_child(box)
+	elif bottom:
+		# docked at the bottom so the 3D table stays in view
+		box.alignment = BoxContainer.ALIGNMENT_END
+		box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(box)
 	else:
 		var center := CenterContainer.new()
 		margin.add_child(center)
@@ -1217,6 +1162,8 @@ func _close_overlay() -> void:
 	if overlay_layer != null:
 		_clear(overlay_layer)
 	_overlay_kind = ""
+	if hud != null and is_instance_valid(hud):
+		hud.visible = true
 
 
 func _closing(then: Callable) -> Callable:
@@ -1339,13 +1286,9 @@ func _show_gun(last_text: String = "") -> void:
 	if game.gun != null:
 		holder = game.gun["holder"]
 		shells = game.gun["shells"]
-	var box := _open_overlay(0.97, false, "gun")
+	var box := _open_overlay(0.2, false, "gun", true)
 	var shooter: int = game.last_result["winner"]
 	box.add_child(_title("%s HAS THE SHOTGUN" % _name(shooter), Palette.RED))
-	var gun_holder := CenterContainer.new()
-	var gun := ShotgunView.new()
-	gun_holder.add_child(gun)
-	box.add_child(gun_holder)
 	var shell_row := HBoxContainer.new()
 	shell_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	shell_row.add_theme_constant_override("separation", 10)
@@ -1402,18 +1345,17 @@ func _show_gun(last_text: String = "") -> void:
 		else:
 			box.add_child(_label("The shotgun goes back on the wall.", 24, Palette.DIM, true))
 			_add_next_round(box)
-	if last_text != "":
-		gun.call_deferred("kick")
 
 
-func _fire(_shooter: int, target: int) -> void:
-	_act("shoot", [target], _after_fire.bind(target))
+func _fire(shooter: int, target: int) -> void:
+	_act("shoot", [target], _after_fire.bind(shooter, target))
 
 
-func _after_fire(res: Dictionary, target: int) -> void:
+func _after_fire(res: Dictionary, shooter: int, target: int) -> void:
 	if not res["ok"]:
 		return
 	if not _online():
+		world.fire(shooter, target)
 		_flash(Color.WHITE)
 		_shake()
 	var text := "BANG. %s takes %d." % [_name(target), res["damage"]]

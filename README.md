@@ -1,7 +1,13 @@
 # Shotgun Rummy
 
-Rummy for 2–6 players, on one phone or over the same Wi-Fi. Item cards bend the rules, and
-whoever goes out picks up the shotgun.
+Rummy for 2–6 players at a 3D table under a hanging lamp, on one phone or over
+the same Wi-Fi. Item cards bend the rules, and whoever goes out picks up the
+shotgun.
+
+You sit at the near side of the table with your hand in front of you. Tap
+cards to select them, tap the stock or discard pile to draw, and tap a meld on
+the table to lay off onto it. The other players sit around the table with
+their health and card counts above their heads.
 
 Built with [Godot 4](https://godotengine.org/) (4.4 or newer; the latest 4.x is best).
 
@@ -96,7 +102,9 @@ the game ends for everyone. When exporting an app for Android, tick the
 | `scripts/core/game.gd` | The full rules: dealing, turns, items, scoring, shotgun, health. No UI, so it can be tested and reused for AI or online play later. |
 | `scripts/core/bot.gd` | A simple player the tests use. Starting point for AI players. |
 | `scripts/net/session.gd` | Lobbies, Wi-Fi discovery and online play (the host checks every move). |
-| `scripts/ui/` | Everything on screen: `main.gd` builds the screens, `card_art.gd` draws the cards. |
+| `scripts/three/world3d.gd` | The 3D room: table, lamp, players, shotgun, card placement and tap picking. |
+| `scripts/three/card3d.gd`, `card_textures.gd` | A 3D card, and the card faces (drawn once at startup from the 2D card art). |
+| `scripts/ui/` | Menus, buttons and pop-ups over the 3D view: `main.gd` builds the screens, `card_art.gd` draws card faces. |
 | `tests/test_runner.gd` | Rules tests. |
 
 Tunable numbers (hand size, health, items per turn, shells) are in `options` at
@@ -135,4 +143,5 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [ ] Sound effects
 - [ ] AI players
 - [ ] Extra cards (jokers, special cards)
-- [ ] 3D PC version
+- [x] 3D table (phone portrait; also works on a PC screen)
+- [ ] Polished PC version
