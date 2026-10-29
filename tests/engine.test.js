@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const E = require('../js/engine.js');
+require('../js/items.js');
 const { DealerAI } = require('../js/ai.js');
 
 const c = (id) => {
@@ -86,7 +87,7 @@ test('cannot discard the card just taken from the discard pile', () => {
 });
 
 test('going out scores opponent deadwood, rummy doubles', () => {
-  const g = new E.RummyGame({ seed: 3 });
+  const g = new E.RummyGame({ seed: 3, items: {} });
   g.startRound();
   const p = g.currentPlayer;
   const opp = g.opponentsOf(p.id)[0];
@@ -101,6 +102,122 @@ test('going out scores opponent deadwood, rummy doubles', () => {
   assert.equal(g.lastResult.rummy, true);
   assert.equal(g.lastResult.points, 50); // (10+10+5) * 2
   assert.equal(p.score, 50);
+  // 50 points = 1 + floor(50 / 10), capped at 3 shells
+  assert.equal(g.phase, 'shoot');
+  assert.deepEqual(g.gun, { holder: p.id, shells: 3 });
+});
+
+const item = (id, n = 1) => E.makeItemCard(id, n);
+
+function setupTurn(seed = 4) {
+  const g = new E.RummyGame({ seed, items: {} });
+  g.startRound();
+  const p = g.currentPlayer;
+  const opp = g.opponentsOf(p.id)[0];
+  return { g, p, opp };
+}
+
+test('deck includes item cards', () => {
+  const g = new E.RummyGame({ seed: 5 });
+  g.startRound();
+  const all = g.stock.concat(g.discardPile, ...g.players.map((p) => p.hand));
+  const items = all.filter(E.isItem);
+  assert.equal(items.length, Object.values(E.defaultItemCounts()).reduce((a, b) => a + b, 0));
+  assert.equal(all.length, 52 + items.length);
+});
+
+test('items never meld and count 5 deadwood', () => {
+  assert.equal(E.meldType([item('beer', 1), item('beer', 2), item('beer', 3)]), null);
+  assert.equal(E.meldType(cards('5S 6S').concat(item('saw'))), null);
+  const best = E.bestMeldPartition(cards('5S 6S 7S').concat(item('saw')));
+  assert.equal(best.deadwoodPoints, 5);
+});
+
+test('only one item per turn, usable before drawing', () => {
+  const { g, p } = setupTurn();
+  p.hp = 3;
+  p.hand.push(item('cigarettes', 1), item('cigarettes', 2));
+  assert.ok(g.useItem(p.id, 'I-cigarettes-1').ok);
+  assert.equal(p.hp, 4);
+  assert.equal(g.useItem(p.id, 'I-cigarettes-2').ok, false);
+  assert.equal(g.phase, 'draw');
+});
+
+test('cigarettes need missing health', () => {
+  const { g, p } = setupTurn();
+  p.hand.push(item('cigarettes'));
+  assert.equal(g.useItem(p.id, 'I-cigarettes-1').ok, false);
+});
+
+test('handcuffs skip the opponent turn', () => {
+  const { g, p, opp } = setupTurn();
+  p.hand.push(item('handcuffs'));
+  assert.ok(g.useItem(p.id, 'I-handcuffs-1').ok);
+  assert.equal(opp.cuffed, true);
+  g.drawFromStock(p.id);
+  g.discard(p.id, p.hand[0].id);
+  assert.equal(g.currentPlayer.id, p.id);
+  assert.equal(opp.cuffed, false);
+});
+
+test('magnifier reveals the top of the stock privately, beer burns it', () => {
+  const { g, p } = setupTurn();
+  p.hand.push(item('magnifier'));
+  const top = g.topOfStock;
+  const r = g.useItem(p.id, 'I-magnifier-1');
+  assert.equal(r.reveal, top);
+  assert.equal(r.revealTo, p.id);
+  g.itemsUsedThisTurn = 0;
+  p.hand.push(item('beer'));
+  const b = g.useItem(p.id, 'I-beer-1');
+  assert.equal(b.reveal, top);
+  assert.notEqual(g.topOfStock, top);
+});
+
+test('adrenaline steals a card', () => {
+  const { g, p, opp } = setupTurn();
+  p.hand.push(item('adrenaline'));
+  const before = opp.hand.length;
+  const r = g.useItem(p.id, 'I-adrenaline-1');
+  assert.ok(r.ok);
+  assert.equal(opp.hand.length, before - 1);
+  assert.ok(p.hand.includes(r.reveal));
+});
+
+test('using your last card as an item goes out', () => {
+  const { g, p } = setupTurn();
+  p.hp = 2;
+  p.hand = [item('cigarettes')];
+  g.useItem(p.id, 'I-cigarettes-1');
+  assert.equal(g.lastResult.winner, p.id);
+});
+
+test('shotgun: winner shoots, saw doubles, death ends the match', () => {
+  const { g, p, opp } = setupTurn();
+  opp.hp = opp.maxHp = 5;
+  p.sawed = true;
+  p.hand = cards('2S 3S 4S');
+  opp.hand = cards('KH QH KD');
+  g.stock.push(c('JD'));
+  g.drawFromStock(p.id);
+  g.meld(p.id, ['2S', '3S', '4S']);
+  g.discard(p.id, 'JD');
+  // 30 points, doubled for rummy = 60 → 3 shells (the max)
+  assert.equal(g.gun.shells, 3);
+  assert.equal(g.shoot(opp.id, p.id).ok, false); // not their gun
+  assert.equal(g.shoot(p.id, p.id).ok, false); // no self shots
+  assert.equal(g.shoot(p.id, opp.id).damage, 2);
+  assert.equal(opp.hp, 3);
+  g.shoot(p.id, opp.id);
+  g.shoot(p.id, opp.id);
+  assert.equal(opp.hp, 1);
+  assert.equal(g.phase, 'roundOver');
+  assert.equal(g.gun, null);
+  assert.ok(g.startRound().ok);
+  assert.equal(opp.hp, 1); // health carries over between rounds
+  g.damage(opp.id, 1);
+  assert.equal(g.phase, 'matchOver');
+  assert.equal(g.matchWinner, p.id);
 });
 
 test('AI vs AI matches always finish and conserve cards', () => {
@@ -114,19 +231,29 @@ test('AI vs AI matches always finish and conserve cards', () => {
     });
     const ais = { a: new DealerAI(g, 'a', { rng: E.createRng(seed) }), b: new DealerAI(g, 'b', { rng: E.createRng(seed + 99) }) };
     g.startRound();
+    const deckSize = g.stock.length + g.discardPile.length + 20;
     let turns = 0;
     while (g.phase !== 'matchOver') {
       if (g.phase === 'roundOver') {
         g.startRound();
         continue;
       }
+      if (g.phase === 'shoot') {
+        g.shoot(g.gun.holder, ais[g.gun.holder].chooseTarget());
+        continue;
+      }
       ais[g.currentPlayer.id].playTurn();
+      if (g.phase === 'matchOver') break;
       const total =
-        g.stock.length + g.discardPile.length + g.melds.reduce((s, m) => s + m.cards.length, 0) + g.players.reduce((s, p) => s + p.hand.length, 0);
-      assert.equal(total, 52, `card count drifted (seed ${seed})`);
+        g.stock.length +
+        g.discardPile.length +
+        g.burned.length +
+        g.melds.reduce((s, m) => s + m.cards.length, 0) +
+        g.players.reduce((s, p) => s + p.hand.length, 0);
+      assert.equal(total, deckSize, `card count drifted (seed ${seed})`);
       for (const m of g.melds) assert.equal(E.meldType(m.cards), m.type);
       assert.ok(++turns < 5000, `match did not finish (seed ${seed})`);
     }
-    assert.ok(g.players.some((p) => p.score >= 100));
+    assert.equal(g.players.filter((p) => p.hp > 0).length, 1);
   }
 });

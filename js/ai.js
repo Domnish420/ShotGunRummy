@@ -1,8 +1,8 @@
 /*
  * Shotgun Rummy — The Dealer's brain.
  *
- * The AI is split into small decisions (draw, next play, discard) so the UI
- * can run them one step at a time with pauses, like a dealer thinking.
+ * The AI is split into small decisions (item, draw, next play, discard, target)
+ * so the UI can run them one step at a time with pauses, like a dealer thinking.
  */
 (function (root, factory) {
   const engine = typeof module === 'object' && module.exports ? require('./engine.js') : root.RummyEngine;
@@ -17,19 +17,62 @@
       this.game = game;
       this.playerId = playerId;
       this.rng = options.rng || Math.random;
+      this.peeked = null; // card seen on top of the stock with the magnifier
+      game.on('itemUsed', (e) => {
+        if (e.player === this.playerId && e.item === 'magnifier') this.peeked = e.reveal;
+      });
+      game.on('turnStart', () => {
+        this.peeked = null;
+      });
+    }
+
+    get me() {
+      return this.game.getPlayer(this.playerId);
     }
 
     get hand() {
-      return this.game.getPlayer(this.playerId).hand;
+      return this.me.hand;
+    }
+
+    _helps(card) {
+      if (E.isItem(card)) return false;
+      if (this.game.melds.some((m) => E.canLayOff(m, [card]))) return true;
+      const withCard = E.bestMeldPartition(this.hand.concat(card));
+      return !withCard.deadwood.some((c) => c.id === card.id);
+    }
+
+    /** Item card id to use now, or null. Called in the draw phase. */
+    chooseItem() {
+      const g = this.game;
+      const me = this.me;
+      const items = this.hand.filter((c) => E.isItem(c) && !g.itemBlocker(this.playerId, c.id));
+      if (!items.length) return null;
+      const opp = g.opponentsOf(this.playerId)[0];
+      const has = (id) => items.find((c) => c.item === id);
+      const pick = (id) => has(id) && has(id).id;
+
+      if (me.hp <= me.maxHp - 2 && me.hp >= 2 && has('medicine')) return pick('medicine');
+      if (me.hp < me.maxHp && has('cigarettes')) return pick('cigarettes');
+      if (has('saw')) return pick('saw');
+      if (opp && opp.hand.length <= 6 && has('handcuffs')) return pick('handcuffs');
+      if (opp && opp.hand.length <= 6 && has('adrenaline')) return pick('adrenaline');
+      if (has('magnifier')) return pick('magnifier');
+      if (has('phone')) return pick('phone');
+      if (has('beer') && this.rng() < 0.5) return pick('beer');
+      return null;
     }
 
     /** 'discard' if the top discard helps, otherwise 'stock'. */
     chooseDraw() {
       const top = this.game.topDiscard;
+      const peek = this.peeked && this.peeked === this.game.topOfStock ? this.peeked : null;
+      if (peek && this._helps(peek)) return 'stock';
       if (!top) return 'stock';
-      if (this.game.melds.some((m) => E.canLayOff(m, [top]))) return 'discard';
-      const withTop = E.bestMeldPartition(this.hand.concat(top));
-      return withTop.deadwood.some((c) => c.id === top.id) ? 'stock' : 'discard';
+      if (E.isItem(top)) {
+        // only grab items it would use right away next turn
+        return top.item === 'cigarettes' && this.me.hp < this.me.maxHp ? 'discard' : 'stock';
+      }
+      return this._helps(top) ? 'discard' : 'stock';
     }
 
     /** The next meld / lay-off to make, or null when done. */
@@ -56,6 +99,8 @@
         let score = E.bestMeldPartition(rest).deadwoodPoints;
         // don't feed the opponent a card that fits a meld on the table
         if (this.game.melds.some((m) => E.canLayOff(m, [card]))) score += 6;
+        // don't hand over good items
+        if (E.isItem(card) && card.item !== 'beer') score += 4;
         const tiebreak = -E.cardPoints(card) + this.rng() * 0.5;
         if (!best || score < best.score || (score === best.score && tiebreak < best.tiebreak)) {
           best = { card, score, tiebreak };
@@ -64,9 +109,18 @@
       return best.card.id;
     }
 
+    /** Who to shoot: the weakest living opponent. */
+    chooseTarget() {
+      const opps = this.game.opponentsOf(this.playerId);
+      return opps.sort((a, b) => a.hp - b.hp)[0].id;
+    }
+
     /** Plays a full turn synchronously (used by tests / simulations). */
     playTurn() {
       const g = this.game;
+      const item = this.chooseItem();
+      if (item) g.useItem(this.playerId, item);
+      if (!g.isTurnOf(this.playerId)) return;
       const res = this.chooseDraw() === 'discard' ? g.drawFromDiscard(this.playerId) : g.drawFromStock(this.playerId);
       if (!res.ok || g.phase !== 'play') return;
       let play;
