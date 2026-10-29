@@ -1,6 +1,6 @@
 # Shotgun Rummy
 
-Pass-and-play Rummy for 2–6 players on one phone. Item cards bend the rules, and
+Rummy for 2–6 players, on one phone or over the same Wi-Fi. Item cards bend the rules, and
 whoever goes out picks up the shotgun.
 
 Built with [Godot 4](https://godotengine.org/) (4.4 or newer; the latest 4.x is best).
@@ -11,8 +11,8 @@ Built with [Godot 4](https://godotengine.org/) (4.4 or newer; the latest 4.x is 
 2. Open Godot, click **Import**, and pick `project.godot` in this folder.
 3. Press **F5** (or the ▶ Play button, top right).
 
-The window opens at phone shape (portrait). Untick **HIDE HANDS BETWEEN TURNS**
-on the setup screen if you're testing alone and don't want the "pass the phone"
+The window opens at phone shape (portrait). Under **PASS & PLAY**, untick **HIDE HANDS BETWEEN TURNS**
+if you're testing alone and don't want the "pass the phone"
 screen between every turn.
 
 ## Run it on your phone
@@ -26,6 +26,21 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_android.ht
 
 **iPhone:** exporting needs a Mac with Xcode. See
 https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
+
+## Playing together
+
+From the main menu:
+
+- **HOST A LOBBY**: your phone runs the game. Others join, then you press START.
+- **JOIN A LOBBY**: lobbies on the same Wi-Fi show up automatically. If none
+  appear (some routers and hotspots block this), type the IP address shown on
+  the host's screen and press JOIN.
+- **PASS & PLAY**: everyone shares one phone.
+
+Every phone needs this project. The host's phone is the referee: other phones
+only ever receive their own hand, so nobody can peek. If anyone leaves mid-game,
+the game ends for everyone. When exporting an app for Android, tick the
+**INTERNET** permission in the export settings.
 
 ## How to play
 
@@ -76,6 +91,7 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
 | `scripts/core/items.gd` | Item list (names, icons, copies). Edit this to tune items. |
 | `scripts/core/game.gd` | The full rules: dealing, turns, items, scoring, shotgun, health. No UI, so it can be tested and reused for AI or online play later. |
 | `scripts/core/bot.gd` | A simple player the tests use. Starting point for AI players. |
+| `scripts/net/session.gd` | Lobbies, Wi-Fi discovery and online play (the host checks every move). |
 | `scripts/ui/` | Everything on screen: `main.gd` builds the screens, `card_art.gd` draws the cards. |
 | `tests/test_runner.gd` | Rules tests. |
 
@@ -89,6 +105,14 @@ godot --headless --path . --import
 godot --headless --path . -s tests/test_runner.gd
 ```
 
+`tests/net_test.gd` runs a host and two players in one process and plays a
+whole 3-player match over the network, checking nobody can see anyone else's
+cards:
+
+```
+godot --headless --path . -s tests/net_test.gd
+```
+
 `tests/ui_smoke.gd` plays a whole 3-player match through the real screens and
 can save screenshots (needs a window, so leave off `--headless`):
 
@@ -100,6 +124,10 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 
 - [x] Rummy for 2–6 local players with a rotating dealer
 - [x] Item cards, health and the shotgun
+- [x] Trump cards and gold hints
+- [x] Main menu, lobbies on the same Wi-Fi
+- [ ] Character customisation
+- [ ] Online lobbies over the internet
 - [ ] Sound effects
 - [ ] AI players
 - [ ] Extra cards (jokers, special cards)

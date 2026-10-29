@@ -59,6 +59,20 @@ func _overlay_text() -> String:
 
 func _run() -> void:
 	await _frames(6)
+	await _shot("00_menu")
+	main._name_edit.text = "sam"
+	main._on_host_pressed()
+	await _frames()
+	await _shot("00b_host_lobby")
+	main.show_menu()
+	await _frames()
+	main._on_join_pressed()
+	await _frames(90)
+	await _shot("00c_join")
+	main.show_menu()
+	await _frames()
+	main._on_pass_and_play_pressed()
+	await _frames()
 	await _shot("01_setup")
 	main.player_names = ["SAM", "ALEX", "JO"]
 	main.hide_hands = true

@@ -713,6 +713,75 @@ func shoot(shooter: int, target: int) -> Dictionary:
 	return _ok({"damage": dmg})
 
 
+# ---------------------------------------------------------------- network
+
+## Everything `view_seat` is allowed to know, as plain data that can be sent
+## over the network. Other players' hands and items, and the stock, are
+## replaced by face-down placeholders so only their counts are known.
+func snapshot(view_seat: int) -> Dictionary:
+	var ps := []
+	for p in players:
+		var mine: bool = p.seat == view_seat
+		ps.append({
+			"seat": p.seat, "name": p.name, "hp": p.hp, "max_hp": p.max_hp, "alive": p.alive,
+			"cuffed": p.cuffed, "sawed": p.sawed, "has_melded": p.has_melded,
+			"score": p.score, "rounds_won": p.rounds_won,
+			"hand": p.hand.duplicate(true) if mine else _hidden(p.hand.size(), "h%d" % p.seat),
+			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
+		})
+	return {
+		"options": options.duplicate(true), "players": ps, "round_num": round_num, "dealer": dealer,
+		"turn": turn, "phase": phase, "stock": _hidden(stock.size(), "s"),
+		"discard_pile": discard_pile.duplicate(true), "melds": melds.duplicate(true),
+		"burned": _hidden(burned.size(), "b"), "gun": gun.duplicate() if gun != null else null,
+		"last_result": last_result.duplicate(true), "winner": winner, "trump_rank": trump_rank,
+		"drawn_from_discard": drawn_from_discard, "items_used_this_turn": items_used_this_turn,
+		"melded_at_turn_start": _melded_at_turn_start,
+	}
+
+
+## Turns this game into a read-only mirror of a snapshot (used on players'
+## phones; only the host's game is real).
+func load_snapshot(d: Dictionary) -> void:
+	options = d["options"]
+	players.clear()
+	for pd in d["players"]:
+		var p := Player.new(int(pd["seat"]), str(pd["name"]))
+		p.hp = pd["hp"]
+		p.max_hp = pd["max_hp"]
+		p.alive = pd["alive"]
+		p.cuffed = pd["cuffed"]
+		p.sawed = pd["sawed"]
+		p.has_melded = pd["has_melded"]
+		p.score = pd["score"]
+		p.rounds_won = pd["rounds_won"]
+		p.hand = pd["hand"]
+		p.items = pd["items"]
+		players.append(p)
+	round_num = d["round_num"]
+	dealer = d["dealer"]
+	turn = d["turn"]
+	phase = d["phase"]
+	stock = d["stock"]
+	discard_pile = d["discard_pile"]
+	melds = d["melds"]
+	burned = d["burned"]
+	gun = d["gun"]
+	last_result = d["last_result"]
+	winner = d["winner"]
+	trump_rank = d["trump_rank"]
+	drawn_from_discard = d["drawn_from_discard"]
+	items_used_this_turn = d["items_used_this_turn"]
+	_melded_at_turn_start = d["melded_at_turn_start"]
+
+
+func _hidden(count: int, tag: String) -> Array:
+	var out := []
+	for i in range(count):
+		out.append({"id": "?%s-%d" % [tag, i], "hidden": true, "rank": 0, "suit": ""})
+	return out
+
+
 # ---------------------------------------------------------------- helpers
 
 func _shuffle(arr: Array) -> Array:
