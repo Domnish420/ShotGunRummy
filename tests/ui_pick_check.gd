@@ -52,7 +52,8 @@ func _initialize() -> void:
 	var ev := InputEventMouseButton.new()
 	ev.button_index = MOUSE_BUTTON_LEFT
 	ev.pressed = true
-	ev.position = cam.unproject_position(stock_card.global_position)
+	# the 3D view is smaller than the screen: scale its pixels back up
+	ev.position = cam.unproject_position(stock_card.global_position) * main.view_rect.size / Vector2(main.view3d.size)
 	main._on_table_input(ev)
 	check(g.players[0].hand.size() + g.players[0].items.size() > before, "tapping the stock draws")
 	print("PICK %s" % ("OK" if fails == 0 else "FAILED"))

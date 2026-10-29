@@ -22,6 +22,9 @@ const MAX_PLAYERS := 6
 
 var game: Game
 var world: World3DScene
+var view3d: SubViewport
+var view_rect: TextureRect
+var graphics := "PS3"
 var session: Session
 var profile_name := ""
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
@@ -72,17 +75,34 @@ var hint_btn: Button
 func _ready() -> void:
 	theme = Palette.make_theme()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_load_settings()
+
+	# the 3D table renders small, then is scaled up with crisp pixels and the
+	# gritty post-processing shader
+	view3d = SubViewport.new()
+	view3d.own_world_3d = true
+	view3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	view3d.msaa_3d = Viewport.MSAA_DISABLED
+	add_child(view3d)
+	view_rect = TextureRect.new()
+	view_rect.texture = view3d.get_texture()
+	view_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	view_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	view_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	view_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var post := ShaderMaterial.new()
+	post.shader = load("res://shaders/post.gdshader")
+	view_rect.material = post
+	add_child(_full(view_rect))
+	_fit_view()
 	world = World3DScene.new()
-	add_child(world)
+	view3d.add_child(world)
 	world.deal_finished.connect(_on_deal_finished)
 
 	screen = _full(Control.new())
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(screen)
 
-	var vignette := _vignette()
-	add_child(vignette)
-	_flicker(vignette)
 	overlay_layer = _full(Control.new())
 	overlay_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay_layer)
@@ -101,10 +121,39 @@ func _ready() -> void:
 	session.updated.connect(_on_net_update)
 	session.ended.connect(_on_session_ended)
 
-	_load_settings()
 	get_tree().root.size_changed.connect(_fit_window)
 	_fit_window()
 	show_menu()
+
+
+## How sharp the 3D is: a share of the screen's resolution.
+const GRAPHICS := {"PS2": 0.42, "PS3": 0.6, "SHARP": 1.0}
+
+
+func _fit_view() -> void:
+	var s := get_viewport_rect().size
+	var scale: float = GRAPHICS.get(graphics, 0.6)
+	view3d.size = Vector2i(maxi(64, int(s.x * scale)), maxi(64, int(s.y * scale)))
+	var post := view_rect.material as ShaderMaterial
+	# full-resolution play needs less grit to look right
+	post.set_shader_parameter("dither", 0.0 if graphics == "SHARP" else 1.0)
+	post.set_shader_parameter("levels", 64.0 if graphics == "SHARP" else 28.0)
+
+
+## A point on screen, in the 3D view's (smaller) pixels.
+func _to_view(screen_pos: Vector2) -> Vector2:
+	return screen_pos * Vector2(view3d.size) / view_rect.size
+
+
+func _cycle_graphics() -> void:
+	var order := GRAPHICS.keys()
+	graphics = order[(order.find(graphics) + 1) % order.size()]
+	_save_settings()
+	_fit_view()
+	if game == null:
+		show_menu()
+	else:
+		_show_menu()
 
 
 ## Phones in portrait lay out at 720x1280; wide screens (PC, a phone on its
@@ -115,6 +164,8 @@ func _fit_window() -> void:
 	var want := Vector2i(1280, 720) if s.x > s.y else Vector2i(720, 1280)
 	if win.content_scale_size != want:
 		win.content_scale_size = want
+	if view3d != null:
+		_fit_view.call_deferred()
 
 
 # ================================================================ helpers
@@ -182,34 +233,6 @@ func _flags(p) -> String:
 	return f
 
 
-func _vignette() -> TextureRect:
-	var g := Gradient.new()
-	g.set_color(0, Color(0, 0, 0, 0))
-	g.set_color(1, Color(0, 0, 0, 0.75))
-	g.add_point(0.55, Color(0, 0, 0, 0))
-	var tex := GradientTexture2D.new()
-	tex.gradient = g
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.42)
-	tex.fill_to = Vector2(1.15, 1.1)
-	var r := TextureRect.new()
-	r.texture = tex
-	r.stretch_mode = TextureRect.STRETCH_SCALE
-	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_full(r)
-	return r
-
-
-## The overhead light flickers now and then.
-func _flicker(r: Control) -> void:
-	var t := r.create_tween().set_loops()
-	t.tween_interval(6.0)
-	t.tween_property(r, "modulate:a", 1.6, 0.05)
-	t.tween_property(r, "modulate:a", 1.0, 0.08)
-	t.tween_property(r, "modulate:a", 1.4, 0.05)
-	t.tween_property(r, "modulate:a", 1.0, 0.1)
-
-
 func _flash(color: Color) -> void:
 	flash_rect.color = Color(color, 0.9)
 	var t := create_tween()
@@ -234,6 +257,7 @@ func _load_settings() -> void:
 	player_names = cfg.get_value("setup", "names", player_names)
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
 	profile_name = cfg.get_value("profile", "name", "")
+	graphics = cfg.get_value("video", "graphics", "PS3")
 
 
 func _save_settings() -> void:
@@ -241,6 +265,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "names", player_names)
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("profile", "name", profile_name)
+	cfg.set_value("video", "graphics", graphics)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -294,6 +319,7 @@ func show_menu() -> void:
 	box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
 	box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
 	box.add_child(_paper_button("PASS & PLAY (ONE PHONE)", _on_pass_and_play_pressed, 28))
+	box.add_child(_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24))
 	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
 
 
@@ -874,7 +900,7 @@ func _on_table_input(event: InputEvent) -> void:
 		return
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
-	var hit: Dictionary = world.pick(event.position)
+	var hit: Dictionary = world.pick(_to_view(event.position))
 	match hit.get("kind", ""):
 		"hand":
 			_toggle_card(hit["id"])
@@ -1545,6 +1571,7 @@ func _show_menu() -> void:
 	var box := _open_overlay(0.94, false, "menu")
 	box.add_child(_title("PAUSED"))
 	box.add_child(_button("RESUME", _closing(_after_action)))
+	box.add_child(_button("GRAPHICS: %s" % graphics, _cycle_graphics))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
 		box.add_child(_button("LEAVE THE GAME", show_menu))

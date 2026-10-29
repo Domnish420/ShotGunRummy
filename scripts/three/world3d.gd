@@ -15,6 +15,7 @@ const Cards = preload("res://scripts/core/cards.gd")
 const Palette = preload("res://scripts/ui/palette.gd")
 const CardTextures = preload("res://scripts/three/card_textures.gd")
 const Card3D = preload("res://scripts/three/card3d.gd")
+const Props = preload("res://scripts/three/props.gd")
 
 const TABLE_TOP := 0.03
 const TABLE_RX := 0.95 # the table is an oval
@@ -56,6 +57,7 @@ var _deal := {} # while dealing: { "deck": Transform3D, "order": { id: n }, "sta
 var _resync := false
 var fx_busy := false # an item animation is playing
 var _spots := {} # seat -> SpotLight3D over players whose hand is exposed
+var _cone: ShaderMaterial
 
 
 func _ready() -> void:
@@ -121,36 +123,19 @@ func _build_room() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 0.85
 	env.glow_enabled = true
-	env.glow_intensity = 0.6
+	env.glow_intensity = 0.8
+	env.glow_bloom = 0.15
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.08, 0.065, 0.05)
+	env.fog_density = 0.06
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 0.85
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
-	# floor and table
-	var floor_mesh := PlaneMesh.new()
-	floor_mesh.size = Vector2(12, 12)
-	add_child(_mesh(floor_mesh, _mat(Color(0.05, 0.045, 0.04)), Vector3(0, -0.78, 0)))
-	var rim := CylinderMesh.new()
-	rim.top_radius = 1.0
-	rim.bottom_radius = 0.96
-	rim.height = 0.07
-	rim.radial_segments = 48
-	var rim_mi := _mesh(rim, _mat(Palette.WOOD, 0.7), Vector3(0, -0.01, 0))
-	rim_mi.scale = Vector3(TABLE_RX + 0.06, 1, TABLE_RZ + 0.06)
-	add_child(rim_mi)
-	var top := CylinderMesh.new()
-	top.top_radius = 1.0
-	top.bottom_radius = 1.0
-	top.height = 0.06
-	top.radial_segments = 48
-	var top_mi := _mesh(top, _mat(Palette.FELT.darkened(0.15), 1.0))
-	top_mi.scale = Vector3(TABLE_RX, 1, TABLE_RZ)
-	add_child(top_mi)
-	var leg := CylinderMesh.new()
-	leg.top_radius = 0.12
-	leg.bottom_radius = 0.3
-	leg.height = 0.75
-	add_child(_mesh(leg, _mat(Palette.WOOD), Vector3(0, -0.4, 0)))
+	# the room, the table and the clutter on it
+	Props.build_room(self, TABLE_TOP, TABLE_RX, TABLE_RZ)
 
 	# the lamp over the table
 	var cord := CylinderMesh.new()
@@ -163,7 +148,7 @@ func _build_room() -> void:
 	shade.bottom_radius = 0.34
 	shade.height = 0.24
 	shade.radial_segments = 24
-	var shade_mat := _mat(Color(0.12, 0.13, 0.1), 0.5, 0.6)
+	var shade_mat := Props.tex_mat("metal", Color(0.45, 0.5, 0.4), 3.0, 0.5, 0.6)
 	shade_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	add_child(_mesh(shade, shade_mat, Vector3(0, 1.95, 0)))
 	var bulb := SphereMesh.new()
@@ -174,12 +159,22 @@ func _build_room() -> void:
 	lamp.position = Vector3(0, 1.85, 0)
 	lamp.rotation_degrees = Vector3(-90, 0, 0)
 	lamp.spot_range = 4.5
-	lamp.spot_angle = 52.0
+	lamp.spot_angle = 66.0
 	lamp.spot_attenuation = 1.3
 	lamp.light_energy = LAMP
 	lamp.light_color = Color(1.0, 0.85, 0.62)
 	lamp.shadow_enabled = true
+	lamp.shadow_blur = 1.5
 	add_child(lamp)
+	_cone = Props.build_light_cone(self, 1.84, TABLE_TOP)
+	# a low warm glow off the felt, so the players' faces and coats show
+	var bounce := OmniLight3D.new()
+	bounce.position = Vector3(0, 0.35, 0)
+	bounce.omni_range = 2.6
+	bounce.omni_attenuation = 1.4
+	bounce.light_energy = 0.65
+	bounce.light_color = Color(0.85, 0.8, 0.62)
+	add_child(bounce)
 	_flicker()
 
 	# a faint fill so the near side of the table isn't pitch black
@@ -234,6 +229,8 @@ func _flicker() -> void:
 
 
 func _process(delta: float) -> void:
+	if _cone != null:
+		_cone.set_shader_parameter("flicker", lamp.light_energy / LAMP)
 	if _menu_mode:
 		# drift slowly round the table behind the menus
 		_menu_t += delta * 0.12
@@ -285,32 +282,10 @@ func _toward_center(seat_pos: Vector3, t: float) -> Vector3:
 
 
 func _figure(seat: int, color: Color) -> Dictionary:
-	var node := Node3D.new()
-	var body := CapsuleMesh.new()
-	body.radius = 0.2
-	body.height = 0.9
-	node.add_child(_mesh(body, _mat(color, 0.95), Vector3(0, 0.12, 0)))
-	var shoulders := CapsuleMesh.new()
-	shoulders.radius = 0.12
-	shoulders.height = 0.56
-	var sh := _mesh(shoulders, _mat(color, 0.95), Vector3(0, 0.48, 0))
-	sh.rotation.z = PI / 2.0
-	node.add_child(sh)
-	var head := Node3D.new()
-	head.position = Vector3(0, 0.72, 0)
-	var skull := SphereMesh.new()
-	skull.radius = 0.15
-	skull.height = 0.34
-	head.add_child(_mesh(skull, _mat(Color(0.09, 0.085, 0.08), 0.7)))
-	var eyes := []
-	for x in [-0.055, 0.055]:
-		var eye := SphereMesh.new()
-		eye.radius = 0.02
-		eye.height = 0.04
-		var e := _mesh(eye, _glow(Color(1, 0.98, 0.9), 3.0), Vector3(x, 0.02, -0.135))
-		head.add_child(e)
-		eyes.append(e)
-	node.add_child(head)
+	var built: Dictionary = Props.build_figure(self, color, [0, 1, 2, 1, 0, 2][seat % 6])
+	var node: Node3D = built["node"]
+	var head: Node3D = built["head"]
+	var eyes: Array = built["eyes"]
 	var label := Label3D.new()
 	label.font = _font
 	label.font_size = 34
@@ -322,7 +297,6 @@ func _figure(seat: int, color: Color) -> Dictionary:
 	label.position = Vector3(0, 1.0, 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	node.add_child(label)
-	add_child(node)
 	return {"node": node, "head": head, "eyes": eyes, "label": label, "slumped": false, "seat": seat}
 
 
@@ -655,7 +629,8 @@ func play_item(item_id: String, user: int, target: int = -1) -> void:
 		t.parallel().tween_property(light, "light_energy", 3.0, 0.15)
 		t.tween_property(card, "transform", Transform3D(facing.scaled(Vector3(0.01, 0.01, 0.01)), center), 0.2)
 	t.tween_callback(card.queue_free)
-	t.tween_callback(func() -> void: fx_busy = false)
+	# taps wait for the animation; a timer makes sure they never wait forever
+	get_tree().create_timer(2.2).timeout.connect(func() -> void: fx_busy = false)
 
 
 ## A quick flash of coloured light at a spot.
@@ -923,28 +898,7 @@ func pick(screen_pos: Vector2) -> Dictionary:
 # ================================================================ the shotgun
 
 func _build_shotgun() -> Node3D:
-	var g := Node3D.new()
-	var steel := _mat(Color(0.18, 0.18, 0.19), 0.35, 0.8)
-	var wood := _mat(Color(0.36, 0.2, 0.1), 0.6)
-	var barrel := CylinderMesh.new()
-	barrel.top_radius = 0.022
-	barrel.bottom_radius = 0.022
-	barrel.height = 0.62
-	for x in [-0.024, 0.024]:
-		var b := _mesh(barrel, steel, Vector3(x, 0.0, -0.31))
-		b.rotation.x = PI / 2.0
-		g.add_child(b)
-	var receiver := BoxMesh.new()
-	receiver.size = Vector3(0.09, 0.08, 0.16)
-	g.add_child(_mesh(receiver, steel, Vector3(0, -0.01, 0.06)))
-	var pump := BoxMesh.new()
-	pump.size = Vector3(0.08, 0.05, 0.14)
-	g.add_child(_mesh(pump, wood, Vector3(0, -0.035, -0.22)))
-	var stock := BoxMesh.new()
-	stock.size = Vector3(0.07, 0.1, 0.34)
-	var stock_mi := _mesh(stock, wood, Vector3(0, -0.05, 0.3))
-	stock_mi.rotation.x = 0.18
-	g.add_child(stock_mi)
+	var g: Node3D = Props.build_shotgun()
 	var flash := OmniLight3D.new()
 	flash.name = "Flash"
 	flash.position = Vector3(0, 0, -0.66)

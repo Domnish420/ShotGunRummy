@@ -88,6 +88,8 @@ func _run() -> void:
 		steps += 1
 		await _frames(1)
 		var game = main.game
+		if OS.get_cmdline_user_args().has("--progress") and steps % 400 == 0:
+			print("step %d: round %d phase %s turn %d overlay %d [%s] status '%s' dealing %s fx %s" % [steps, game.round_num, game.phase, game.turn, main.overlay_layer.get_child_count(), _overlay_text().left(60), main.status_label.text, main.world.dealing, main.world.fx_busy])
 		if main.overlay_layer.get_child_count() > 0:
 			var text := _overlay_text()
 			if text.contains("HAS THE SHOTGUN"):
