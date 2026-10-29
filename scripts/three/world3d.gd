@@ -8,6 +8,9 @@ extends Node3D
 ## between syncs, so they slide from the stock to your hand, from your hand to
 ## the table, and so on.
 
+## Shuffling and dealing at the start of a round has finished.
+signal deal_finished
+
 const Cards = preload("res://scripts/core/cards.gd")
 const Palette = preload("res://scripts/ui/palette.gd")
 const CardTextures = preload("res://scripts/three/card_textures.gd")
@@ -24,6 +27,8 @@ const SEAT_RX := 1.08
 const SEAT_RZ := 1.5
 const MOVE_TIME := 0.28
 const LAMP := 4.0
+const DEAL_STEP := 0.09 # seconds between dealt cards
+const TRUMP_NAMES := ["", "ACES", "TWOS", "THREES", "FOURS", "FIVES", "SIXES", "SEVENS", "EIGHTS", "NINES", "TENS", "JACKS", "QUEENS", "KINGS"]
 const FIGURE_COLORS := [Color(0.16, 0.13, 0.11), Color(0.22, 0.06, 0.06), Color(0.07, 0.12, 0.16), Color(0.12, 0.15, 0.07), Color(0.17, 0.1, 0.17), Color(0.2, 0.16, 0.06)]
 
 var textures: CardTextures
@@ -45,6 +50,10 @@ var _last := {} # the last sync, so we can redo it when textures arrive
 var _viewer := 0
 var _gun_pose := ""
 var _landscape := false
+var dealing := false # shuffle/deal animation running; taps should wait
+var _round_seen := 0
+var _deal := {} # while dealing: { "deck": Transform3D, "order": { id: n }, "start": seconds }
+var _resync := false
 
 
 func _ready() -> void:
@@ -230,11 +239,20 @@ func _process(delta: float) -> void:
 		camera.look_at_from_position(pos, Vector3(0, 0.1, 0), Vector3.UP)
 
 
+## A new match is starting: its first round gets dealt even if the last
+## match ended on round 1 too.
+func reset_rounds() -> void:
+	_round_seen = 0
+
+
 ## Menu mode: an empty table and a slowly moving camera.
 func set_menu_mode(on: bool) -> void:
 	_menu_mode = on
 	if on:
 		_last = {}
+		_round_seen = 0
+		_deal = {}
+		dealing = false
 		for id in _cards:
 			_cards[id].queue_free()
 		_cards.clear()
@@ -362,18 +380,29 @@ func _flat(pos: Vector3, yaw: float, face_up: bool) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, yaw) * tilt, pos)
 
 
-func _tween(node: Node3D, prop: String, value) -> void:
+func _tween(node: Node3D, prop: String, value, delay: float = 0.0, time: float = MOVE_TIME) -> void:
 	if not node.is_inside_tree():
 		node.set(prop, value)
 		return
+	var old = node.get_meta("tween") if node.has_meta("tween") else null
+	if old is Tween and old.is_valid():
+		old.kill()
 	var t := node.create_tween()
-	t.tween_property(node, prop, value, MOVE_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if delay > 0.0:
+		t.tween_interval(delay)
+	t.tween_property(node, prop, value, time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	node.set_meta("tween", t)
 
 
 ## Everything about one card's place this sync.
 func _place(seen: Dictionary, id: String, card: Dictionary, card_size: Vector2, xf: Transform3D, face_up: bool, lit: bool, kind: String, pick_id: String, outline: String, trump: bool, spawn: Transform3D) -> void:
 	seen[id] = true
 	var fresh := not _cards.has(id)
+	var delay := 0.0
+	if fresh and not _deal.is_empty() and _deal["order"].has(id):
+		var n: int = _deal["order"][id]
+		spawn = _deal["deck"].translated(Vector3(0, 0.0012 * (200 - n), 0))
+		delay = _deal["start"] + n * DEAL_STEP
 	var c := _card(id, card_size, spawn)
 	if face_up and not card.get("hidden", false) and not card.is_empty():
 		var k := CardTextures.key_for(card, trump)
@@ -385,6 +414,8 @@ func _place(seen: Dictionary, id: String, card: Dictionary, card_size: Vector2, 
 	c.set_shadows(lit)
 	if fresh and spawn == xf:
 		c.transform = xf
+	elif delay > 0.0:
+		_tween(c, "transform", xf, delay, 0.32)
 	else:
 		_tween(c, "transform", xf)
 
@@ -396,12 +427,18 @@ func sync(s: Dictionary) -> void:
 	_last = s
 	var game = s["game"]
 	var viewer: int = s["viewer"]
+	var new_round: bool = game.round_num != _round_seen and (game.phase == "draw" or game.phase == "play")
+	if dealing and not new_round:
+		_resync = true # catch up when the deal is done
+		return
 	_viewer = viewer
 	var n: int = game.players.size()
 	var trump_rank: int = game.trump_rank
 	var seen := {}
 	_clear_labels()
 	_sync_figures(game, viewer)
+	if new_round:
+		_begin_deal(game, viewer, s["hand"])
 
 	var stock_xf := _flat(Vector3(-0.2, TABLE_TOP + 0.002, -0.02), 0.08, false)
 	var discard_base := Vector3(0.2, TABLE_TOP + 0.002, -0.02)
@@ -427,6 +464,8 @@ func sync(s: Dictionary) -> void:
 		var top_one := i == pile.size() - 1
 		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] else "", game.is_trump(c), stock_xf)
 	_label_at("DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+	if trump_rank > 0:
+		_label_at("TRUMP: %s" % TRUMP_NAMES[trump_rank], Vector3(0, TABLE_TOP + 0.01, 0.23), 34, Palette.GOLD)
 
 	# melds, in a grid on the table
 	var slots := [Vector3(-0.4, 0, 0.32), Vector3(0.4, 0, 0.32), Vector3(-0.4, 0, -0.38), Vector3(0.4, 0, -0.38), Vector3(-0.4, 0, 0.58), Vector3(0.4, 0, 0.58), Vector3(-0.4, 0, -0.64), Vector3(0.4, 0, -0.64)]
@@ -474,6 +513,8 @@ func sync(s: Dictionary) -> void:
 		var hand_z := -1.0 if _landscape else -0.62
 		var hand_y := -0.225 if _landscape else -0.27
 		var local := Transform3D(Basis(Vector3.FORWARD, (i - mid) * 0.05), Vector3((i - mid) * hstep, hand_y - absf(i - mid) * 0.006 + lift, hand_z + i * 0.0025))
+		if s.get("hide_hand", false):
+			local.basis = local.basis * Basis(Vector3.UP, PI) # backs toward you
 		var outline := ""
 		if s["selected"].has(c["id"]):
 			outline = "selected"
@@ -491,6 +532,8 @@ func sync(s: Dictionary) -> void:
 		var c: Dictionary = my_items[i]
 		var x := (i - (my_items.size() - 1) * 0.5) * 0.085
 		var local := Transform3D(Basis(), Vector3(x + (0.62 if _landscape else 0.0), -0.16 if _landscape else -0.13, -0.98 if _landscape else -0.64))
+		if s.get("hide_hand", false):
+			local.basis = local.basis * Basis(Vector3.UP, PI)
 		var outline := "selected" if c["id"] == s["selected_item"] else ""
 		_place(seen, c["id"], c, ITEM_CARD, cam * local, true, false, "item", c["id"], outline, false, stock_xf)
 
@@ -500,6 +543,131 @@ func sync(s: Dictionary) -> void:
 			_cards.erase(id)
 
 	_sync_gun(game, viewer)
+
+
+# ================================================================ dealing
+
+## Start of a round: sweep the old cards to the dealer, shuffle, then deal one
+## card at a time to each player in turn, starting on the dealer's left, then
+## the items, then turn up the discard and set down the stock.
+func _begin_deal(game, viewer: int, my_hand: Array) -> void:
+	_round_seen = game.round_num
+	var n: int = game.players.size()
+	var deck_pos := _toward_center(seat_position(game.dealer, viewer, n), 0.5)
+	deck_pos.y = TABLE_TOP + 0.002
+	var yaw := atan2(-deck_pos.x, -deck_pos.z)
+	var deck := _flat(deck_pos, yaw, false)
+
+	# old cards go back to the dealer
+	for id in _cards:
+		var c: Card3D = _cards[id]
+		c.set_pickable("", "")
+		_tween(c, "transform", deck, randf() * 0.15, 0.3)
+		get_tree().create_timer(0.5).timeout.connect(c.queue_free)
+	_cards.clear()
+
+	# deal order: round and round from the dealer's left
+	var seats := []
+	var s: int = game.next_alive(game.dealer)
+	for i in range(n):
+		if game.players[s].alive:
+			seats.append(s)
+		s = (s + 1) % n
+	var order := {}
+	var count := 0
+	var hand_size := 0
+	for seat in seats:
+		hand_size = maxi(hand_size, (my_hand if seat == viewer else game.players[seat].hand).size())
+	for k in range(hand_size):
+		for seat in seats:
+			var hand: Array = my_hand if seat == viewer else game.players[seat].hand
+			if k < hand.size():
+				order[hand[k]["id"]] = count
+				count += 1
+	var item_rounds := 0
+	for seat in seats:
+		item_rounds = maxi(item_rounds, game.players[seat].items.size())
+	for k in range(item_rounds):
+		for seat in seats:
+			var items: Array = game.players[seat].items
+			if k < items.size():
+				order[items[k]["id"]] = count
+				count += 1
+	for c in game.discard_pile:
+		order[c["id"]] = count
+		count += 1
+	for i in range(mini(game.stock.size(), 14)):
+		order["stock-%d" % i] = count + i / 4 # the stock slides over in a few clumps
+	count += 4
+
+	var shuffle_start := 0.45
+	var deal_start := shuffle_start + 1.3
+	_deal = {"deck": deck, "order": order, "start": deal_start}
+	dealing = true
+	_shuffle_show(deck, shuffle_start)
+	if game.trump_rank > 0:
+		_banner("ROUND %d\nTRUMP: %s" % [game.round_num, TRUMP_NAMES[game.trump_rank]], Vector3(0, 0.55, -0.15), deal_start + count * DEAL_STEP)
+	var done := get_tree().create_timer(deal_start + count * DEAL_STEP + 0.4)
+	done.timeout.connect(_end_deal)
+
+
+func _end_deal() -> void:
+	dealing = false
+	_deal = {}
+	if _resync and not _last.is_empty():
+		_resync = false
+		sync(_last)
+	deal_finished.emit()
+
+
+## A quick riffle: the deck splits, the halves come back together, twice.
+func _shuffle_show(deck: Transform3D, start: float) -> void:
+	var side := deck.basis.x.normalized()
+	var halves := [[], []]
+	for i in range(16):
+		var c := Card3D.new()
+		_cards_root.add_child(c)
+		c.setup(TABLE_CARD, _back_mat)
+		c.set_face("__back", _back_mat)
+		c.set_pickable("", "")
+		c.transform = deck.translated(Vector3(0, 0.0015 * i, 0))
+		c.visible = false
+		halves[i % 2].append(c)
+	for h in range(2):
+		for i in range(halves[h].size()):
+			var c: Card3D = halves[h][i]
+			var home := c.transform
+			var apart := home.translated(side * (0.13 if h == 0 else -0.13) + Vector3(0, 0.02, 0))
+			var t := c.create_tween()
+			t.tween_interval(start)
+			t.tween_callback(c.show)
+			for rep_i in range(2):
+				t.tween_property(c, "transform", apart, 0.22).set_trans(Tween.TRANS_SINE)
+				t.tween_interval(0.02 * i)
+				t.tween_property(c, "transform", home, 0.18).set_trans(Tween.TRANS_SINE)
+			t.tween_interval(0.25)
+			t.tween_callback(c.queue_free)
+
+
+## Big floating text over the table, e.g. the round's trump.
+func _banner(text: String, pos: Vector3, seconds: float) -> void:
+	var l := Label3D.new()
+	l.font = _font
+	l.text = text
+	l.font_size = 64
+	l.pixel_size = 0.0025
+	l.modulate = Palette.GOLD
+	l.outline_size = 14
+	l.outline_modulate = Color(0, 0, 0, 0.9)
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = pos
+	add_child(l)
+	var t := l.create_tween()
+	t.tween_interval(seconds)
+	t.tween_property(l, "modulate:a", 0.0, 0.5)
+	t.tween_callback(l.queue_free)
 
 
 # ================================================================ labels

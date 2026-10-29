@@ -30,6 +30,8 @@ var menu_message := ""
 var _pending_cb := Callable() # waiting on the host to answer this phone's action
 var _overlay_kind := ""
 var _last_shot_text := ""
+var _hand_hidden := false # pass-and-play: your cards stay face down until you take the phone
+var _waiting_for_deal := false
 var _ip_edit: LineEdit
 var _name_edit: LineEdit
 
@@ -71,6 +73,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	world = World3DScene.new()
 	add_child(world)
+	world.deal_finished.connect(_on_deal_finished)
 
 	screen = _full(Control.new())
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -526,6 +529,8 @@ func start_match() -> void:
 
 
 func _reset_match_view() -> void:
+	world.reset_rounds()
+	_hand_hidden = false
 	log_lines = []
 	seen_upto = {}
 	turn_counter = 0
@@ -677,8 +682,9 @@ func _after_action() -> void:
 				lit_card = ""
 				message = ""
 				if hide_hands:
+					_hand_hidden = true
 					_refresh()
-					_show_pass_screen()
+					_pass_after_deal()
 					return
 				_mark_turn_seen()
 	_refresh()
@@ -841,7 +847,7 @@ func _build_table() -> void:
 func _on_table_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if game == null or overlay_layer.get_child_count() > 0:
+	if game == null or overlay_layer.get_child_count() > 0 or world.dealing:
 		return
 	var hit: Dictionary = world.pick(event.position)
 	match hit.get("kind", ""):
@@ -907,6 +913,7 @@ func _refresh() -> void:
 	world.sync({
 		"game": game, "viewer": seat, "hand": hand, "selected": selected, "selected_item": selected_item,
 		"meld_hints": meld_ids, "lay_hints": lay_ids, "lit": lit_card, "can_draw": can_draw, "targets": targets,
+		"hide_hand": _hand_hidden,
 	})
 
 	# buttons
@@ -941,6 +948,8 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if game.phase != "draw" and game.phase != "play":
 		return "ROUND OVER"
 	var seat := _me()
+	if world.dealing:
+		return "SHUFFLING AND DEALING..."
 	if not _my_turn():
 		return "WAITING FOR %s..." % _name(game.turn)
 	if selected_item != "":
@@ -967,7 +976,8 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 		if not game.find_swap(seat, m["id"], selected).is_empty():
 			return "TAP THE GLOWING MELD TO SWAP FOR ITS TRUMP AND MELD IT"
 	if sel_cards.size() == 1:
-		return "PRESS DISCARD TO END YOUR TURN"
+		var blocked := game.discard_blocker(seat, sel_cards[0]["id"])
+		return blocked.to_upper() if blocked != "" else "PRESS DISCARD TO END YOUR TURN"
 	return "NOT A VALID MELD"
 
 
@@ -1197,8 +1207,27 @@ func _show_pass_screen() -> void:
 
 
 func _on_pass_ready() -> void:
+	_hand_hidden = false
 	_mark_turn_seen()
 	_refresh()
+
+
+## The pass screen waits until the cards have been dealt, so everyone sees
+## the shuffle and the deal.
+func _pass_after_deal() -> void:
+	if _waiting_for_deal:
+		return
+	if world.dealing:
+		_waiting_for_deal = true
+		await world.deal_finished
+		_waiting_for_deal = false
+	if game != null and (game.phase == "draw" or game.phase == "play") and shown_turn != turn_counter:
+		_show_pass_screen()
+
+
+func _on_deal_finished() -> void:
+	if game != null and round_label != null and overlay_layer.get_child_count() == 0:
+		_refresh()
 
 
 func _show_reveal(title: String, card: Dictionary, text: String, then: Callable) -> void:
@@ -1407,6 +1436,7 @@ func _show_rules() -> void:
 		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
 		"SWAPPING A TRUMP. If a meld on the table has a trump in it and you hold the real card it stands for, you can swap that card in and take the trump, but only if you meld the trump straight away with 2 or more of your own cards. Select the real card plus the cards for your new meld, then tap the glowing meld.",
 		"FIRST TURN. Nobody can put cards down on their first turn of a round: just draw and discard.",
+		"NO DISCARDING TRUMPS. You can't discard a trump card; meld it or lay it off. (If you're holding nothing but trumps, you may.)",
 		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
 	]
 	for line in lines:

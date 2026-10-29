@@ -26,6 +26,8 @@ func _initialize() -> void:
 		p.turns_taken = 2
 	g.melds.append({"id": "mx", "type": "run", "cards": Cards.parse_many("2C 3C 4C"), "owner": 1})
 	main._refresh()
+	if main.world.dealing:
+		await main.world.deal_finished
 	for i in range(30):
 		await physics_frame
 	var world = main.world

@@ -15,7 +15,7 @@ var _test := ""
 func _init() -> void:
 	for t in [
 		"test_deck", "test_points", "test_trump_rotation", "test_trump_runs", "test_trump_sets",
-		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_no_discarding_trumps", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -219,6 +219,21 @@ func test_trump_swap() -> void:
 	g.melds.append({"id": "my", "type": "set", "cards": cards("7S 7H AS"), "owner": 1})
 	g.players[0].hand = cards("7D 5H 6H KD")
 	check(g.swap_trump(0, "my", "7D", "AS", ["5H", "6H"])["ok"], "swap into a set; ace makes 5 6 A of hearts")
+
+
+func test_no_discarding_trumps() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("AS 7H 9C")
+	g.stock.append(Cards.parse("KD"))
+	g.draw_stock(0)
+	check(not g.can_discard(0, "AS"), "aces are trump in round 1: can't discard")
+	check(not g.discard(0, "AS")["ok"], "discard refused")
+	check(g.discard(0, "KD")["ok"], "other cards are fine")
+	# holding nothing but trumps, you're allowed to
+	g.players[1].hand = cards("AH AD")
+	g.stock.append(Cards.parse("AC"))
+	g.draw_stock(1)
+	check(g.can_discard(1, "AH"), "all trumps: discarding one is allowed")
 
 
 # ------------------------------------------------------------------ table

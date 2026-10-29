@@ -73,6 +73,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   the real card it stands for, swap it in and take the trump, but only if you
   meld the trump straight away with 2+ of your own cards.
 - **First turn.** Nobody can put cards down on their first turn of a round.
+- **No discarding trumps.** Trump cards can't be discarded (unless you hold
+  nothing but trumps). The round's trump is shown on the table.
 - **Hints.** A gold outline means a card makes a meld in your hand, a gold
   underline means it fits a meld on the table, and a gold banner tells you when
   you can go out (and when it would be Rummy). Turn them off with HINTS.

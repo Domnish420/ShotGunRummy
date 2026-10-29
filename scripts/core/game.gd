@@ -31,6 +31,7 @@ extends RefCounted
 ##    straight away in a new meld with 2+ cards from your hand.
 ##  - Nobody can put cards down (meld, lay off, swap) on their first turn of a
 ##    round.
+##  - Trump cards can't be discarded (unless you hold nothing but trumps).
 ##
 ## Shotgun:
 ##  - Everyone has 4 health.
@@ -83,6 +84,7 @@ var options := {
 	"points_per_shell": 10,
 	"trump_cards": true,
 	"no_placing_first_turn": true,
+	"no_discarding_trumps": true,
 }
 var rng := RandomNumberGenerator.new()
 var players: Array = []
@@ -239,7 +241,25 @@ func is_turn_of(seat: int) -> bool:
 
 
 func can_discard(seat: int, card_id: String) -> bool:
-	return not (card_id == drawn_from_discard and players[seat].hand.size() > 1)
+	return discard_blocker(seat, card_id) == ""
+
+
+## Why `card_id` can't be discarded, or "" if it can.
+func discard_blocker(seat: int, card_id: String) -> String:
+	var hand: Array = players[seat].hand
+	if card_id == drawn_from_discard and hand.size() > 1:
+		return "You can't discard the card you just picked up."
+	if trump_rank > 0 and options["no_discarding_trumps"]:
+		var card := {}
+		for c in hand:
+			if c["id"] == card_id:
+				card = c
+		if not card.is_empty() and Cards.is_wild(card, trump_rank):
+			# allowed only when you're holding nothing but trumps
+			for c in hand:
+				if not Cards.is_wild(c, trump_rank):
+					return "You can't discard a trump card. Meld it or lay it off."
+	return ""
 
 
 # ---------------------------------------------------------------- rounds
@@ -540,8 +560,9 @@ func discard(seat: int, card_id: String) -> Dictionary:
 	var cards := _cards_from(p.hand, [card_id])
 	if cards.is_empty():
 		return _fail("That card is not in your hand.")
-	if not can_discard(seat, card_id):
-		return _fail("You can't discard the card you just picked up.")
+	var blocked := discard_blocker(seat, card_id)
+	if blocked != "":
+		return _fail(blocked)
 	_remove_cards(p, cards)
 	discard_pile.append(cards[0])
 	_emit("discard", {"seat": seat, "card": cards[0]})
