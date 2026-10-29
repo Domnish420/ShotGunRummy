@@ -3,8 +3,8 @@ extends RefCounted
 ##
 ## Every player is dealt 2 items at the start of each round, and the rest are
 ## shuffled into the stock, so a draw can give you an item instead of a playing
-## card. Draw an item and you keep it and draw again, until you get a playing
-## card. Unused items go back at the end of the round. Use as many items as you
+## card. Draw an item and you keep it and draw again (from the stock or the
+## discard pile) until you get a playing card. Unused items go back at the end of the round. Use as many items as you
 ## like, at any point in your turn. Items never count as deadwood and you don't
 ## need to get rid of them to go out.
 ##

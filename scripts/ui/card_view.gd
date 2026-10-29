@@ -9,7 +9,9 @@ const Palette = preload("res://scripts/ui/palette.gd")
 var card: Dictionary = {}
 var face_down := false
 var selected := false
-var hint := false
+var hint := false # part of a meld you could make: gold outline
+var lay_hint := false # fits a meld on the table: gold underline
+var trump := false # this round's wild card
 var glow := false
 var locked := false
 var lift := 0.0
@@ -34,12 +36,14 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	var top := 0.0 if selected else lift
 	var rect := Rect2(Vector2(0, top), Vector2(size.x, size.y - lift))
-	CardArt.draw_card(self, font, rect, card, face_down)
+	CardArt.draw_card(self, font, rect, card, face_down, false, trump)
 	if locked:
 		draw_rect(rect, Color(0, 0, 0, 0.35))
-	if hint:
-		draw_rect(Rect2(rect.position.x + 8, rect.end.y - 6, rect.size.x - 16, 4), Palette.AMBER)
+	if lay_hint:
+		draw_rect(Rect2(rect.position.x + 8, rect.end.y - 8, rect.size.x - 16, 4), Palette.GOLD)
 	if selected:
 		draw_rect(rect.grow(2), Palette.AMBER, false, 4.0)
+	elif hint:
+		draw_rect(rect.grow(3), Palette.GOLD, false, 4.0)
 	elif glow:
 		draw_rect(rect.grow(3), Color(Palette.AMBER, 0.85), false, 3.0)

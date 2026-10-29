@@ -15,12 +15,17 @@ extends RefCounted
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
 ##    the table, then discard 1 card. You can't discard the card you just took
 ##    from the discard pile.
-##  - Drawing an item from the stock: keep it and draw again, until you get a
-##    playing card.
+##  - Drawing an item from the stock: keep it and draw again (stock or discard
+##    pile, your choice) until you get a playing card.
 ##  - Use as many items as you like, at any point in your turn.
 ##  - Empty your hand of playing cards to win the round (items don't count). You score the cards left in everyone
 ##    else's hand: A = 1, 2-10 = face value, J/Q/K = 10. Going out in one turn
 ##    without having melded before ("rummy") doubles it.
+##
+## Trump cards:
+##  - Each round one rank is trump: aces in round 1, 2s in round 2 ... kings in
+##    round 13, then back to aces. A trump card can stand in for any card, of
+##    any suit, in any set or run (in round 1, 2♣ 3♣ A♦ 5♣ is a run).
 ##
 ## Shotgun:
 ##  - Everyone has 4 health.
@@ -70,6 +75,7 @@ var options := {
 	"max_reshuffles": 3,
 	"max_shells": 3,
 	"points_per_shell": 10,
+	"trump_cards": true,
 }
 var rng := RandomNumberGenerator.new()
 var players: Array = []
@@ -85,6 +91,7 @@ var item_deck: Array = []
 var gun = null # { holder, shells, total } while someone holds the shotgun
 var last_result: Dictionary = {}
 var winner := -1
+var trump_rank := 0 # this round's wild rank, 0 = none
 var drawn_from_discard := ""
 var items_used_this_turn := 0
 
@@ -176,6 +183,46 @@ func prev_alive(seat: int) -> int:
 	return seat
 
 
+## Trump rank for a round: 1 (aces) in round 1 up to 13 (kings), then again.
+static func trump_for_round(round_number: int) -> int:
+	return posmod(round_number - 1, 13) + 1
+
+
+func is_trump(card: Dictionary) -> bool:
+	return not card.has("item") and Cards.is_wild(card, trump_rank)
+
+
+## Could the current player go out this turn with the cards they hold?
+## { "can": bool, "rummy": bool (going out now would score double) }
+func go_out_check(seat: int) -> Dictionary:
+	if not is_turn_of(seat) or phase != "play":
+		return {"can": false, "rummy": false}
+	var best: Dictionary = Cards.best_partition(players[seat].hand, trump_rank)
+	var table := []
+	for m in melds:
+		table.append({"type": m["type"], "cards": m["cards"].duplicate()})
+	for meld_cards in best["melds"]:
+		table.append({"type": Cards.meld_type(meld_cards, trump_rank), "cards": meld_cards.duplicate()})
+	# lay off whatever's left, as long as something still fits
+	var left: Array = best["deadwood"].duplicate()
+	var progress := true
+	while progress:
+		progress = false
+		for c in left:
+			for t in table:
+				var kind: String = Cards.lay_off_type(t, [c], trump_rank)
+				if kind != "":
+					t["type"] = kind
+					t["cards"].append(c)
+					left.erase(c)
+					progress = true
+					break
+			if progress:
+				break
+	var can := left.is_empty() or (left.size() == 1 and can_discard(seat, left[0]["id"]))
+	return {"can": can, "rummy": can and options["rummy_bonus"] and not _melded_at_turn_start}
+
+
 func top_discard() -> Dictionary:
 	return discard_pile.back() if not discard_pile.is_empty() else {}
 
@@ -202,6 +249,7 @@ func start_round() -> Dictionary:
 	# The deal moves one seat to the right each round, so last round's dealer
 	# sits to the new dealer's left and goes first.
 	dealer = prev_alive(0) if dealer < 0 else prev_alive(dealer)
+	trump_rank = trump_for_round(round_num) if options["trump_cards"] else 0
 
 	for p in players:
 		p.hand = []
@@ -235,7 +283,7 @@ func start_round() -> Dictionary:
 	last_result = {}
 	_reshuffles = 0
 	turn = order[0]
-	_emit("round_start", {"round": round_num, "dealer": dealer, "first": turn})
+	_emit("round_start", {"round": round_num, "dealer": dealer, "first": turn, "trump": trump_rank})
 	_begin_turn()
 	return _ok()
 
@@ -286,24 +334,21 @@ func draw_stock(seat: int) -> Dictionary:
 	var err := _guard(seat, "draw")
 	if err != "":
 		return _fail(err)
-	# items you draw are yours to keep, and you draw again until you get a
-	# playing card
-	var items_drawn := []
-	while true:
-		if stock.is_empty() and not _reshuffle_stock():
-			_end_round(-1, "The deck ran dry.")
-			return _ok({"round_over": true, "items_drawn": items_drawn})
-		var card: Dictionary = stock.pop_back()
-		if card.has("item"):
-			current().items.append(card)
-			items_drawn.append(card)
-			continue
-		current().hand.append(card)
-		phase = "play"
-		# what was drawn stays secret; everyone can see how many items you got
-		_emit("draw", {"seat": seat, "source": "stock", "items": items_drawn.size()})
-		return _ok({"card": card, "items_drawn": items_drawn})
-	return _fail("unreachable")
+	if stock.is_empty() and not _reshuffle_stock():
+		_end_round(-1, "The deck ran dry.")
+		return _ok({"round_over": true})
+	var card: Dictionary = stock.pop_back()
+	if card.has("item"):
+		# keep the item and draw again, from the stock or the discard pile,
+		# until you get a playing card
+		current().items.append(card)
+		_emit("draw", {"seat": seat, "source": "stock", "item": true})
+		return _ok({"card": card, "item": true})
+	current().hand.append(card)
+	phase = "play"
+	# which card you drew stays secret
+	_emit("draw", {"seat": seat, "source": "stock", "item": false})
+	return _ok({"card": card, "item": false})
 
 
 func draw_discard(seat: int) -> Dictionary:
@@ -339,12 +384,12 @@ func meld(seat: int, card_ids: Array) -> Dictionary:
 	var cards := _cards_from(p.hand, card_ids)
 	if cards.is_empty():
 		return _fail("Those cards are not in your hand.")
-	var kind: String = Cards.meld_type(cards)
+	var kind: String = Cards.meld_type(cards, trump_rank)
 	if kind == "":
 		return _fail("Not a set (3-4 of a kind) or a run (3+ in a row, same suit).")
 	_remove_cards(p, cards)
 	_meld_counter += 1
-	var m := {"id": "m%d" % _meld_counter, "type": kind, "cards": Cards.sorted_meld(cards, kind), "owner": seat}
+	var m := {"id": "m%d" % _meld_counter, "type": kind, "cards": Cards.sorted_meld(cards, kind, trump_rank), "owner": seat}
 	melds.append(m)
 	p.has_melded = true
 	_emit("meld", {"seat": seat, "meld": m})
@@ -363,10 +408,12 @@ func lay_off(seat: int, card_ids: Array, meld_id: String) -> Dictionary:
 	var m := find_meld(meld_id)
 	if m.is_empty():
 		return _fail("That meld doesn't exist.")
-	if not Cards.can_lay_off(m, cards):
+	var kind: String = Cards.lay_off_type(m, cards, trump_rank)
+	if kind == "":
 		return _fail("Those cards don't fit on that meld.")
 	_remove_cards(p, cards)
-	m["cards"] = Cards.sorted_meld(m["cards"] + cards, m["type"])
+	m["type"] = kind
+	m["cards"] = Cards.sorted_meld(m["cards"] + cards, kind, trump_rank)
 	p.has_melded = true
 	_emit("layoff", {"seat": seat, "meld": m, "cards": cards})
 	_check_gone_out(p)

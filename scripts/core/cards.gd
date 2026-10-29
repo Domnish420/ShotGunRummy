@@ -2,7 +2,8 @@ extends RefCounted
 ## Playing cards, melds and deadwood. Pure logic, no nodes.
 ##
 ## A card is a Dictionary: { "id": "7H", "rank": 7, "suit": "H" }.
-## Aces are low: A-2-3 is a run, Q-K-A is not.
+## Aces are low: A-2-3 is a run, Q-K-A is not. Each round one rank is trump
+## (wild); see the melds section.
 
 const SUITS := ["S", "H", "D", "C"]
 const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
@@ -121,109 +122,149 @@ static func _less_by_rank(a: Dictionary, b: Dictionary) -> bool:
 
 
 # ------------------------------------------------------------------ melds
+#
+# `trump` is this round's wild rank (1 = aces ... 13 = kings, 0 = none).
+# A trump card can stand in for any card, of any suit, in any set or run.
 
-static func is_set(cards: Array) -> bool:
+static func is_wild(card: Dictionary, trump: int) -> bool:
+	return trump > 0 and int(card["rank"]) == trump
+
+
+static func is_set(cards: Array, trump: int = 0) -> bool:
 	if cards.size() < 3 or cards.size() > 4:
 		return false
-	var rank: int = cards[0]["rank"]
+	var rank := -1
 	var suits := {}
 	for c in cards:
-		if c["rank"] != rank:
+		if is_wild(c, trump):
+			continue
+		if rank == -1:
+			rank = c["rank"]
+		elif c["rank"] != rank:
+			return false
+		if suits.has(c["suit"]):
 			return false
 		suits[c["suit"]] = true
-	return suits.size() == cards.size()
-
-
-static func is_run(cards: Array) -> bool:
-	if cards.size() < 3:
-		return false
-	var suit: String = cards[0]["suit"]
-	var ranks := []
-	for c in cards:
-		if c["suit"] != suit:
-			return false
-		ranks.append(c["rank"])
-	ranks.sort()
-	for i in range(1, ranks.size()):
-		if ranks[i] != ranks[i - 1] + 1:
-			return false
 	return true
 
 
-## "run", "set" or "" when the cards don't make a meld.
-static func meld_type(cards: Array) -> String:
-	if is_run(cards):
+static func is_run(cards: Array, trump: int = 0) -> bool:
+	if cards.size() < 3 or cards.size() > 13:
+		return false
+	var suit := ""
+	var ranks := {}
+	var wilds := 0
+	for c in cards:
+		if is_wild(c, trump):
+			wilds += 1
+			continue
+		if suit == "":
+			suit = c["suit"]
+		elif c["suit"] != suit:
+			return false
+		if ranks.has(c["rank"]):
+			return false
+		ranks[c["rank"]] = true
+	if ranks.is_empty():
+		return true
+	var lo: int = ranks.keys().min()
+	var hi: int = ranks.keys().max()
+	# trump cards fill the gaps; any spare ones extend the ends
+	return (hi - lo + 1) - ranks.size() <= wilds
+
+
+## "run", "set", "any" (trump cards make it work either way, e.g. 7 + two
+## trumps) or "" when the cards don't make a meld.
+static func meld_type(cards: Array, trump: int = 0) -> String:
+	var run := is_run(cards, trump)
+	var set3 := is_set(cards, trump)
+	if run and set3:
+		return "any"
+	if run:
 		return "run"
-	if is_set(cards):
+	if set3:
 		return "set"
 	return ""
 
 
-static func sorted_meld(cards: Array, type: String) -> Array:
+## Cards in display order. In runs, trump cards sit in the gaps they fill.
+static func sorted_meld(cards: Array, type: String, trump: int = 0) -> Array:
 	var out := cards.duplicate()
-	if type == "run":
+	if type == "run" and is_run(cards, 0):
+		# a natural run, even if some of it happens to be trump
 		sort_by_rank(out)
-	else:
-		sort_by_suit(out)
-	return out
+		return out
+	var naturals := []
+	var wilds := []
+	for c in cards:
+		if is_wild(c, trump):
+			wilds.append(c)
+		else:
+			naturals.append(c)
+	if type != "run":
+		# sets: naturals by suit, then the trumps standing in
+		sort_by_suit(naturals)
+		return naturals + wilds
+	sort_by_rank(naturals)
+	var arranged := []
+	for i in range(naturals.size()):
+		if i > 0:
+			for gap in range(int(naturals[i]["rank"]) - int(naturals[i - 1]["rank"]) - 1):
+				arranged.append(wilds.pop_back())
+		arranged.append(naturals[i])
+	# spare trumps go on the high end while there's room, then the low end
+	var top: int = naturals[-1]["rank"]
+	while not wilds.is_empty():
+		if top < 13:
+			arranged.append(wilds.pop_back())
+			top += 1
+		else:
+			arranged.push_front(wilds.pop_back())
+	return arranged
 
 
 ## Can `cards` be added to a table meld ({ "type", "cards" })?
-static func can_lay_off(meld: Dictionary, cards: Array) -> bool:
+static func can_lay_off(meld: Dictionary, cards: Array, trump: int = 0) -> bool:
+	return lay_off_type(meld, cards, trump) != ""
+
+
+## The meld's type after laying `cards` on it, or "" if they don't fit.
+static func lay_off_type(meld: Dictionary, cards: Array, trump: int = 0) -> String:
 	if cards.is_empty():
-		return false
+		return ""
 	var combined: Array = meld["cards"] + cards
-	return meld_type(combined) == meld["type"]
+	var now := meld_type(combined, trump)
+	var was: String = meld["type"]
+	if now == "":
+		return ""
+	if was == "any":
+		return now
+	if now == "any" or now == was:
+		return was
+	return ""
 
 
 ## Every set and run that can be formed from cards in `hand`.
-static func candidate_melds(hand: Array) -> Array:
+## Hands are small (about 8 cards), so every subset of 3+ cards is checked.
+static func candidate_melds(hand: Array, trump: int = 0) -> Array:
 	var out := []
-
-	var by_rank := {}
-	for c in hand:
-		if not by_rank.has(c["rank"]):
-			by_rank[c["rank"]] = []
-		by_rank[c["rank"]].append(c)
-	for group in by_rank.values():
-		if group.size() == 3:
-			out.append(group.duplicate())
-		elif group.size() == 4:
-			out.append(group.duplicate())
-			for skip in range(4):
-				var three := []
-				for i in range(4):
-					if i != skip:
-						three.append(group[i])
-				out.append(three)
-
-	for suit in SUITS:
-		var cards := []
-		for c in hand:
-			if c["suit"] == suit:
-				cards.append(c)
-		sort_by_rank(cards)
-		# split into chains of consecutive ranks
-		var chains := []
-		var chain := []
-		for c in cards:
-			if not chain.is_empty() and c["rank"] != chain[-1]["rank"] + 1:
-				chains.append(chain)
-				chain = []
-			chain.append(c)
-		if not chain.is_empty():
-			chains.append(chain)
-		for ch in chains:
-			for i in range(ch.size()):
-				for j in range(i + 2, ch.size()):
-					out.append(ch.slice(i, j + 1))
+	var n := hand.size()
+	if n > 16:
+		n = 16
+	for mask in range(1, 1 << n):
+		var subset := []
+		for i in range(n):
+			if mask & (1 << i):
+				subset.append(hand[i])
+		if subset.size() >= 3 and meld_type(subset, trump) != "":
+			out.append(subset)
 	return out
 
 
 ## Best way to arrange a hand into melds, minimising deadwood points.
 ## Returns { "melds": Array[Array], "deadwood": Array, "points": int }.
-static func best_partition(hand: Array) -> Dictionary:
-	var candidates := candidate_melds(hand)
+static func best_partition(hand: Array, trump: int = 0) -> Dictionary:
+	var candidates := candidate_melds(hand, trump)
 	var index := {}
 	for i in range(hand.size()):
 		index[hand[i]["id"]] = i

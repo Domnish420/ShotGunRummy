@@ -8,8 +8,8 @@ const Palette = preload("res://scripts/ui/palette.gd")
 
 
 ## Draws `card` into `rect` on canvas item `ci` (call from its _draw).
-## An empty card draws an empty slot.
-static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary, face_down: bool = false, compact: bool = false) -> void:
+## An empty card draws an empty slot. `trump` marks this round's wild cards.
+static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary, face_down: bool = false, compact: bool = false, trump: bool = false) -> void:
 	var radius := int(rect.size.x * 0.09)
 	if face_down:
 		_draw_back(ci, rect, radius)
@@ -22,7 +22,10 @@ static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary,
 		_draw_item(ci, font, rect, card, radius, compact)
 		return
 
-	ci.draw_style_box(Palette.box(Palette.PAPER, Color(0.6, 0.55, 0.45), 1, radius), rect)
+	if trump:
+		ci.draw_style_box(Palette.box(Palette.PAPER, Palette.GOLD, 3, radius), rect)
+	else:
+		ci.draw_style_box(Palette.box(Palette.PAPER, Color(0.6, 0.55, 0.45), 1, radius), rect)
 	var color := Palette.CARD_RED if Cards.is_red(card) else Palette.CARD_INK
 	var label := Cards.rank_label(card["rank"])
 	var fs := int(rect.size.x * (0.36 if compact else 0.3))
@@ -32,6 +35,10 @@ static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary,
 	var small := rect.size.x * (0.14 if compact else 0.11)
 	var corner := rect.position + Vector2(pad + small, pad + ascent + small * 1.2)
 	draw_suit(ci, card["suit"], corner, small, color)
+	if trump:
+		# a gold star: visible on the left strip of overlapped meld cards too
+		var star_at := corner + Vector2(0, small * 2.8) if compact else Vector2(rect.end.x - pad - small * 1.6, rect.position.y + pad + small * 1.6)
+		draw_star(ci, star_at, small * (1.4 if compact else 1.6), Palette.GOLD)
 	if compact:
 		return
 	draw_suit(ci, card["suit"], rect.get_center() + Vector2(0, rect.size.y * 0.08), rect.size.x * 0.24, color)
@@ -73,6 +80,19 @@ static func _draw_item(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary
 		fs -= 1
 	var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	ci.draw_string(font, Vector2(rect.get_center().x - w * 0.5, rect.end.y - rect.size.y * 0.08), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.INK)
+
+
+## A four-pointed star with a dark outline, marking trump cards.
+static func draw_star(ci: CanvasItem, c: Vector2, s: float, color: Color) -> void:
+	var outline := PackedVector2Array()
+	var fill := PackedVector2Array()
+	for i in range(8):
+		var a := i * PI / 4.0 - PI / 2.0
+		var r := s if i % 2 == 0 else s * 0.38
+		outline.append(c + Vector2(cos(a), sin(a)) * (r + 2.0))
+		fill.append(c + Vector2(cos(a), sin(a)) * r)
+	ci.draw_colored_polygon(outline, Palette.CARD_INK)
+	ci.draw_colored_polygon(fill, color)
 
 
 ## Suit shape centred on `c`, roughly 2*s tall.

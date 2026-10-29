@@ -26,6 +26,7 @@ var hide_hands := true
 
 var selected: Array = [] # playing card ids
 var selected_item := ""
+var lit_card := "" # the card just drawn, glows in your hand
 var sort_by_rank := false
 var hints := true
 var message := ""
@@ -42,6 +43,8 @@ var flash_rect: ColorRect
 
 # table widgets
 var round_label: Label
+var trump_label: Label
+var go_out_label: Label
 var opponents_box: VBoxContainer
 var stock_view: CardView
 var stock_label: Label
@@ -334,11 +337,10 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			if d["source"] == "discard":
 				_log("%s takes %s from the discard pile." % [_name(d["seat"]), Cards.card_name(d["card"])])
 			else:
-				var n: int = d.get("items", 0)
-				if n == 0:
-					_log("%s draws from the stock." % _name(d["seat"]))
+				if d.get("item", false):
+					_log("%s draws an item from the stock and draws again." % _name(d["seat"]))
 				else:
-					_log("%s draws %d item%s from the stock, then a card." % [_name(d["seat"]), n, "" if n == 1 else "s"])
+					_log("%s draws from the stock." % _name(d["seat"]))
 		"meld":
 			_log("%s melds %s." % [_name(d["seat"]), Cards.cards_text(d["meld"]["cards"])])
 		"layoff":
@@ -387,6 +389,7 @@ func _after_action() -> void:
 			if shown_turn != turn_counter:
 				selected = []
 				selected_item = ""
+				lit_card = ""
 				message = ""
 				if hide_hands:
 					_refresh()
@@ -433,6 +436,8 @@ func _build_table() -> void:
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	round_label.clip_text = true
 	top.add_child(round_label)
+	trump_label = _tag("", 24, Palette.GOLD)
+	top.add_child(trump_label)
 	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("MENU", _show_menu, 22)]:
 		b.custom_minimum_size = Vector2(0, 46)
 		top.add_child(b)
@@ -492,6 +497,10 @@ func _build_table() -> void:
 	status_label.custom_minimum_size = Vector2(0, 62)
 	col.add_child(status_label)
 
+	go_out_label = _label("", 30, Palette.GOLD, true)
+	go_out_label.visible = false
+	col.add_child(go_out_label)
+
 	items_row = HBoxContainer.new()
 	items_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	items_row.add_theme_constant_override("separation", 10)
@@ -533,6 +542,7 @@ func _refresh() -> void:
 	var my_turn := game.phase == "draw" or game.phase == "play"
 
 	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
+	trump_label.text = "TRUMP: %s  " % trump_name(game.trump_rank) if game.trump_rank > 0 else ""
 
 	# other players, in turn order after the current one
 	_clear(opponents_box)
@@ -549,6 +559,7 @@ func _refresh() -> void:
 	stock_view.queue_redraw()
 	stock_label.text = "STOCK %d" % game.stock.size() if not game.stock.is_empty() else "SHUFFLE"
 	discard_view.card = game.top_discard()
+	discard_view.trump = not discard_view.card.is_empty() and game.is_trump(discard_view.card)
 	discard_view.glow = can_draw and not game.discard_pile.is_empty()
 	discard_view.queue_redraw()
 
@@ -558,7 +569,7 @@ func _refresh() -> void:
 	_clear(meld_flow)
 	for m in game.melds:
 		var mv := MeldView.new()
-		mv.setup(m, _name(m["owner"]), can_play and not sel_cards.is_empty() and Cards.can_lay_off(m, sel_cards))
+		mv.setup(m, _name(m["owner"]), can_play and not sel_cards.is_empty() and Cards.can_lay_off(m, sel_cards, game.trump_rank), game.trump_rank)
 		mv.tapped.connect(_lay_off_on)
 		meld_flow.add_child(mv)
 
@@ -566,7 +577,7 @@ func _refresh() -> void:
 	me_name.text = me.name + _flags(me)
 	_clear(me_hp)
 	me_hp.add_child(_hp_bar(me))
-	var best: Dictionary = Cards.best_partition(me.hand)
+	var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
 	deadwood_label.text = "DEADWOOD %d" % best["points"]
 
 	_clear(items_row)
@@ -586,14 +597,17 @@ func _refresh() -> void:
 		Cards.sort_by_rank(hand)
 	else:
 		Cards.sort_by_suit(hand)
-	var hint_ids := {}
+	# hints: gold outline = makes a meld in your hand, gold underline = fits
+	# a meld already on the table
+	var meld_ids := {}
+	var lay_ids := {}
 	for meld_cards in best["melds"]:
 		for c in meld_cards:
-			hint_ids[c["id"]] = true
+			meld_ids[c["id"]] = true
 	for c in best["deadwood"]:
 		for m in game.melds:
-			if Cards.can_lay_off(m, [c]):
-				hint_ids[c["id"]] = true
+			if Cards.can_lay_off(m, [c], game.trump_rank):
+				lay_ids[c["id"]] = true
 	var avail := get_viewport_rect().size.x - 32.0
 	var n := hand.size()
 	var sep := 6
@@ -604,13 +618,16 @@ func _refresh() -> void:
 		var cv := CardView.new()
 		cv.setup(c, CARD_SIZE, LIFT)
 		cv.selected = selected.has(c["id"])
-		cv.hint = hints and hint_ids.has(c["id"])
+		cv.hint = hints and meld_ids.has(c["id"])
+		cv.lay_hint = hints and lay_ids.has(c["id"])
+		cv.trump = game.is_trump(c)
+		cv.glow = c["id"] == lit_card
 		cv.locked = can_play and not game.can_discard(seat, c["id"])
 		cv.tapped.connect(_toggle_card)
 		hand_row.add_child(cv)
 
 	# buttons
-	var valid_meld := can_play and sel_cards.size() >= 3 and Cards.meld_type(sel_cards) != ""
+	var valid_meld := can_play and sel_cards.size() >= 3 and Cards.meld_type(sel_cards, game.trump_rank) != ""
 	meld_btn.disabled = not valid_meld
 	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
 	discard_btn.disabled = not (can_play and sel_cards.size() == 1 and game.can_discard(seat, sel_cards[0]["id"]))
@@ -619,6 +636,20 @@ func _refresh() -> void:
 
 	status_label.add_theme_color_override("font_color", Palette.PINK if message != "" else Palette.AMBER)
 	status_label.text = _status_text(sel_cards, valid_meld)
+
+	# tell the player when they can go out, and shout when it's rummy
+	var out: Dictionary = game.go_out_check(seat)
+	go_out_label.visible = hints and out["can"]
+	if out["rummy"]:
+		go_out_label.text = "RUMMY IS ON! GO OUT NOW FOR DOUBLE POINTS"
+	else:
+		go_out_label.text = "YOU CAN GO OUT THIS TURN"
+
+
+## "ACES", "SEVENS", "KINGS"...
+static func trump_name(rank: int) -> String:
+	const NAMES := ["", "ACES", "TWOS", "THREES", "FOURS", "FIVES", "SIXES", "SEVENS", "EIGHTS", "NINES", "TENS", "JACKS", "QUEENS", "KINGS"]
+	return NAMES[rank] if rank >= 1 and rank <= 13 else ""
 
 
 func _status_text(sel_cards: Array, valid_meld: bool) -> String:
@@ -640,7 +671,7 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if valid_meld:
 		return "VALID MELD. PRESS MELD"
 	for m in game.melds:
-		if Cards.can_lay_off(m, sel_cards):
+		if Cards.can_lay_off(m, sel_cards, game.trump_rank):
 			return "TAP A GLOWING MELD TO LAY OFF"
 	if sel_cards.size() == 1:
 		return "PRESS DISCARD TO END YOUR TURN"
@@ -686,29 +717,25 @@ func _draw_stock() -> void:
 	var res := game.draw_stock(game.turn)
 	if not _handle(res):
 		return
-	var drawn: Array = res.get("items_drawn", [])
-	if drawn.is_empty():
+	if res.get("round_over", false):
 		_after_action()
 		return
+	var card: Dictionary = res["card"]
 	_refresh()
-	_show_drawn_items(drawn, 0)
-
-
-## Shows each item pulled from the stock, one after another.
-func _show_drawn_items(drawn: Array, i: int) -> void:
-	if i >= drawn.size():
-		_after_action()
-		return
-	var item: Dictionary = drawn[i]
-	var title := "YOU DREW AN ITEM" if drawn.size() == 1 else "ITEM %d OF %d" % [i + 1, drawn.size()]
-	var text := "%s Keep it and draw again until you get a playing card." % Items.def(item["item"])["text"]
-	_show_reveal(title, item, text, _show_drawn_items.bind(drawn, i + 1))
+	if res["item"]:
+		var text := "%s It's yours. Now draw again: the stock or the discard pile." % Items.def(card["item"])["text"]
+		_show_reveal("YOU DREW AN ITEM", card, text, _after_action)
+	else:
+		lit_card = card["id"]
+		_show_reveal("YOU DREW", card, Cards.card_name(card) + (" (TRUMP)" if game.is_trump(card) else ""), _after_action)
 
 
 func _draw_discard() -> void:
 	if game.phase != "draw" or game.discard_pile.is_empty():
 		return
-	if _handle(game.draw_discard(game.turn)):
+	var res := game.draw_discard(game.turn)
+	if _handle(res):
+		lit_card = res["card"]["id"]
 		_after_action()
 
 
@@ -853,6 +880,8 @@ func _show_pass_screen() -> void:
 	var hp_row := _hp_bar(game.players[seat])
 	hp_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(hp_row)
+	if game.trump_rank > 0:
+		box.add_child(_label("TRUMP THIS ROUND: %s" % trump_name(game.trump_rank), 26, Palette.GOLD, true))
 	var start: int = seen_upto.get(seat, 0)
 	var news := log_lines.slice(maxi(start, log_lines.size() - 8))
 	if not news.is_empty():
@@ -873,6 +902,7 @@ func _show_reveal(title: String, card: Dictionary, text: String, then: Callable)
 	var holder := CenterContainer.new()
 	var cv := CardView.new()
 	cv.setup(card, Vector2(150, 216))
+	cv.trump = not card.is_empty() and game.is_trump(card)
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(cv)
 	box.add_child(_label(text, 28, Palette.INK, true))
@@ -899,9 +929,11 @@ func _show_round_result() -> void:
 		box.add_child(_title("DEAD DECK"))
 		box.add_child(_label("The stock ran out. Nobody gets the shotgun.", 26, Palette.INK, true))
 	else:
+		if r["rummy"]:
+			box.add_child(_label("RUMMY!", 96, Palette.GOLD, true))
 		box.add_child(_title("%s GOES OUT" % _name(w), Palette.AMBER))
 		if r["rummy"]:
-			box.add_child(_label("RUMMY! Out in a single turn. Points doubled.", 26, Palette.AMBER, true))
+			box.add_child(_label("Out in a single turn. Points doubled.", 26, Palette.GOLD, true))
 		box.add_child(_label("%d points = %d shell%s in the shotgun." % [r["points"], r["shells"], "" if r["shells"] == 1 else "s"], 28, Palette.INK, true))
 		box.add_child(_label("(1 shell, +1 for every 10 points, max 3)", 20, Palette.DIM, true))
 	for h in r["hands"]:
@@ -913,6 +945,7 @@ func _show_round_result() -> void:
 		for c in h["cards"]:
 			var cv := CardView.new()
 			cv.setup(c, Vector2(52, 76))
+			cv.trump = game.is_trump(c)
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			flow.add_child(cv)
 		box.add_child(flow)
@@ -1029,7 +1062,8 @@ func _show_rules() -> void:
 		"LAYING OFF. Add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
 		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
 		"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for every 10 points scored (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
-		"HINTS. Underlined cards are part of your best melds. DEADWOOD is what you'd be caught holding if someone went out now.",
+		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
+		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
 	]
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))

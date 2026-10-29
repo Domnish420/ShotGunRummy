@@ -44,6 +44,13 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
 - **Going out.** Empty your hand of playing cards to win the round (items don't count). You score the cards everyone
   else is still holding (A = 1, 2–10 = face value, J/Q/K = 10). Going out in one
   turn without having melded before is **Rummy** and doubles it.
+- **Trump cards.** Each round one rank is wild: aces in round 1, 2s in round 2,
+  and so on up to kings in round 13, then back to aces. A trump card (gold star)
+  can stand in for any card of any suit in any set or run, so in round 1
+  2♣ 3♣ A♦ 5♣ is a run.
+- **Hints.** A gold outline means a card makes a meld in your hand, a gold
+  underline means it fits a meld on the table, and a gold banner tells you when
+  you can go out (and when it would be Rummy). Turn them off with HINTS.
 - **The shotgun.** The winner gets 1 shell, +1 for every 10 points (max 3), and
   picks who to shoot with each one. Everyone has 4 health. Health carries over
   between rounds. 0 health and you're out. Last one standing wins.

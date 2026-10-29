@@ -14,10 +14,12 @@ const LABEL_H := 22.0
 var meld: Dictionary = {}
 var owner_label := ""
 var target := false
+var trump_rank := 0
 
 
-func setup(p_meld: Dictionary, p_owner_label: String, p_target: bool) -> void:
+func setup(p_meld: Dictionary, p_owner_label: String, p_target: bool, p_trump_rank: int = 0) -> void:
 	meld = p_meld
+	trump_rank = p_trump_rank
 	owner_label = p_owner_label
 	target = p_target
 	var n: int = meld["cards"].size()
@@ -37,7 +39,8 @@ func _draw() -> void:
 	draw_string(font, Vector2(4, 17), owner_label, HORIZONTAL_ALIGNMENT_LEFT, size.x - 8, 18, Palette.DIM)
 	var x := 4.0
 	for c in meld["cards"]:
-		CardArt.draw_card(self, font, Rect2(Vector2(x, LABEL_H + 4), CARD), c, false, true)
+		var is_trump: bool = trump_rank > 0 and int(c["rank"]) == trump_rank
+		CardArt.draw_card(self, font, Rect2(Vector2(x, LABEL_H + 4), CARD), c, false, true, is_trump)
 		x += STEP
 	if target:
 		draw_rect(Rect2(Vector2(1, LABEL_H), size - Vector2(2, LABEL_H + 1)), Palette.AMBER, false, 3.0)

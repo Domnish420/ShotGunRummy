@@ -14,7 +14,8 @@ var _test := ""
 
 func _init() -> void:
 	for t in [
-		"test_deck", "test_points", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_deck", "test_points", "test_trump_rotation", "test_trump_runs", "test_trump_sets",
+		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -31,6 +32,12 @@ func check(cond: bool, what: String) -> void:
 	if not cond:
 		_failures += 1
 		printerr("FAIL [%s] %s" % [_test, what])
+
+
+## Draws from the stock until a playing card comes up (items mean drawing again).
+func draw_playing_card(g: Game, seat: int) -> void:
+	while g.is_turn_of(seat) and g.phase == "draw":
+		g.draw_stock(seat)
 
 
 func cards(ids: String) -> Array:
@@ -92,6 +99,76 @@ func test_best_partition() -> void:
 	check(best["melds"].size() == 2, "two melds")
 
 
+# ------------------------------------------------------------------ trump
+
+func test_trump_rotation() -> void:
+	check(Game.trump_for_round(1) == 1, "round 1: aces")
+	check(Game.trump_for_round(2) == 2, "round 2: twos")
+	check(Game.trump_for_round(13) == 13, "round 13: kings")
+	check(Game.trump_for_round(14) == 1, "round 14: back to aces")
+	var g := new_game(2)
+	check(g.trump_rank == 1, "first round's trump is aces")
+	g.phase = "round_over"
+	g.start_round()
+	check(g.trump_rank == 2, "next round's trump is twos")
+
+
+func test_trump_runs() -> void:
+	check(Cards.is_run(cards("2C 3C AC 5C"), 1), "2 3 A 5 of clubs: the ace is the 4")
+	check(Cards.is_run(cards("2C 3C AD 5C"), 1), "the trump can be any suit")
+	check(Cards.is_run(cards("2C AH 5C AS"), 1), "two trumps fill two gaps")
+	check(Cards.is_run(cards("JC QC AD"), 1), "a spare trump extends the end")
+	check(not Cards.is_run(cards("2C 5C AD"), 1), "one trump can't fill two gaps")
+	check(not Cards.is_run(cards("2C 3H AD"), 1), "naturals still need one suit")
+	check(not Cards.is_run(cards("2C 3C AD 5C"), 0), "no trump, no run")
+	var shown := Cards.ids_of(Cards.sorted_meld(cards("5C AD 2C 3C"), "run", 1))
+	check(shown == ["2C", "3C", "AD", "5C"], "the trump is shown in its gap (got %s)" % [shown])
+
+
+func test_trump_sets() -> void:
+	check(Cards.is_set(cards("7S 7H 2D"), 2), "two sevens and a trump")
+	check(Cards.is_set(cards("7S 2H 2D"), 2), "one seven and two trumps")
+	check(not Cards.is_set(cards("7S 7S 2D"), 2), "no duplicate suits")
+	check(not Cards.is_set(cards("7S 7H 7D 7C 2D"), 2), "a set is still at most 4")
+	check(Cards.meld_type(cards("7S 2H 2D"), 2) == "any", "7 + two trumps could be a set or a run")
+
+
+func test_trump_lay_off() -> void:
+	var run := {"type": "run", "cards": cards("4D 5D 6D")}
+	check(Cards.can_lay_off(run, cards("KS"), 13), "lay a trump on a run")
+	var either := {"type": "any", "cards": cards("7S 2H 2D")}
+	check(Cards.lay_off_type(either, cards("8S"), 2) == "run", "an 8 of spades makes it a run")
+	check(Cards.lay_off_type(either, cards("7H"), 2) == "set", "a 7 of hearts makes it a set")
+
+
+func test_trump_in_game() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("2C 3C AD 5C 9H 9S")
+	g.stock.append(Cards.parse("KH"))
+	g.draw_stock(0)
+	var r := g.meld(0, ["2C", "3C", "AD", "5C"])
+	check(r["ok"], "meld 2 3 A 5 of clubs in round 1")
+	check(r["ok"] and r["meld"]["type"] == "run", "it's a run")
+	check(g.lay_off(0, ["9H"], r["meld"]["id"])["ok"] == false, "9H doesn't fit")
+
+
+func test_trump_partition() -> void:
+	var best := Cards.best_partition(cards("2C 3C AD 5C KH"), 1)
+	check(best["points"] == 10, "only the king is deadwood (got %d)" % best["points"])
+
+
+func test_go_out_check() -> void:
+	var g := new_game(2)
+	g.players[0].hand = cards("2C 3C 4C")
+	g.stock.append(Cards.parse("KH"))
+	g.draw_stock(0)
+	var chk := g.go_out_check(0)
+	check(chk["can"], "meld 2 3 4 and discard the king")
+	check(chk["rummy"], "and it's rummy: nothing melded before")
+	g.players[0].hand = cards("2C 3C 4C KH QS")
+	check(not g.go_out_check(0)["can"], "two loose cards: can't go out")
+
+
 # ------------------------------------------------------------------ table
 
 func test_deal() -> void:
@@ -114,18 +191,25 @@ func test_deal() -> void:
 func test_drawing_an_item() -> void:
 	var g := new_game(2)
 	var card := Cards.parse("KD")
-	var beer := {"id": "I-beer-99", "item": "beer"}
 	var saw := {"id": "I-saw-99", "item": "saw"}
 	g.stock.append(card)
 	g.stock.append(saw)
-	g.stock.append(beer)
 	var hand_before: int = g.players[0].hand.size()
 	var r := g.draw_stock(0)
-	check(r["ok"] and r["items_drawn"].size() == 2, "drew two items")
-	check(r["card"] == card, "kept drawing until a playing card")
-	check(g.players[0].items.has(beer) and g.players[0].items.has(saw), "items go with your items")
-	check(g.players[0].hand.size() == hand_before + 1, "the playing card goes in your hand")
+	check(r["ok"] and r["item"], "drew an item")
+	check(g.players[0].items.has(saw), "it goes with your items")
+	check(g.phase == "draw", "and you draw again")
+	r = g.draw_stock(0)
+	check(r["ok"] and not r["item"] and r["card"] == card, "then a playing card")
+	check(g.players[0].hand.size() == hand_before + 1, "which goes in your hand")
 	check(g.phase == "play", "then you discard to end the turn")
+	# after an item you may take the discard pile instead
+	g = new_game(2)
+	g.stock.append({"id": "I-beer-99", "item": "beer"})
+	g.draw_stock(0)
+	var top: Dictionary = g.top_discard()
+	r = g.draw_discard(0)
+	check(r["ok"] and r["card"] == top, "second draw from the discard pile")
 
 
 func test_beer_can_burn_an_item() -> void:
@@ -154,8 +238,9 @@ func test_turn_guards() -> void:
 	var g := new_game(2)
 	check(not g.draw_stock(1)["ok"], "can't draw out of turn")
 	check(not g.discard(0, g.players[0].hand[0]["id"])["ok"], "must draw first")
+	g.stock.append(Cards.parse("KD"))
 	check(g.draw_stock(0)["ok"], "draw")
-	check(not g.draw_stock(0)["ok"], "only one draw")
+	check(not g.draw_stock(0)["ok"], "only one draw once you have a playing card")
 
 
 func test_discard_pickup_rule() -> void:
@@ -183,7 +268,7 @@ func test_many_items_per_turn() -> void:
 	check(g.use_item(0, b)["ok"], "and another")
 	check(g.players[0].hp == 4, "+2 health")
 	check(g.phase == "draw", "still need to draw")
-	g.draw_stock(0)
+	draw_playing_card(g, 0)
 	check(g.use_item(0, _give_item(g, 0, "magnifier"))["ok"], "and after drawing")
 
 
@@ -192,7 +277,7 @@ func test_handcuffs() -> void:
 	var cuffs := _give_item(g, 0, "handcuffs")
 	check(not g.use_item(0, cuffs)["ok"], "handcuffs need a target")
 	check(g.use_item(0, cuffs, 1)["ok"], "cuff seat 2")
-	g.draw_stock(0)
+	draw_playing_card(g, 0)
 	g.discard(0, g.players[0].hand[0]["id"])
 	check(g.turn == 2, "seat 2 is skipped")
 	check(not g.players[1].cuffed, "cuffs come off")
@@ -259,7 +344,7 @@ func test_shotgun_and_elimination() -> void:
 	check(g.phase == "round_over", "gun empty")
 	g.start_round()
 	check(g.players[2].hand.is_empty(), "eliminated players aren't dealt in")
-	g.draw_stock(g.turn)
+	draw_playing_card(g, g.turn)
 	var seat := g.turn
 	g.discard(seat, g.players[seat].hand[0]["id"])
 	check(g.players[g.turn].alive, "turns skip eliminated players")

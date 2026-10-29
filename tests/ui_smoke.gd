@@ -86,6 +86,8 @@ func _run() -> void:
 				quit(0)
 				return
 			elif text.contains("USES") or text.contains("DREW AN ITEM"):
+				if text.contains("DREW AN ITEM"):
+					await _shot("04b_drew_item")
 				await _shot("04_item")
 			var buttons := _overlay_buttons()
 			var pick = buttons[0] if not buttons.is_empty() else null
@@ -123,7 +125,9 @@ func _run() -> void:
 				main._draw_stock()
 			continue
 		if game.phase == "play":
-			var best: Dictionary = Cards.best_partition(me.hand)
+			if game.go_out_check(seat)["can"]:
+				await _shot("03d_can_go_out")
+			var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
 			if not best["melds"].is_empty():
 				main.selected = Cards.ids_of(best["melds"][0])
 				main._refresh()
@@ -134,7 +138,7 @@ func _run() -> void:
 			var laid := false
 			for c in me.hand:
 				for m in game.melds:
-					if Cards.can_lay_off(m, [c]):
+					if Cards.can_lay_off(m, [c], game.trump_rank):
 						main.selected = [c["id"]]
 						main._lay_off_on(m["id"])
 						laid = true

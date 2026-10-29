@@ -26,17 +26,19 @@ static func play_turn(game) -> void:
 	if not game.is_turn_of(seat):
 		return
 
-	var top: Dictionary = game.top_discard()
-	if not top.is_empty() and helps(game, me.hand, top):
-		game.draw_discard(seat)
-	else:
-		game.draw_stock(seat)
+	# items drawn from the stock mean drawing again
+	while game.is_turn_of(seat) and game.phase == "draw":
+		var top: Dictionary = game.top_discard()
+		if not top.is_empty() and helps(game, me.hand, top):
+			game.draw_discard(seat)
+		else:
+			game.draw_stock(seat)
 	if not game.is_turn_of(seat):
 		return
 
 	# meld everything possible, then lay off
 	while game.is_turn_of(seat):
-		var best: Dictionary = Cards.best_partition(me.hand)
+		var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
 		if best["melds"].is_empty():
 			break
 		if not game.meld(seat, Cards.ids_of(best["melds"][0]))["ok"]:
@@ -46,9 +48,8 @@ static func play_turn(game) -> void:
 		laid = false
 		for card in me.hand:
 			for m in game.melds:
-				if Cards.can_lay_off(m, [card]):
-					game.lay_off(seat, [card["id"]], m["id"])
-					laid = true
+				if Cards.can_lay_off(m, [card], game.trump_rank):
+					laid = game.lay_off(seat, [card["id"]], m["id"])["ok"]
 					break
 			if laid:
 				break
@@ -59,10 +60,10 @@ static func play_turn(game) -> void:
 ## Would `card` end up in a meld (or fit one on the table)?
 static func helps(game, hand: Array, card: Dictionary) -> bool:
 	for m in game.melds:
-		if Cards.can_lay_off(m, [card]):
+		if Cards.can_lay_off(m, [card], game.trump_rank):
 			return true
 	var with_card: Array = hand + [card]
-	var best: Dictionary = Cards.best_partition(with_card)
+	var best: Dictionary = Cards.best_partition(with_card, game.trump_rank)
 	for c in best["deadwood"]:
 		if c["id"] == card["id"]:
 			return false
@@ -79,7 +80,7 @@ static func choose_discard(game, seat: int) -> String:
 			continue
 		var rest: Array = hand.duplicate()
 		rest.erase(card)
-		var score: int = int(Cards.best_partition(rest)["points"]) * 100 - Cards.card_points(card)
+		var score: int = int(Cards.best_partition(rest, game.trump_rank)["points"]) * 100 - Cards.card_points(card)
 		if score < best_score:
 			best_score = score
 			best_id = card["id"]
