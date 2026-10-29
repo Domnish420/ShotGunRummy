@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shotgun Rummy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="vignette"></div>
+
+  <!-- Waiver / title screen -->
+  <section id="waiver" class="screen">
+    <div class="waiver-paper">
+      <h1>SHOTGUN RUMMY</h1>
+      <p class="fine">GENERAL RELEASE OF LIABILITY</p>
+      <p class="fine">The undersigned agrees to play Rummy against The Dealer. Sets of three or four.
+        Runs of three or more, same suit. Aces low. First to <b>100</b> walks out.
+        The house is not responsible for what happens to the other one.</p>
+      <label for="name-input">SIGN HERE:</label>
+      <input id="name-input" maxlength="10" autocomplete="off" spellcheck="false" placeholder="YOUR NAME">
+      <p id="waiver-error" class="error"></p>
+      <button id="sign-btn" class="btn">SIGN</button>
+    </div>
+  </section>
+
+  <!-- Table -->
+  <main id="table" class="screen hidden">
+    <header class="topbar">
+      <div class="scores">
+        <span id="score-dealer" class="score">DEALER 0</span>
+        <span class="target">FIRST TO <span id="target-score">100</span></span>
+        <span id="score-player" class="score">YOU 0</span>
+      </div>
+      <div class="top-actions">
+        <span id="round-label">ROUND 1</span>
+        <button id="rules-btn" class="btn small">RULES</button>
+      </div>
+    </header>
+
+    <section class="dealer-area">
+      <div class="dealer">
+        <div class="dealer-face" aria-hidden="true"><span class="eye"></span><span class="eye"></span><span class="mouth"></span></div>
+        <div id="dealer-speech" class="speech">...</div>
+      </div>
+      <div id="dealer-hand" class="hand opponent"></div>
+    </section>
+
+    <section class="felt">
+      <div class="piles">
+        <div class="pile">
+          <div id="stock" class="card back" role="button" tabindex="0" aria-label="Draw from stock"></div>
+          <div id="stock-count" class="pile-label">STOCK</div>
+        </div>
+        <div class="pile">
+          <div id="discard" class="slot" role="button" tabindex="0" aria-label="Take top discard"></div>
+          <div class="pile-label">DISCARD</div>
+        </div>
+      </div>
+      <div class="meld-zones">
+        <div class="meld-zone">
+          <div class="zone-label">DEALER'S MELDS</div>
+          <div id="melds-dealer" class="melds"></div>
+        </div>
+        <div class="meld-zone">
+          <div class="zone-label" id="player-zone-label">YOUR MELDS</div>
+          <div id="melds-player" class="melds"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="player-area">
+      <div id="status" class="status">...</div>
+      <div id="player-hand" class="hand"></div>
+      <div class="controls">
+        <button id="meld-btn" class="btn">MELD</button>
+        <button id="discard-btn" class="btn danger">DISCARD</button>
+        <button id="sort-btn" class="btn small">SORT: SUIT</button>
+        <label class="toggle"><input id="hint-toggle" type="checkbox" checked> HINTS</label>
+        <span id="deadwood" class="deadwood">DEADWOOD 0</span>
+      </div>
+    </section>
+
+    <aside class="log-panel">
+      <div class="zone-label">LOG</div>
+      <ol id="log"></ol>
+    </aside>
+  </main>
+
+  <!-- Modal (round end / rules) -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div id="modal-body"></div>
+      <div class="modal-actions"><button id="modal-btn" class="btn">CONTINUE</button></div>
+    </div>
+  </div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
