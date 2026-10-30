@@ -1,5 +1,5 @@
 extends Control
-## Shotgun Rummy UI (phone first).
+## Shotgun Cards UI (phone first): Shotgun Rummy and Shotgun Blackjack.
 ##
 ## Screens are built in code: main menu -> lobby (same Wi-Fi) or pass-and-play
 ## setup -> table, with overlays on top for "pass the phone", item reveals,
@@ -18,6 +18,11 @@ const World3DScene = preload("res://scripts/three/world3d.gd")
 const Session = preload("res://scripts/net/session.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Bot = preload("res://scripts/core/bot.gd")
+const Blackjack = preload("res://scripts/core/blackjack.gd")
+const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
+
+## The card games, in menu order.
+const GAMES := {"rummy": "SHOTGUN RUMMY", "blackjack": "SHOTGUN BLACKJACK"}
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -39,6 +44,7 @@ var _picked: Dictionary = {} # highlighted on the character select screen
 var custom_looks: Array = [] # characters you've made
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
+var game_kind := "rummy" # which card game: see GAMES
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -271,10 +277,17 @@ func _name(seat: int) -> String:
 func _load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
-		return
+		# the game used to be called Shotgun Rummy: on a computer its settings
+		# (and your characters) were saved in a folder by that name
+		var old := OS.get_user_data_dir().get_base_dir().path_join("Shotgun Rummy").path_join("settings.cfg")
+		if not FileAccess.file_exists(old) or cfg.load(old) != OK:
+			return
 	player_names = cfg.get_value("setup", "names", player_names)
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
 	setup_bots = cfg.get_value("setup", "bots", [])
+	game_kind = str(cfg.get_value("setup", "game", "rummy"))
+	if not GAMES.has(game_kind):
+		game_kind = "rummy"
 	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
 	solo_level = str(cfg.get_value("solo", "level", "normal"))
 	profile_name = cfg.get_value("profile", "name", "")
@@ -290,6 +303,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "names", player_names)
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("setup", "bots", setup_bots)
+	cfg.set_value("setup", "game", game_kind)
 	cfg.set_value("solo", "opponents", solo_opponents)
 	cfg.set_value("solo", "level", solo_level)
 	cfg.set_value("profile", "name", profile_name)
@@ -330,7 +344,8 @@ func show_menu() -> void:
 	round_label = null
 	world.set_menu_mode(true)
 	var box := _paper()
-	box.add_child(_label("SHOTGUN\nRUMMY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_paper_button("GAME: %s  ▸" % GAMES[game_kind], _cycle_game, 26))
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
 		menu_message = ""
@@ -349,6 +364,25 @@ func show_menu() -> void:
 	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
 	box.add_child(_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24))
 	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
+
+
+## Rummy -> Blackjack -> ...
+func _cycle_game() -> void:
+	if _name_edit != null and is_instance_valid(_name_edit):
+		profile_name = _name_edit.text.strip_edges().to_upper().left(10)
+	var kinds := GAMES.keys()
+	game_kind = kinds[(kinds.find(game_kind) + 1) % kinds.size()]
+	_save_settings()
+	show_menu()
+
+
+## A new, empty game of `kind`.
+static func new_game(kind: String) -> Game:
+	return Blackjack.new() if kind == "blackjack" else Game.new()
+
+
+func _blackjack() -> bool:
+	return game != null and game.kind == "blackjack"
 
 
 func _noop() -> void:
@@ -392,6 +426,7 @@ func _on_pass_and_play_pressed() -> void:
 func show_this_phone() -> void:
 	var box := _paper()
 	box.add_child(_label("ON THIS PHONE", 52, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label(GAMES[game_kind], 26, Palette.CARD_INK, true))
 	box.add_child(_paper_button("VS AI (SOLO)", show_solo))
 	box.add_child(_label("Just you against AI players.", 22, Palette.CARD_INK, true))
 	box.add_child(_paper_button("PASS THE PHONE", _on_pass_and_play_pressed))
@@ -407,6 +442,7 @@ const SOLO_LEVELS := ["easy", "normal", "hard", "mixed"]
 func show_solo() -> void:
 	var box := _paper()
 	box.add_child(_label("VS AI", 60, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label(GAMES[game_kind], 26, Palette.CARD_INK, true))
 	box.add_child(_label("%s, PLAYING AS %s" % [profile_name if profile_name != "" else "YOU", _short_name(my_look)], 24, Palette.CARD_INK, true))
 	var count_row := HBoxContainer.new()
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -475,7 +511,7 @@ func _start_solo() -> void:
 		bots.append(Bot.LEVELS[i % Bot.LEVELS.size()] if solo_level == "mixed" else solo_level)
 	_save_settings()
 	local_mode = "solo"
-	_table = {"names": names, "looks": looks, "bots": bots}
+	_table = {"names": names, "looks": looks, "bots": bots, "kind": game_kind}
 	start_match()
 
 
@@ -492,6 +528,7 @@ func _on_host_pressed() -> void:
 	if n == "":
 		return
 	var err := session.host(n, my_look)
+	session.game_kind = game_kind
 	if err != "":
 		menu_message = err
 		show_menu()
@@ -514,7 +551,8 @@ func show_join() -> void:
 		box.add_child(_label("Looking... (the host needs to be on the HOST A LOBBY screen)", 22, Palette.CARD_INK, true))
 	for ip in session.lobbies:
 		var l: Dictionary = session.lobbies[ip]
-		box.add_child(_paper_button("%s  (%d/%d)" % [l["name"], l["players"], l["max"]], _join_ip.bind(ip), 28))
+		var kind_name: String = str(GAMES.get(l.get("kind", "rummy"), "")).trim_prefix("SHOTGUN ")
+		box.add_child(_paper_button("%s · %s (%d/%d)" % [l["name"], kind_name, l["players"], l["max"]], _join_ip.bind(ip), 26))
 	box.add_child(_label("OR JOIN BY IP (shown on the host's screen)", 22, Palette.CARD_INK, true))
 	var row := HBoxContainer.new()
 	_ip_edit = LineEdit.new()
@@ -563,6 +601,10 @@ func show_lobby() -> void:
 			box.add_child(_label("Or join by IP: %s" % ", ".join(ips), 24, Palette.CARD_INK, true))
 	else:
 		box.add_child(_label("IN THE LOBBY", 48, Color(0.36, 0.06, 0.05), true))
+	if session.is_host():
+		box.add_child(_paper_button("GAME: %s  ▸" % GAMES.get(session.game_kind, "?"), _cycle_lobby_game, 24))
+	else:
+		box.add_child(_label("GAME: %s" % GAMES.get(session.game_kind, "?"), 26, Palette.CARD_INK, true))
 	box.add_child(_label("PLAYERS (%d/%d)" % [session.names.size(), Session.MAX_PLAYERS], 26, Palette.CARD_INK))
 	for i in range(session.names.size()):
 		var who: String = session.names[i]
@@ -599,6 +641,13 @@ func show_lobby() -> void:
 	else:
 		box.add_child(_label("Waiting for the host to start...", 24, Palette.CARD_INK, true))
 	box.add_child(_paper_button("LEAVE", show_menu, 28))
+
+
+func _cycle_lobby_game() -> void:
+	var kinds := GAMES.keys()
+	game_kind = kinds[(kinds.find(session.game_kind) + 1) % kinds.size()]
+	_save_settings()
+	session.set_game(game_kind)
 
 
 func _on_roster_changed() -> void:
@@ -908,9 +957,9 @@ func show_setup() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	paper.add_child(box)
-	box.add_child(_label("SHOTGUN\nRUMMY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
-	box.add_child(_label("The undersigned agree to a game of Rummy. Strange things are dealt with the cards. Whoever goes out gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
+	box.add_child(_label("The undersigned agree to a game of %s." % ("Blackjack" if game_kind == "blackjack" else "Rummy") + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
 
 	var count_row := HBoxContainer.new()
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1042,7 +1091,7 @@ func _start_from_setup() -> void:
 	_save_settings()
 	_fit_setup_looks()
 	local_mode = "pass"
-	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate()}
+	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate(), "kind": game_kind}
 	start_match()
 
 
@@ -1051,7 +1100,7 @@ func _start_from_setup() -> void:
 ## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
 	session.leave()
-	game = Game.new()
+	game = new_game(str(_table.get("kind", "rummy")))
 	game.setup(_table["names"])
 	for i in range(game.players.size()):
 		game.players[i].look = _table["looks"][i]
@@ -1180,6 +1229,13 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("— ROUND %d — %s deals. %s goes first." % [d["round"], _name(d["dealer"]), _name(d["first"])])
 		"turn_start":
 			turn_counter += 1
+		"hit":
+			_log("%s hits: %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
+		"stand":
+			_log("%s stands%s." % [_name(d["seat"]), " on %d" % d["total"] if d["seat"] == _me() else ""])
+		"bust":
+			_log("%s GOES BUST." % _name(d["seat"]))
+			world.announce("%s\nGOES BUST" % _name(d["seat"]))
 		"turn_skipped":
 			_log("%s is in handcuffs and skips a turn." % _name(d["seat"]))
 		"draw":
@@ -1212,7 +1268,12 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 		"round_end":
 			if d["winner"] >= 0:
 				world.cheer(d["winner"])
-			if d["winner"] < 0:
+			if _blackjack():
+				if d["winner"] < 0:
+					_log(str(d.get("reason", "Nobody wins.")))
+				else:
+					_log("%s wins with %d%s: %d shell%s." % [_name(d["winner"]), d["points"], " (BLACKJACK)" if d.get("blackjack", false) else (" (FIVE-CARD CHARLIE)" if d.get("charlie", false) else ""), d["shells"], "" if d["shells"] == 1 else "s"])
+			elif d["winner"] < 0:
 				_log("The deck ran dry. Nobody scores.")
 			else:
 				_log("%s goes out%s: %d points, %d shell%s." % [_name(d["winner"]), " with RUMMY" if d["rummy"] else "", d["points"], d["shells"], "" if d["shells"] == 1 else "s"])
@@ -1345,6 +1406,120 @@ func _handle(res: Dictionary) -> bool:
 	message = ""
 	selected = []
 	return true
+
+
+# ================================================================ blackjack
+
+const BLACKJACK_RULES := [
+	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player deals each round and the player to their left goes first; the dealer plays last. Next round the deal moves one seat to the right. Everyone plays against each other: there's no house.",
+	"THE DEAL. Everyone gets 2 cards, one face down and one face up, and 2 item cards. The other items are shuffled into the stock. The deck is shuffled fresh every round.",
+	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again.",
+	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST: out of the round.",
+	"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings in round 13. A trump (gold star) counts as whatever you need, from 1 to 11.",
+	"WINNING. The highest total wins the round. A BLACKJACK (21 with your first 2 cards) beats everything, then a FIVE-CARD CHARLIE (5 cards without going bust). A tie goes to whoever holds fewer cards; still tied, nobody wins. If everyone else goes bust, the last one in wins.",
+	"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for a Blackjack, +1 for a five-card Charlie (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
+]
+
+
+func _refresh_blackjack() -> void:
+	var seat := _me()
+	var me = game.players[seat]
+	var my_turn := _my_turn()
+	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
+	trump_label.text = "TRUMP: %s  " % trump_name(game.trump_rank) if game.trump_rank > 0 else ""
+	me_name.text = me.name + _flags(me)
+	_clear(me_hp)
+	me_hp.add_child(_hp_bar(me))
+	var t: int = game.hand_total(seat)
+	deadwood_label.text = ("BUST %d" % t if me.bust else "TOTAL %d" % t) if not me.hand.is_empty() else ""
+	var can_play: bool = my_turn and game.phase == "play"
+	world.sync({
+		"game": game, "viewer": seat, "hand": me.hand.duplicate(), "selected": [], "selected_item": selected_item,
+		"meld_hints": {}, "lay_hints": {}, "lit": lit_card, "can_draw": can_play, "targets": {},
+		"hide_hand": _hand_hidden,
+	})
+	meld_btn.disabled = not can_play
+	discard_btn.disabled = not can_play
+	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
+	status_label.add_theme_color_override("font_color", Palette.PINK if message != "" else Palette.AMBER)
+	status_label.text = _status_text([], false)
+	go_out_label.visible = can_play and t == 21
+	go_out_label.text = "BLACKJACK!" if game.is_blackjack(seat) else "21! STAND ON IT"
+
+
+func _status_blackjack() -> String:
+	if game.phase != "play":
+		return "ROUND OVER"
+	if world.dealing:
+		return "SHUFFLING AND DEALING..."
+	var seat := _me()
+	var me = game.players[seat]
+	if not _my_turn():
+		var who := "%s IS THINKING..." % _name(game.turn) if _is_bot(game.turn) else "WAITING FOR %s..." % _name(game.turn)
+		if me.bust:
+			return "YOU'RE BUST. " + who
+		if me.stood:
+			return "YOU STAND ON %d. %s" % [game.hand_total(seat), who]
+		return who
+	if selected_item != "":
+		var item := game.find_item(seat, selected_item)
+		if not item.is_empty():
+			var def := Items.def(item["item"])
+			var blocker := game.item_blocker(seat, selected_item)
+			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
+	if me.ultimatum:
+		return "REVOLVER: TAKE A CARD THIS TURN, OR STAND AND SPIN THE CYLINDER"
+	return "%s, YOU HAVE %d. HIT OR STAND" % [_name(seat), game.hand_total(seat)]
+
+
+func _hit() -> void:
+	if not _my_turn() or game.phase != "play":
+		return
+	_act("hit", [], _after_hit)
+
+
+func _after_hit(res: Dictionary) -> void:
+	if not _handle(res):
+		return
+	lit_card = res.get("card", {}).get("id", "")
+	_after_action()
+
+
+func _stand() -> void:
+	if not _my_turn() or game.phase != "play":
+		return
+	lit_card = ""
+	_act("stand", [], _after_simple)
+
+
+func _show_blackjack_result() -> void:
+	var r := game.last_result
+	var box := _open_overlay(0.94, true, "result")
+	var w: int = r["winner"]
+	if w < 0:
+		box.add_child(_title("NOBODY WINS"))
+		box.add_child(_label(str(r.get("reason", "")), 26, Palette.INK, true))
+	else:
+		if r.get("blackjack", false):
+			box.add_child(_label("BLACKJACK!", 84, Palette.GOLD, true))
+		elif r.get("charlie", false):
+			box.add_child(_label("FIVE-CARD CHARLIE!", 56, Palette.GOLD, true))
+		box.add_child(_title("%s WINS WITH %d" % [_name(w), r["points"]], Palette.AMBER))
+		box.add_child(_label("%d shell%s in the shotgun." % [r["shells"], "" if r["shells"] == 1 else "s"], 28, Palette.INK, true))
+		box.add_child(_label("(1 shell, +1 for a Blackjack, +1 for a five-card Charlie)", 20, Palette.DIM, true))
+	for h in r["hands"]:
+		var note := "BUST (%d)" % h["points"] if h.get("bust", false) else str(h["points"])
+		box.add_child(_label("%s: %s" % [h["name"], note], 24, Palette.GOLD if h["seat"] == w else Palette.INK))
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 4)
+		for c in h["cards"]:
+			var cv := CardView.new()
+			cv.setup(c, Vector2(52, 76))
+			cv.trump = game.is_trump(c)
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			flow.add_child(cv)
+		box.add_child(flow)
+	_add_result_buttons(box, w)
 
 
 # ================================================================ AI players
@@ -1519,6 +1694,10 @@ func _build_table() -> void:
 		b.custom_minimum_size = Vector2(200, 46)
 		minor.add_child(b)
 	col.add_child(minor)
+	if _blackjack():
+		meld_btn.text = "HIT"
+		discard_btn.text = "STAND"
+		minor.visible = false
 
 
 ## A tap on the table: find the card under it in 3D.
@@ -1528,6 +1707,13 @@ func _on_table_input(event: InputEvent) -> void:
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
+	if _blackjack():
+		match hit.get("kind", ""):
+			"item":
+				_toggle_item(hit["id"])
+			"stock":
+				_hit()
+		return
 	match hit.get("kind", ""):
 		"hand":
 			_toggle_card(hit["id"])
@@ -1547,6 +1733,9 @@ func _on_table_input(event: InputEvent) -> void:
 
 func _refresh() -> void:
 	if game == null or round_label == null:
+		return
+	if _blackjack():
+		_refresh_blackjack()
 		return
 	var seat := _me()
 	var me = game.players[seat]
@@ -1623,6 +1812,8 @@ static func trump_name(rank: int) -> String:
 func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if message != "":
 		return message.to_upper()
+	if _blackjack():
+		return _status_blackjack()
 	if game.phase != "draw" and game.phase != "play":
 		return "ROUND OVER"
 	var seat := _me()
@@ -1746,7 +1937,9 @@ func _toggle_item(id: String) -> void:
 
 
 func _meld_selected() -> void:
-	if _my_turn():
+	if _blackjack():
+		_hit()
+	elif _my_turn():
 		_act("meld", [selected.duplicate()], _after_simple)
 
 
@@ -1763,6 +1956,9 @@ func _lay_off_on(meld_id: String) -> void:
 
 
 func _discard_selected() -> void:
+	if _blackjack():
+		_stand()
+		return
 	if not _my_turn() or selected.size() != 1:
 		return
 	lit_card = ""
@@ -1778,7 +1974,7 @@ func _use_selected_item() -> void:
 	match Items.needs(item["item"]):
 		"player":
 			_show_target_picker(item)
-		"meld_card", "hand_card":
+		"meld_card", "hand_card", "table_card":
 			_show_card_picker(item)
 		_:
 			_use_item(item, -1)
@@ -1801,11 +1997,11 @@ func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
 		"magnifier":
 			text = "Top of the stock:"
 		"phone":
-			text = "%s is holding:" % _name(target)
+			text = ("%s's face-down card:" if _blackjack() else "%s is holding:") % _name(target)
 		"adrenaline":
 			text = "You stole:"
 		"joker_paint":
-			text = "Wild until your turn ends. Meld it to keep it wild."
+			text = "A trump for the rest of the round: it's worth whatever you need." if _blackjack() else "Wild until your turn ends. Meld it to keep it wild."
 		"sticky_fingers":
 			text = str(res["text"]) + ". It's in your hand."
 	if shown.is_empty():
@@ -1965,7 +2161,18 @@ func _show_card_picker(item: Dictionary) -> void:
 	box.add_child(_title(str(def["name"]).to_upper(), Palette.PURPLE.lightened(0.3)))
 	box.add_child(_label(def["text"], 26, Palette.INK, true))
 	var choices: Array = game.item_choices(_me(), item["item"])
-	if Items.needs(item["item"]) == "meld_card":
+	if Items.needs(item["item"]) == "table_card":
+		box.add_child(_label("WHICH CARD?", 26, Palette.DIM, true))
+		for p in game.others(_me()):
+			var theirs := []
+			for c in p.hand:
+				if choices.has(c["id"]):
+					theirs.append(c)
+			if theirs.is_empty():
+				continue
+			box.add_child(_label("%s:" % p.name, 22, Palette.DIM))
+			box.add_child(_card_buttons(theirs, item))
+	elif Items.needs(item["item"]) == "meld_card":
 		box.add_child(_label("WHICH CARD?", 26, Palette.DIM, true))
 		for m in game.melds:
 			var mine := []
@@ -1999,6 +2206,9 @@ func _card_buttons(cards: Array, item: Dictionary) -> HFlowContainer:
 
 
 func _show_round_result() -> void:
+	if _blackjack():
+		_show_blackjack_result()
+		return
 	var r := game.last_result
 	var box := _open_overlay(0.94, true, "result")
 	var w: int = r["winner"]
@@ -2026,6 +2236,11 @@ func _show_round_result() -> void:
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			flow.add_child(cv)
 		box.add_child(flow)
+	_add_result_buttons(box, w)
+
+
+## The shotgun (or what's next) under a round's result.
+func _add_result_buttons(box: VBoxContainer, w: int) -> void:
 	if game.gun != null:
 		var mine: bool = (not _online() or int(game.gun["holder"]) == _me()) and not _is_bot(int(game.gun["holder"]))
 		var b := _button("%s, PICK UP THE SHOTGUN" % _name(w) if mine else "WATCH %s SHOOT" % _name(w), _show_gun)
@@ -2169,7 +2384,7 @@ func _play_again_online() -> void:
 func _show_rules() -> void:
 	var box := _open_overlay(0.96, true, "rules")
 	box.add_child(_title("RULES"))
-	var lines := [
+	var lines: Array = BLACKJACK_RULES if _blackjack() else [
 		"THE TABLE. 2 to 6 players, either passing one phone around (PASS & PLAY) or each on their own phone in a lobby on the same Wi-Fi. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
 		"THE DEAL. Everyone gets 7 playing cards and 2 item cards. The other item cards are shuffled into the stock, so a draw from it can give you an item instead of a playing card.",
 		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
@@ -2183,11 +2398,15 @@ func _show_rules() -> void:
 		"NO DISCARDING TRUMPS. You can't discard a trump card; meld it or lay it off. (If you're holding nothing but trumps, you may.)",
 		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
 	]
+	if _blackjack():
+		box.add_child(_title("BLACKJACK"))
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))
 	box.add_child(_label("ITEMS (use as many as you like, any time in your turn)", 28, Palette.PURPLE.lightened(0.3)))
 	for id in Items.DEFS:
-		var d: Dictionary = Items.DEFS[id]
+		var d: Dictionary = Items.def(id)
+		if int(d["copies"]) <= 0:
+			continue
 		box.add_child(_label("%s %s ×%d: %s" % [d["icon"], d["name"], d["copies"], d["text"]], 24, Palette.INK))
 	box.add_child(_button("BACK", _closing(_after_action)))
 

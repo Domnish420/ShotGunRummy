@@ -53,6 +53,7 @@ func _overlay_buttons(main) -> Array:
 func _run() -> void:
 	await _frames(4)
 	var host = phones[0]
+	host.game_kind = "rummy" # settings may remember another game
 	host._name_edit.text = "sam"
 	host._on_host_pressed()
 	check(host.session.is_host(), "host is hosting")
@@ -91,6 +92,16 @@ func _run() -> void:
 	check(p1.game != null and p1.game.players.size() == 4, "player 1 has the table")
 	check(p1.game.players[0].look.get("name", "") == host.my_look.get("name", "?"), "everyone sees the host's character")
 
+	await _play_match()
+	await _test_blackjack()
+	await _test_leaving()
+	print("%d failures" % failures)
+	quit(1 if failures > 0 else 0)
+
+
+## Plays the match on every phone until all of them show the end screen.
+func _play_match() -> void:
+	var host = phones[0]
 	var steps := 0
 	var rounds_seen := {}
 	while steps < 40000:
@@ -107,15 +118,41 @@ func _run() -> void:
 			if main.game == null or main.game.phase != "match_over" or main._overlay_kind != "match":
 				all_done = false
 		if all_done:
-			print("NET OK: match finished after %d rounds, winner %s" % [real.round_num, real.players[real.winner].name])
+			print("NET OK: %s match finished after %d rounds, winner %s" % [real.kind, real.round_num, real.players[real.winner].name])
 			break
 		for main in phones:
 			_drive(main)
 	if steps >= 40000:
 		check(false, "match didn't finish")
-	await _test_leaving()
-	print("%d failures" % failures)
-	quit(1 if failures > 0 else 0)
+
+
+## A lobby set to Blackjack plays Blackjack on every phone.
+func _test_blackjack() -> void:
+	var host = phones[0]
+	host.show_menu()
+	await _frames(4)
+	host._name_edit.text = "sam"
+	host._on_host_pressed()
+	host._cycle_lobby_game()
+	check(host.session.game_kind == "blackjack", "the host picks Blackjack")
+	for main in [phones[1], phones[2]]:
+		main.show_menu()
+		main._name_edit.text = "x"
+		main._on_join_pressed()
+		main._ip_edit.text = "127.0.0.1"
+		main._join_typed_ip()
+	for i in range(300):
+		await _frames(1)
+		if host.session.names.size() == 3 and phones[2].session.names.size() == 3:
+			break
+	check(phones[1].session.game_kind == "blackjack", "players see the lobby is Blackjack")
+	host.session.add_bot("normal")
+	await _frames(6)
+	host.session.start_match()
+	await _frames(10)
+	check(phones[1].game != null and phones[1].game.kind == "blackjack", "player 1's table is Blackjack")
+	await _play_match()
+	host.game_kind = "rummy"
 
 
 ## A player walking out mid-game sends everyone back to the menu with a note.
@@ -195,6 +232,12 @@ func _drive(main) -> void:
 	if not game.is_turn_of(seat):
 		return
 	var me = game.players[seat]
+	if game.kind == "blackjack":
+		if game.hand_total(seat) < 16:
+			main._hit()
+		else:
+			main._stand()
+		return
 	if game.phase == "draw":
 		var top: Dictionary = game.top_discard()
 		if not top.is_empty() and Bot.helps(game, me.hand, top):

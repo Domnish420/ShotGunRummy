@@ -26,6 +26,7 @@ const TABLE_CARD := Vector2(0.15, 0.215)
 const HAND_CARD := Vector2(0.105, 0.152)
 const ITEM_CARD := Vector2(0.075, 0.1)
 const OPP_CARD := Vector2(0.09, 0.13)
+const BJ_CARD := Vector2(0.11, 0.158) # Blackjack hands lie face up on the table
 const SEAT_RX := 1.08
 const SEAT_RZ := 1.5
 const MOVE_TIME := 0.28
@@ -61,6 +62,8 @@ var _spots := {} # seat -> SpotLight3D over players whose hand is exposed
 var _cone: ShaderMaterial
 var _preview := {} # the customiser's character, while it's showing
 var _preview_light: SpotLight3D
+var _dealer_chip: Node3D
+var _chip_seat := -99 # where the dealer chip sits (relative to the viewer)
 const PREVIEW_SPOT := Vector3(-2.15, -0.78, -1.0) # by the bottle shelf
 const PREVIEW_CAM := Vector3(0.0, 1.15, 3.1) # from the spot: the gap beside the table
 
@@ -203,6 +206,71 @@ func _build_room() -> void:
 	for k in outline_colors:
 		_outline_mats[k] = _glow(outline_colors[k], 1.6)
 	_back_mat = textures.material("__back")
+	_build_dealer_chip()
+
+
+## The dealer chip: a fat white button with DEALER on it, slid in front of
+## whoever deals this round.
+func _build_dealer_chip() -> void:
+	_dealer_chip = Node3D.new()
+	_dealer_chip.scale = Vector3.ONE * 1.6 # big enough to spot across the table
+	add_child(_dealer_chip)
+	var rim := CylinderMesh.new()
+	rim.top_radius = 0.062
+	rim.bottom_radius = 0.064
+	rim.height = 0.014
+	rim.radial_segments = 28
+	_dealer_chip.add_child(_mesh(rim, _mat(Color(0.5, 0.06, 0.05), 0.6), Vector3(0, 0.007, 0)))
+	var face := CylinderMesh.new()
+	face.top_radius = 0.05
+	face.bottom_radius = 0.05
+	face.height = 0.004
+	face.radial_segments = 28
+	_dealer_chip.add_child(_mesh(face, _mat(Color(0.93, 0.89, 0.8), 0.5), Vector3(0, 0.0145, 0)))
+	# notches round the rim, like a casino button
+	for i in range(8):
+		var notch := BoxMesh.new()
+		notch.size = Vector3(0.012, 0.0145, 0.008)
+		var a := TAU * i / 8.0
+		var n := _mesh(notch, _mat(Color(0.93, 0.89, 0.8), 0.5), Vector3(cos(a) * 0.058, 0.0075, sin(a) * 0.058))
+		n.rotation.y = -a
+		_dealer_chip.add_child(n)
+	var text := Label3D.new()
+	text.font = _font
+	text.text = "DEALER"
+	text.font_size = 30
+	text.pixel_size = 0.0011
+	text.modulate = Color(0.45, 0.05, 0.04)
+	text.outline_size = 0
+	text.rotation_degrees = Vector3(-90, 0, 0)
+	text.position = Vector3(0, 0.0172, 0)
+	_dealer_chip.add_child(text)
+	_dealer_chip.visible = false
+
+
+func _sync_dealer_chip(game, viewer: int) -> void:
+	if game.dealer < 0 or game.players.is_empty():
+		_dealer_chip.visible = false
+		return
+	var n: int = game.players.size()
+	var seat_pos := seat_position(game.dealer, viewer, n)
+	var side := Vector3.UP.cross(seat_pos.normalized()).normalized()
+	var pos := _toward_center(seat_pos, 0.3) - side * 0.32
+	pos.y = TABLE_TOP + 0.001
+	var rel := posmod(game.dealer - viewer, n)
+	if not _dealer_chip.visible:
+		_dealer_chip.visible = true
+		_dealer_chip.position = pos
+	elif rel != _chip_seat:
+		# slide it over to the new dealer with a little hop
+		var t := create_tween()
+		var mid := _dealer_chip.position.lerp(pos, 0.5) + Vector3(0, 0.12, 0)
+		t.tween_property(_dealer_chip, "position", mid, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		t.tween_property(_dealer_chip, "position", pos, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		t.parallel().tween_property(_dealer_chip, "rotation:y", _dealer_chip.rotation.y + TAU, 0.5)
+	else:
+		_dealer_chip.position = pos
+	_chip_seat = rel
 
 
 ## Portrait phones keep the table's width on screen; wide screens its height.
@@ -313,6 +381,8 @@ func set_menu_mode(on: bool) -> void:
 			_figures[s]["node"].queue_free()
 		_figures.clear()
 		_rest_gun(true)
+		_dealer_chip.visible = false
+		_chip_seat = -99
 	else:
 		camera.transform = _cam_home
 
@@ -540,6 +610,9 @@ func sync(s: Dictionary) -> void:
 		var side := Vector3.UP.cross(seat_pos.normalized()).normalized()
 		var yaw := atan2(-seat_pos.x, -seat_pos.z)
 		var hand: Array = p.hand
+		if game.kind == "blackjack":
+			_blackjack_hand(seen, game, p, seat_pos, side, yaw, stock_xf)
+			hand = []
 		for i in range(hand.size()):
 			var pos := center + side * ((i - (hand.size() - 1) * 0.5) * 0.035)
 			pos.y = TABLE_TOP + 0.002 + 0.001 * i
@@ -595,6 +668,33 @@ func sync(s: Dictionary) -> void:
 
 	_sync_gun(game, viewer)
 	_sync_spots(game, viewer)
+	_sync_dealer_chip(game, viewer)
+
+
+## Blackjack: a player's cards lie in a row on the felt in front of them,
+## face up apart from the one dealt face down, with their count beside them.
+func _blackjack_hand(seen: Dictionary, game, p, seat_pos: Vector3, side: Vector3, yaw: float, spawn: Transform3D) -> void:
+	var hand: Array = p.hand
+	var center := _toward_center(seat_pos, 0.42)
+	var step := minf(0.075, 0.42 / maxf(1.0, hand.size()))
+	for i in range(hand.size()):
+		var pos := center + side * ((i - (hand.size() - 1) * 0.5) * step)
+		pos.y = TABLE_TOP + 0.002 + 0.001 * i
+		var up: bool = p.exposed or hand[i].get("shown", false)
+		_place(seen, hand[i]["id"], hand[i], BJ_CARD, _flat(pos, yaw, up), up, true, "", "", "", game.is_trump(hand[i]) if up else false, spawn)
+	if hand.is_empty() or not p.alive:
+		return
+	var note := ""
+	if p.bust:
+		note = "BUST"
+	else:
+		var showing: int = game.showing_total(p.seat)
+		var all_up := true
+		for c in hand:
+			if not (p.exposed or c.get("shown", false)):
+				all_up = false
+		note = ("%d" % showing if all_up else "SHOWING %d" % showing) + ("  STANDS" if p.stood else "")
+	_label_at(note, _toward_center(seat_pos, 0.6) + Vector3(0, TABLE_TOP + 0.01, 0), 24, Palette.PINK if p.bust else Palette.INK)
 
 
 ## A beam of light over anyone whose hand is in the Spotlight.
@@ -1031,6 +1131,8 @@ func _head_of(seat: int) -> Vector3:
 
 
 func _sync_gun(game, viewer: int) -> void:
+	if _gun_pose == "fired":
+		return # the shot is still playing; _after_shot takes it from there
 	if game.phase == "shoot" and game.gun != null:
 		var holder: int = game.gun["holder"]
 		# aim at the middle of the table until a target is picked
@@ -1056,6 +1158,22 @@ func fire(shooter: int, target: int) -> void:
 	kicked.basis = kicked.basis * Basis(Vector3.RIGHT, 0.35)
 	t.tween_property(shotgun, "transform", kicked, 0.05)
 	t.tween_property(shotgun, "transform", pose, 0.35)
+	t.tween_callback(_after_shot)
+
+
+## If the round moved on while the shot played, put the gun back down.
+func _after_shot() -> void:
+	if _gun_pose == "rest":
+		_rest_gun() # put away (back to the menu) while the shot played
+		return
+	if _gun_pose != "fired":
+		return
+	var game = _last.get("game", null)
+	if game == null or game.phase != "shoot" or game.gun == null:
+		_rest_gun()
+	else:
+		_gun_pose = "" # the next sync picks the holder's pose again
+		_sync_gun(game, _viewer)
 
 
 func _bang(target: int) -> void:

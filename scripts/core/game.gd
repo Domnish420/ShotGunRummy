@@ -73,6 +73,8 @@ class Player:
 	var extra_draws: int = 0 # Double Down: cards still to draw on top of the usual 1
 	var look: Dictionary = {} # how they look at the table (see looks.gd); not used by the rules
 	var bot: String = "" # "" for a person, or the AI's difficulty: easy | normal | hard
+	var stood: bool = false # Blackjack: done for this round
+	var bust: bool = false # Blackjack: went over 21
 
 	func _init(p_seat: int, p_name: String) -> void:
 		seat = p_seat
@@ -95,6 +97,9 @@ var options := {
 	"roulette_chambers": 6,
 	"roulette_damage": 2,
 }
+## Which card game this is. Blackjack (blackjack.gd) builds on this one and
+## shares the players, items, health and shotgun.
+var kind := "rummy"
 var rng := RandomNumberGenerator.new()
 var players: Array = []
 var round_num := 0
@@ -129,6 +134,7 @@ func setup(names: Array, opts: Dictionary = {}, rng_seed: int = -1) -> void:
 	players.clear()
 	for i in range(names.size()):
 		players.append(Player.new(i, str(names[i])))
+	Items.mode = kind
 	reset_match()
 
 
@@ -283,6 +289,7 @@ func start_round() -> Dictionary:
 	if int(options["hand_size"]) * alive_count() + 1 > 52:
 		return _fail("Too many players for that hand size.")
 
+	Items.mode = kind
 	round_num += 1
 	# The deal moves one seat to the right each round, so last round's dealer
 	# sits to the new dealer's left and goes first.
@@ -791,7 +798,7 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 				return "Nobody to use it on."
 			if target >= 0 and not targets.has(target):
 				return "You can't use it on them."
-		"meld_card", "hand_card":
+		"meld_card", "hand_card", "table_card":
 			var choices := item_choices(seat, item_id)
 			if choices.is_empty():
 				return "Nothing to use it on." if item_id == "joker_paint" else "There's nothing on the table you can take."
@@ -840,7 +847,7 @@ func use_item(seat: int, item_card_id: String, target: int = -1, choice: String 
 	var needs: String = Items.needs(item_id)
 	if needs == "player" and target < 0:
 		return _fail("Pick a player to use it on.")
-	if (needs == "meld_card" or needs == "hand_card") and choice == "":
+	if needs in ["meld_card", "hand_card", "table_card"] and choice == "":
 		return _fail("Pick a card to use it on.")
 	var p := current()
 	p.items.erase(card)
@@ -1126,10 +1133,11 @@ func snapshot(view_seat: int) -> Dictionary:
 			"score": p.score, "rounds_won": p.rounds_won, "turns_taken": p.turns_taken,
 			"hand": p.hand.duplicate(true) if mine or p.exposed else _hidden_hand(p),
 			"exposed": p.exposed, "ultimatum": p.ultimatum, "extra_draws": p.extra_draws, "look": p.look, "bot": p.bot,
+			"stood": p.stood, "bust": p.bust,
 			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
 		})
 	return {
-		"options": options.duplicate(true), "players": ps, "round_num": round_num, "dealer": dealer,
+		"kind": kind, "options": options.duplicate(true), "players": ps, "round_num": round_num, "dealer": dealer,
 		"turn": turn, "phase": phase, "stock": _hidden(stock.size(), "s"),
 		"discard_pile": discard_pile.duplicate(true), "melds": melds.duplicate(true),
 		"burned": _hidden(burned.size(), "b"), "gun": gun.duplicate() if gun != null else null,
@@ -1143,6 +1151,7 @@ func snapshot(view_seat: int) -> Dictionary:
 ## Turns this game into a read-only mirror of a snapshot (used on players'
 ## phones; only the host's game is real).
 func load_snapshot(d: Dictionary) -> void:
+	Items.mode = kind
 	options = d["options"]
 	players.clear()
 	for pd in d["players"]:
@@ -1161,6 +1170,8 @@ func load_snapshot(d: Dictionary) -> void:
 		p.extra_draws = pd["extra_draws"]
 		p.look = pd.get("look", {})
 		p.bot = str(pd.get("bot", ""))
+		p.stood = bool(pd.get("stood", false))
+		p.bust = bool(pd.get("bust", false))
 		p.hand = pd["hand"]
 		p.items = pd["items"]
 		players.append(p)

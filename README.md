@@ -1,8 +1,17 @@
-# Shotgun Rummy
+# Shotgun Cards
 
-Rummy for 2–6 players at a 3D table under a hanging lamp, on one phone or over
-the same Wi-Fi, with AI players to fill the seats. Item cards bend the rules, and whoever goes out picks up the
-shotgun.
+Card games for 2–6 players at a 3D table under a hanging lamp, on one phone or
+over the same Wi-Fi, with AI players to fill the seats. Every game plays by the
+same house rules: a dealer that moves round the table, item cards shuffled into
+the deck that bend the rules, a trump rank that's wild, health, and a shotgun
+for whoever wins the hand.
+
+- **Shotgun Rummy**: classic Rummy. Go out first.
+- **Shotgun Blackjack**: everyone against everyone. Closest to 21 wins.
+
+Pick the game at the top of the main menu (**GAME: …**), or in a lobby (the
+host taps it to change it). A white **DEALER** chip on the table shows who
+deals; it slides to the next dealer each round.
 
 You sit at the near side of the table with your hand in front of you. Tap
 cards to select them, tap the stock or discard pile to draw, and tap a meld on
@@ -105,7 +114,7 @@ only ever receive their own hand, so nobody can peek. If anyone leaves mid-game,
 the game ends for everyone. When exporting an app for Android, tick the
 **INTERNET** permission in the export settings.
 
-## How to play
+## How to play Shotgun Rummy
 
 - **The table.** One player deals each round and the player to their left goes
   first. Next round the deal moves one seat to the right, so whoever dealt last
@@ -139,7 +148,38 @@ the game ends for everyone. When exporting an app for Android, tick the
   picks who to shoot with each one. Everyone has 4 health. Health carries over
   between rounds. 0 health and you're out. Last one standing wins.
 
-### Items
+## How to play Shotgun Blackjack
+
+- **The table.** The dealer moves round the table like in Rummy. The player to
+  the dealer's left goes first, and the dealer plays last. There's no house:
+  everyone plays against everyone.
+- **The deal.** Everyone gets 2 cards, one face down and one face up, and 2
+  item cards. The rest of the items are shuffled into the stock. The deck is
+  shuffled fresh every round.
+- **Your turn.** **HIT** (or tap the stock) to take a card, as often as you
+  like, then **STAND**. Use items any time in your turn. Draw an item and you
+  keep it and draw again.
+- **Counting.** 2–10 count their number, J/Q/K 10, an ace 1 or 11. Over 21 and
+  you're **bust**, out of the round. Reaching 21 or 5 cards stands for you.
+- **Trump cards.** The same rotating trump as Rummy (aces in round 1, then
+  twos…). A trump counts as whatever you need, from 1 to 11.
+- **Winning.** Highest total wins. A **Blackjack** (21 with your first 2
+  cards) beats everything, then a **five-card Charlie** (5 cards without going
+  bust). A tie goes to whoever holds fewer cards; still tied, nobody wins. If
+  everyone else busts, the last one in wins.
+- **The shotgun.** The winner gets 1 shell, +1 for a Blackjack, +1 for a
+  five-card Charlie (max 3).
+- **Items.** The same items, adapted where they need to be: the Burner Phone
+  sees someone's face-down card, Spotlight and Flashbang turn face-down cards
+  up, Double Down deals a player one more card right now (even if they've
+  stood), Shakedown makes someone throw away their last card, Handcuffs make
+  someone who hasn't played yet stand on what they have, the Revolver makes
+  someone take a card or spin, Sticky Fingers steals a face-up card, Dumpster
+  Dive takes the top of the discard pile, and Joker Paint makes a card wild
+  for the round. Garbage Day isn't in the Blackjack deck. The in-game RULES
+  list shows each one.
+
+### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
 Use as many as you like on your turn. Copies are in brackets; tune them in
@@ -175,7 +215,9 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | --- | --- |
 | `scripts/core/cards.gd` | Cards, sets, runs, lay-offs, deadwood. |
 | `scripts/core/items.gd` | Item list (names, icons, copies). Edit this to tune items. |
-| `scripts/core/game.gd` | The full rules: dealing, turns, items, scoring, shotgun, health. No UI, so it can be tested and reused for AI or online play later. |
+| `scripts/core/game.gd` | Shotgun Rummy's rules: dealing, turns, items, scoring, shotgun, health. No UI, so it's tested on its own. |
+| `scripts/core/blackjack.gd` | Shotgun Blackjack's rules. Builds on `game.gd` for the players, items, health and shotgun. |
+| `scripts/core/blackjack_bot.gd` | The Blackjack AI. |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |
 | `scripts/net/session.gd` | Lobbies, Wi-Fi discovery and online play (the host checks every move). |
 | `scripts/three/world3d.gd` | The 3D room: table, lamp, players, shotgun, card placement and tap picking. |
@@ -197,11 +239,18 @@ godot --headless --path . -s tests/test_runner.gd
 ```
 
 `tests/net_test.gd` runs a host, two players and an AI in one process and
-plays a whole 4-player match over the network, checking nobody can see anyone
-else's cards:
+plays a whole 4-player match of each game over the network, checking nobody
+can see anyone else's cards:
 
 ```
 godot --headless --path . -s tests/net_test.gd
+```
+
+`tests/ui_blackjack_check.gd` plays Shotgun Blackjack solo against two AIs
+through the real screens:
+
+```
+godot --headless --path . -s tests/ui_blackjack_check.gd
 ```
 
 `tests/ui_ai_check.gd` plays a pass & play match of one person against three
@@ -229,6 +278,8 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [ ] Sound effects
 - [x] AI players (easy, normal, hard)
 - [ ] Voice chat (once there's internet play)
+- [x] Shotgun Blackjack
+- [ ] More card games
 - [ ] Extra cards (jokers, special cards)
 - [x] 3D table (phone portrait; also works on a PC screen)
 - [ ] Polished PC version

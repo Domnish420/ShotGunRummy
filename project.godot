@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="Shotgun Rummy"
-config/description="Pass-and-play Rummy with items and a shotgun."
+config/name="Shotgun Cards"
+config/description="Card games with items and a shotgun: Rummy and Blackjack."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://icon.png"

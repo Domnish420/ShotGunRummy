@@ -8,6 +8,7 @@ const Bot = preload("res://scripts/core/bot.gd")
 const Items = preload("res://scripts/core/items.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Session = preload("res://scripts/net/session.gd")
+const Blackjack = preload("res://scripts/core/blackjack.gd")
 
 var _failures := 0
 var _checks := 0
@@ -26,6 +27,7 @@ func _init() -> void:
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches", "test_ai_levels",
+		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_items", "test_bj_ai_matches",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -689,3 +691,191 @@ func test_ai_levels() -> void:
 		if g.winner >= 0:
 			wins[g.players[g.winner].bot] += 1
 	print("  AI wins by level: %s" % [wins])
+
+
+# ================================================================ blackjack
+
+func new_bj(n: int = 3, rng_seed: int = 1) -> Blackjack:
+	var names := []
+	for i in range(n):
+		names.append("P%d" % (i + 1))
+	var g := Blackjack.new()
+	g.setup(names, {}, rng_seed)
+	g.start_round()
+	return g
+
+
+func test_bj_totals() -> void:
+	check(Blackjack.total(cards("KH 7C"), 0) == 17, "K 7 is 17")
+	check(Blackjack.total(cards("AH KC"), 0) == 21, "A K is 21")
+	check(Blackjack.total(cards("AH AC 9D"), 0) == 21, "A A 9 is 21")
+	check(Blackjack.total(cards("AH 9C 5D"), 0) == 15, "an ace drops to 1")
+	check(Blackjack.total(cards("KH QC 5D"), 0) == 25, "bust is bust")
+	check(Blackjack.total(cards("7H 3C"), 7) == 14, "a trump 7 tops up to 11: 11 + 3")
+	check(Blackjack.total(cards("7H KC"), 7) == 21, "a trump makes 21")
+	check(Blackjack.total(cards("7H KC 9D"), 7) == 21, "a trump is worth exactly what you need (2 here)")
+	check(Blackjack.total(cards("7H KC 9D 5S"), 7) == 25, "even a trump at 1 can't save that")
+	check(Blackjack.total(cards("2H"), 2) == 11, "a trump alone is worth 11")
+
+
+func test_bj_deal() -> void:
+	var g := new_bj(4, 3)
+	check(g.kind == "blackjack" and g.phase == "play", "blackjack starts on someone's turn")
+	check(g.turn == g.next_alive(g.dealer), "left of the dealer goes first")
+	for p in g.players:
+		check(p.hand.size() == 2 and p.items.size() == 2, "2 cards and 2 items each")
+		check(not p.hand[0].get("shown", false) and p.hand[1].get("shown", false), "one down, one up")
+	# what others see
+	var snap := g.snapshot(0)
+	var other: Array = snap["players"][1]["hand"]
+	check(other[0].get("hidden", false) and not other[1].get("hidden", false), "you see their face-up card, not the face-down one")
+	var deck_items := 0
+	for c in g.stock:
+		if c.has("item"):
+			deck_items += 1
+	for c in g.stock:
+		check(not (c.has("item") and c["item"] == "garbage_day"), "no Garbage Day in blackjack")
+
+
+func test_bj_turns() -> void:
+	var g := new_bj(3, 5)
+	var first := g.turn
+	var p = g.players[first]
+	p.hand = cards("KH 5C")
+	p.hand[1]["shown"] = true
+	g.stock.append(cards("9D")[0])
+	var res := g.hit(first)
+	check(res["ok"] and res["bust"], "K 5 9 goes bust")
+	check(p.bust and g.turn != first, "bust ends the turn")
+	var second := g.turn
+	g.players[second].hand = cards("10H 6C")
+	g.stock.append(cards("5D")[0])
+	g.hit(second)
+	check(g.players[second].stood and g.turn != second, "21 stands by itself")
+	var third := g.turn
+	g.stock.append({"id": "I-beer-9", "item": "beer"})
+	var before: int = g.players[third].items.size()
+	var stock_before: int = g.stock.size()
+	g.hit(third)
+	check(g.players[third].items.size() == before + 1, "an item off the stock is kept")
+	check(g.stock.size() == stock_before - 2 or g.players[third].bust or g.players[third].stood, "and you draw again")
+	if g.phase == "play":
+		g.stand(g.turn)
+	check(g.phase == "shoot" or g.phase == "round_over", "the round ends after the dealer")
+
+
+func test_bj_winner() -> void:
+	var g := new_bj(3, 7)
+	var order := [g.turn, g.next_alive(g.turn), g.next_alive(g.next_alive(g.turn))]
+	g.players[order[0]].hand = cards("10H 9C") # 19
+	g.players[order[1]].hand = cards("AH KC") # blackjack
+	g.players[order[2]].hand = cards("10S 8D") # 18
+	for s in order:
+		g.stand(s)
+	check(g.phase == "shoot" and g.winner == -1, "someone has the gun")
+	check(g.gun["holder"] == order[1], "blackjack wins")
+	check(g.last_result["blackjack"] and g.gun["shells"] == 2, "blackjack is worth 2 shells")
+	# a tie with the same number of cards: nobody wins
+	g = new_bj(2, 9)
+	g.players[g.turn].hand = cards("10H 8C")
+	g.players[g.next_alive(g.turn)].hand = cards("9S 9D")
+	g.stand(g.turn)
+	g.stand(g.turn)
+	check(g.phase == "round_over" and g.last_result["winner"] == -1, "a tie means nobody wins")
+	# a five-card Charlie
+	g = new_bj(2, 11)
+	var a := g.turn
+	g.players[a].hand = cards("2H 3C")
+	for c in cards("2D 3S 4H"):
+		g.stock.append(c)
+	g.hit(a)
+	g.hit(a)
+	g.hit(a)
+	check(g.players[a].stood and g.turn != a, "five cards under 21 stands")
+	g.players[g.turn].hand = cards("10S 4D")
+	g.stand(g.turn)
+	check(g.gun != null and g.gun["holder"] == a and g.last_result["charlie"], "five-card Charlie wins with a bonus shell")
+	# everyone else bust: the last one in wins straight away
+	g = new_bj(3, 13)
+	var x := g.turn
+	g.players[x].hand = cards("10H QC")
+	g.stock.append(cards("KD")[0])
+	g.hit(x)
+	var y := g.turn
+	g.players[y].hand = cards("10S JC")
+	g.stock.append(cards("KS")[0])
+	g.hit(y)
+	check(g.phase == "shoot" and g.gun["holder"] != x and g.gun["holder"] != y, "the last one not bust wins")
+
+
+func test_bj_items() -> void:
+	var g := new_bj(3, 15)
+	var me := g.turn
+	var nxt := g.next_alive(me)
+	var last := g.next_alive(nxt)
+	# handcuffs: the next player stands on what they have
+	g.players[me].items = [{"id": "I-handcuffs-1", "item": "handcuffs"}, {"id": "I-double_down-1", "item": "double_down"}, {"id": "I-spotlight-1", "item": "spotlight"}]
+	check(g.use_item(me, "I-handcuffs-1", nxt)["ok"], "handcuffs on someone still to play")
+	check(g.use_item(me, "I-spotlight-1", last)["ok"], "spotlight")
+	check(g.players[last].hand[0].get("shown", false), "spotlight turns the face-down card up")
+	g.stand(me)
+	check(g.players[nxt].stood and g.turn == last, "cuffed player is skipped")
+	# double down on a player who stood
+	g.players[last].items = [{"id": "I-double_down-2", "item": "double_down"}]
+	g.players[me].hand = cards("10H QC")
+	g.stock.append(cards("KD")[0])
+	var res := g.use_item(last, "I-double_down-2", me)
+	check(res["ok"] and g.players[me].bust, "double down can bust a player who stood")
+	# sticky fingers takes a face-up card
+	g = new_bj(2, 17)
+	me = g.turn
+	var them := g.next_alive(me)
+	g.players[me].items = [{"id": "I-sticky_fingers-1", "item": "sticky_fingers"}]
+	var choices: Array = g.item_choices(me, "sticky_fingers")
+	check(choices.size() == 1 and choices[0] == g.players[them].hand[1]["id"], "only the face-up card can be stolen")
+	check(g.use_item(me, "I-sticky_fingers-1", -1, choices[0])["ok"] and g.players[me].hand.size() == 3, "stolen into your hand")
+
+
+## Easy, normal and hard blackjack AIs finish whole matches with legal moves.
+func test_bj_ai_matches() -> void:
+	var wins := {"easy": 0, "normal": 0, "hard": 0}
+	for s in range(1, 13):
+		var n := 2 + s % 4
+		var g := new_bj(n, s * 23)
+		for i in range(n):
+			g.players[i].bot = Bot.LEVELS[(i + s) % 3]
+		var memories := {}
+		var steps := 0
+		var refused := 0
+		while g.phase != "match_over" and steps < 20000:
+			steps += 1
+			if g.phase == "round_over":
+				g.start_round()
+				continue
+			var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+			var mem: Dictionary = memories.get_or_add(seat, {})
+			var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
+			if act.is_empty():
+				check(false, "seed %d: no move in phase %s" % [s, g.phase])
+				return
+			var res := Session.perform(g, seat, act[0], act[1], true)
+			if not res["ok"]:
+				refused += 1
+				Bot.note_failure(mem, act)
+			if g.phase == "play":
+				var count := 0
+				for p in g.players:
+					for c in p.hand:
+						if not c.has("item"):
+							count += 1
+				for c in g.stock + g.discard_pile + g.burned:
+					if not c.has("item"):
+						count += 1
+				if count != 52:
+					check(false, "seed %d: %d cards in play" % [s, count])
+					return
+		check(g.phase == "match_over", "seed %d: blackjack match finishes (round %d)" % [s, g.round_num])
+		check(refused < 20, "seed %d: blackjack AI moves are legal (%d refused)" % [s, refused])
+		if g.winner >= 0:
+			wins[g.players[g.winner].bot] += 1
+	print("  blackjack AI wins by level: %s" % [wins])

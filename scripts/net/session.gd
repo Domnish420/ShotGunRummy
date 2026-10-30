@@ -19,10 +19,11 @@ signal ended(reason: String)
 const Game = preload("res://scripts/core/game.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Bot = preload("res://scripts/core/bot.gd")
+const Blackjack = preload("res://scripts/core/blackjack.gd")
 
 const PORT := 47601
 const DISCOVERY_PORT := 47600
-const PROTOCOL := 5
+const PROTOCOL := 6
 const MAX_PLAYERS := 6
 const LOBBY_TIMEOUT_MS := 4000
 
@@ -33,6 +34,7 @@ var names: Array = [] # lobby players in seat order (host is seat 0)
 var looks: Array = [] # their characters, same order
 var bots: Array = [] # "" for a person, or an AI's level, same order (the host runs the AIs)
 var my_look: Dictionary = {}
+var game_kind := "rummy" # which card game the lobby will play
 var lobbies := {} # ip -> { "name", "players", "max", "seen" }
 var game: Game = null
 var in_match := false
@@ -157,7 +159,7 @@ func _process(delta: float) -> void:
 		_beacon_wait -= delta
 		if _beacon_wait <= 0.0:
 			_beacon_wait = 1.0
-			var info := {"game": "shotgun-rummy", "v": PROTOCOL, "name": "%s'S TABLE" % my_name, "players": names.size(), "max": MAX_PLAYERS}
+			var info := {"game": "shotgun-cards", "v": PROTOCOL, "name": "%s'S TABLE" % my_name, "players": names.size(), "max": MAX_PLAYERS, "kind": game_kind}
 			_beacon.put_packet(JSON.stringify(info).to_utf8_buffer())
 	if _scanner != null:
 		var changed := false
@@ -165,9 +167,9 @@ func _process(delta: float) -> void:
 			var data := _scanner.get_packet().get_string_from_utf8()
 			var ip := _scanner.get_packet_ip()
 			var info = JSON.parse_string(data)
-			if info is Dictionary and info.get("game", "") == "shotgun-rummy" and int(info.get("v", 0)) == PROTOCOL:
+			if info is Dictionary and info.get("game", "") == "shotgun-cards" and int(info.get("v", 0)) == PROTOCOL:
 				changed = changed or not lobbies.has(ip) or int(lobbies[ip]["players"]) != int(info.get("players", 0))
-				lobbies[ip] = {"name": str(info.get("name", "TABLE")), "players": int(info.get("players", 0)), "max": int(info.get("max", MAX_PLAYERS)), "seen": Time.get_ticks_msec()}
+				lobbies[ip] = {"name": str(info.get("name", "TABLE")), "players": int(info.get("players", 0)), "max": int(info.get("max", MAX_PLAYERS)), "kind": str(info.get("kind", "rummy")), "seen": Time.get_ticks_msec()}
 		for ip in lobbies.keys():
 			if Time.get_ticks_msec() - int(lobbies[ip]["seen"]) > LOBBY_TIMEOUT_MS:
 				lobbies.erase(ip)
@@ -215,6 +217,18 @@ func _remove_seat(seat: int) -> void:
 	names.remove_at(seat)
 	looks.remove_at(seat)
 	bots.remove_at(seat)
+
+
+## Host: picks the card game.
+func set_game(kind: String) -> void:
+	if mode != "host" or in_match:
+		return
+	game_kind = kind
+	_send_roster()
+
+
+static func make_game(kind: String) -> Game:
+	return Blackjack.new() if kind == "blackjack" else Game.new()
 
 
 ## Host: sits an AI player at the table.
@@ -299,12 +313,13 @@ func _ended(reason: String) -> void:
 
 
 func _send_roster() -> void:
-	_roster.rpc(names, looks, bots)
+	_roster.rpc(names, looks, bots, game_kind)
 	roster_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _roster(lobby_names: Array, lobby_looks: Array = [], lobby_bots: Array = []) -> void:
+func _roster(lobby_names: Array, lobby_looks: Array = [], lobby_bots: Array = [], kind: String = "rummy") -> void:
+	game_kind = kind
 	names = lobby_names
 	looks = lobby_looks
 	bots = lobby_bots
@@ -317,7 +332,7 @@ func start_match() -> void:
 	if mode != "host" or names.size() < 2:
 		return
 	in_match = true
-	game = Game.new()
+	game = make_game(game_kind)
 	game.setup(names)
 	for i in range(game.players.size()):
 		game.players[i].look = looks[i] if i < looks.size() else Looks.for_seat(i)
@@ -326,16 +341,17 @@ func start_match() -> void:
 	match_started.emit()
 	for seat in range(1, _peers.size()):
 		if _peers[seat] > 0:
-			_match_start.rpc_id(_peers[seat], seat)
+			_match_start.rpc_id(_peers[seat], seat, game_kind)
 	game.start_round()
 	_flush(1, {})
 
 
 @rpc("authority", "call_remote", "reliable")
-func _match_start(seat: int) -> void:
+func _match_start(seat: int, kind: String = "rummy") -> void:
 	my_seat = seat
 	in_match = true
-	game = Game.new()
+	game_kind = kind
+	game = make_game(kind)
 
 
 ## Asks to do something on this player's turn. The answer arrives through
@@ -405,6 +421,12 @@ static func perform(g: Game, seat: int, action: String, args: Array, by_host: bo
 	match action:
 		"draw_stock":
 			return g.draw_stock(seat)
+		"hit":
+			if g.kind == "blackjack":
+				return g.hit(seat)
+		"stand":
+			if g.kind == "blackjack":
+				return g.stand(seat)
 		"draw_discard":
 			return g.draw_discard(seat)
 		"meld":

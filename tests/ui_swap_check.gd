@@ -11,6 +11,7 @@ func _initialize() -> void:
 	await process_frame
 	main.player_names = ["SAM", "ALEX"]
 	main.setup_bots = [] # everyone a person (settings may remember AIs)
+	main.game_kind = "rummy" # settings may remember another game
 	main.hide_hands = false
 	main._start_from_setup()
 	await process_frame

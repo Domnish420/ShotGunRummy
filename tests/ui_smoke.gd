@@ -76,6 +76,7 @@ func _run() -> void:
 	await _shot("01_setup")
 	main.player_names = ["SAM", "ALEX", "JO"]
 	main.setup_bots = [] # everyone a person (settings may remember AIs)
+	main.game_kind = "rummy" # settings may remember another game
 	main.hide_hands = true
 	main.show_setup()
 	await _frames()

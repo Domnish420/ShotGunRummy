@@ -50,27 +50,55 @@ const DEFS := {
 }
 
 
+## Blackjack plays the same items with their own twist. Anything not listed
+## here works as in Rummy. "copies": 0 leaves an item out of the deck.
+const BLACKJACK := {
+	"phone": {"text": "See another player's face-down card.", "copies": 2},
+	"handcuffs": {"text": "A player who hasn't played yet skips their turn and stands on what they have.", "copies": 1},
+	"shakedown": {"text": "A player of your choice throws away the last card they were dealt.", "copies": 1},
+	"bad_trade": {"text": "Swap 1 random card with another player.", "copies": 1},
+	"spotlight": {"text": "Turn a player's face-down card face up for everyone.", "copies": 1},
+	"flashbang": {"text": "Every other player turns their face-down card face up.", "copies": 1},
+	"revolver": {"text": "A player who hasn't played yet must take a card on their turn, or play Russian roulette (1 in 6: lose 2 health).", "copies": 1},
+	"double_down": {"text": "A player of your choice is dealt 1 more card, right now, even if they've stood.", "copies": 2},
+	"sticky_fingers": {"text": "Steal a face-up card from another player's hand.", "copies": 1, "needs": "table_card"},
+	"dumpster_dive": {"text": "Take the top card of the discard pile.", "copies": 1},
+	"garbage_day": {"copies": 0},
+	"joker_paint": {"text": "A card in your hand is a trump (worth whatever you need) for the rest of the round.", "copies": 1},
+}
+
+## Which game's rules the items follow: "rummy" or "blackjack". Set when a
+## game starts.
+static var mode := "rummy"
+
+
 static func def(item_id: String) -> Dictionary:
+	if mode == "blackjack" and BLACKJACK.has(item_id):
+		var d: Dictionary = DEFS[item_id].duplicate()
+		d.merge(BLACKJACK[item_id], true)
+		return d
 	return DEFS[item_id]
 
 
 static func item_name(card: Dictionary) -> String:
-	return DEFS[card["item"]]["name"]
+	return def(card["item"])["name"]
 
 
 ## Does this item need another player picked?
 static func needs_target(item_id: String) -> bool:
-	return DEFS[item_id]["needs"] == "player"
+	return def(item_id)["needs"] == "player"
 
 
-## What has to be picked: "", "player", "meld_card" or "hand_card".
+## What has to be picked: "", "player", "meld_card", "hand_card" or
+## "table_card" (a face-up card in someone else's hand, in Blackjack).
 static func needs(item_id: String) -> String:
-	return DEFS[item_id]["needs"]
+	return def(item_id)["needs"]
 
 
+## The item deck for the current game.
 static func create_item_deck() -> Array:
 	var deck := []
 	for item_id in DEFS:
-		for n in range(1, int(DEFS[item_id]["copies"]) + 1):
+		for n in range(1, int(def(item_id)["copies"]) + 1):
 			deck.append({"id": "I-%s-%d" % [item_id, n], "item": item_id})
 	return deck
