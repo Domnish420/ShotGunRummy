@@ -16,6 +16,7 @@ const Palette = preload("res://scripts/ui/palette.gd")
 const CardTextures = preload("res://scripts/three/card_textures.gd")
 const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
+const Looks = preload("res://scripts/core/looks.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -31,7 +32,6 @@ const MOVE_TIME := 0.28
 const LAMP := 4.0
 const DEAL_STEP := 0.09 # seconds between dealt cards
 const TRUMP_NAMES := ["", "ACES", "TWOS", "THREES", "FOURS", "FIVES", "SIXES", "SEVENS", "EIGHTS", "NINES", "TENS", "JACKS", "QUEENS", "KINGS"]
-const FIGURE_COLORS := [Color(0.16, 0.13, 0.11), Color(0.22, 0.06, 0.06), Color(0.07, 0.12, 0.16), Color(0.12, 0.15, 0.07), Color(0.17, 0.1, 0.17), Color(0.2, 0.16, 0.06)]
 
 var textures: CardTextures
 var camera: Camera3D
@@ -59,6 +59,10 @@ var _resync := false
 var fx_busy := false # an item animation is playing
 var _spots := {} # seat -> SpotLight3D over players whose hand is exposed
 var _cone: ShaderMaterial
+var _preview := {} # the customiser's character, while it's showing
+var _preview_light: SpotLight3D
+const PREVIEW_SPOT := Vector3(-2.15, -0.78, -1.0) # by the bottle shelf
+const PREVIEW_CAM := Vector3(0.0, 1.15, 3.1) # from the spot: the gap beside the table
 
 
 func _ready() -> void:
@@ -207,6 +211,9 @@ func _fit_camera() -> void:
 	_landscape = s.x > s.y
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT if _landscape else Camera3D.KEEP_WIDTH
 	camera.fov = 50.0 if _landscape else 62.0
+	if not _preview.is_empty():
+		_aim_preview()
+		return
 	# wide screens look a little further across the table, to see faces
 	if _landscape:
 		camera.look_at_from_position(Vector3(0, 1.3, 1.8), Vector3(0, 0.18, -0.45), Vector3.UP)
@@ -230,6 +237,9 @@ func _flicker() -> void:
 
 
 func _process(delta: float) -> void:
+	if not _preview.is_empty():
+		_preview["node"].rotate_y(delta * 0.5)
+		return
 	if _cone != null:
 		_cone.set_shader_parameter("flicker", lamp.light_energy / LAMP)
 	if _menu_mode:
@@ -245,8 +255,47 @@ func reset_rounds() -> void:
 	_round_seen = 0
 
 
+## The customiser: one character standing in the room, turning slowly.
+func show_preview(look: Dictionary) -> void:
+	var angle := 0.0
+	if not _preview.is_empty():
+		angle = _preview["node"].rotation.y
+		_preview["node"].queue_free()
+	_preview = Props.build_character(self, look, FLOOR_Y, false)
+	_preview["node"].position = PREVIEW_SPOT
+	_preview["node"].rotation.y = angle if angle != 0.0 else PI # facing the camera
+	if _preview_light == null:
+		_preview_light = SpotLight3D.new()
+		_preview_light.light_color = Color(1.0, 0.88, 0.7)
+		_preview_light.light_energy = 5.0
+		_preview_light.spot_range = 4.0
+		_preview_light.spot_angle = 30.0
+		_preview_light.shadow_enabled = true
+		add_child(_preview_light)
+		_preview_light.look_at_from_position(PREVIEW_SPOT + Vector3(0.5, 2.7, 1.0), PREVIEW_SPOT + Vector3(0, 0.6, 0), Vector3.UP)
+	_preview_light.visible = true
+	_aim_preview()
+
+
+## Close in on the customiser's character, with room for the controls.
+func _aim_preview() -> void:
+	camera.fov = 40.0 if not _landscape else 44.0
+	var at := PREVIEW_SPOT + Vector3(0, 0.12 if not _landscape else 0.65, 0)
+	camera.look_at_from_position(PREVIEW_SPOT + PREVIEW_CAM, at, Vector3.UP)
+
+
+func hide_preview() -> void:
+	if not _preview.is_empty():
+		_preview["node"].queue_free()
+		_preview = {}
+	if _preview_light != null:
+		_preview_light.visible = false
+	_fit_camera()
+
+
 ## Menu mode: an empty table and a slowly moving camera.
 func set_menu_mode(on: bool) -> void:
+	hide_preview()
 	_menu_mode = on
 	if on:
 		_last = {}
@@ -282,8 +331,8 @@ func _toward_center(seat_pos: Vector3, t: float) -> Vector3:
 	return seat_pos.lerp(Vector3.ZERO, t)
 
 
-func _figure(seat: int, color: Color) -> Dictionary:
-	var built: Dictionary = Props.build_character(self, Props.CHARACTERS[seat % Props.CHARACTERS.size()], FLOOR_Y)
+func _figure(seat: int, look: Dictionary) -> Dictionary:
+	var built: Dictionary = Props.build_character(self, look if not look.is_empty() else Looks.for_seat(seat), FLOOR_Y)
 	var node: Node3D = built["node"]
 	var head: Node3D = built["head"]
 	var eyes: Array = built["eyes"]
@@ -311,8 +360,13 @@ func _sync_figures(game, viewer: int) -> void:
 	for p in game.players:
 		if p.seat == viewer:
 			continue
+		if _figures.has(p.seat) and _figures[p.seat].get("look", {}) != p.look:
+			# they changed how they look: dress them again
+			_figures[p.seat]["node"].queue_free()
+			_figures.erase(p.seat)
 		if not _figures.has(p.seat):
-			_figures[p.seat] = _figure(p.seat, FIGURE_COLORS[p.seat % FIGURE_COLORS.size()])
+			_figures[p.seat] = _figure(p.seat, p.look)
+			_figures[p.seat]["look"] = p.look.duplicate()
 			_figures[p.seat]["node"].position = seat_position(p.seat, viewer, n) * 1.3
 		var f: Dictionary = _figures[p.seat]
 		var node: Node3D = f["node"]

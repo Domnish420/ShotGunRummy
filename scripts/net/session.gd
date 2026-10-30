@@ -17,10 +17,11 @@ signal updated(events: Array, result: Dictionary)
 signal ended(reason: String)
 
 const Game = preload("res://scripts/core/game.gd")
+const Looks = preload("res://scripts/core/looks.gd")
 
 const PORT := 47601
 const DISCOVERY_PORT := 47600
-const PROTOCOL := 3
+const PROTOCOL := 4
 const MAX_PLAYERS := 6
 const LOBBY_TIMEOUT_MS := 4000
 
@@ -28,6 +29,8 @@ var mode := "offline" # offline | host | client
 var my_name := "PLAYER"
 var my_seat := -1
 var names: Array = [] # lobby players in seat order (host is seat 0)
+var looks: Array = [] # their characters, same order
+var my_look: Dictionary = {}
 var lobbies := {} # ip -> { "name", "players", "max", "seen" }
 var game: Game = null
 var in_match := false
@@ -59,7 +62,7 @@ func is_host() -> bool:
 
 # ================================================================ lobby
 
-func host(player_name: String) -> String:
+func host(player_name: String, look: Dictionary = {}) -> String:
 	leave()
 	my_name = player_name
 	_enet = ENetMultiplayerPeer.new()
@@ -71,6 +74,8 @@ func host(player_name: String) -> String:
 	mode = "host"
 	my_seat = 0
 	names = [player_name]
+	my_look = Looks.clean(look, 0)
+	looks = [my_look]
 	_peers = [1]
 	_beacon = PacketPeerUDP.new()
 	_beacon.set_broadcast_enabled(true)
@@ -79,10 +84,11 @@ func host(player_name: String) -> String:
 	return ""
 
 
-func join(ip: String, player_name: String) -> String:
+func join(ip: String, player_name: String, look: Dictionary = {}) -> String:
 	stop_scan()
 	leave()
 	my_name = player_name
+	my_look = Looks.clean(look, 1)
 	_enet = ENetMultiplayerPeer.new()
 	var err := _enet.create_client(ip.strip_edges(), PORT)
 	if err != OK:
@@ -105,6 +111,7 @@ func leave() -> void:
 	my_seat = -1
 	version = 0
 	names = []
+	looks = []
 	_peers = []
 	in_match = false
 	game = null
@@ -166,7 +173,7 @@ func _process(delta: float) -> void:
 
 
 func _on_connected() -> void:
-	_hello.rpc_id(1, my_name, PROTOCOL)
+	_hello.rpc_id(1, my_name, PROTOCOL, my_look)
 
 
 func _on_connection_failed() -> void:
@@ -197,11 +204,12 @@ func _on_peer_disconnected(id: int) -> void:
 		return
 	_peers.remove_at(seat)
 	names.remove_at(seat)
+	looks.remove_at(seat)
 	_send_roster()
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _hello(player_name: String, protocol: int) -> void:
+func _hello(player_name: String, protocol: int, look: Dictionary = {}) -> void:
 	if mode != "host":
 		return
 	var peer := multiplayer.get_remote_sender_id()
@@ -217,6 +225,7 @@ func _hello(player_name: String, protocol: int) -> void:
 			clean = "PLAYER %d" % (names.size() + 1)
 		while names.has(clean):
 			clean += "*"
+		looks.append(Looks.clean(look, names.size()))
 		names.append(clean)
 		_peers.append(peer)
 		_send_roster()
@@ -246,13 +255,14 @@ func _ended(reason: String) -> void:
 
 
 func _send_roster() -> void:
-	_roster.rpc(names)
+	_roster.rpc(names, looks)
 	roster_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _roster(lobby_names: Array) -> void:
+func _roster(lobby_names: Array, lobby_looks: Array = []) -> void:
 	names = lobby_names
+	looks = lobby_looks
 	roster_changed.emit()
 
 
@@ -264,6 +274,8 @@ func start_match() -> void:
 	in_match = true
 	game = Game.new()
 	game.setup(names)
+	for i in range(game.players.size()):
+		game.players[i].look = looks[i] if i < looks.size() else Looks.for_seat(i)
 	game.event.connect(_on_host_event)
 	match_started.emit()
 	for seat in range(1, _peers.size()):

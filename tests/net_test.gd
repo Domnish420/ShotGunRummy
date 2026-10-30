@@ -83,6 +83,7 @@ func _run() -> void:
 	await _frames(10)
 	check(p1.session.my_seat == 1 and p2.session.my_seat == 2, "seats assigned")
 	check(p1.game != null and p1.game.players.size() == 3, "player 1 has the table")
+	check(p1.game.players[0].look.get("name", "") == host.my_look.get("name", "?"), "everyone sees the host's character")
 
 	var steps := 0
 	var rounds_seen := {}

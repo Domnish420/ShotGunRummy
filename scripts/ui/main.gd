@@ -15,6 +15,7 @@ const Palette = preload("res://scripts/ui/palette.gd")
 const CardView = preload("res://scripts/ui/card_view.gd")
 const World3DScene = preload("res://scripts/three/world3d.gd")
 const Session = preload("res://scripts/net/session.gd")
+const Looks = preload("res://scripts/core/looks.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -27,6 +28,9 @@ var view_rect: TextureRect
 var graphics := "PS3"
 var session: Session
 var profile_name := ""
+var my_look: Dictionary = {} # your character, from the customiser
+var setup_looks: Array = [] # pass & play: each player's character
+var _editing: Dictionary = {} # the look being changed in the customiser
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
 var menu_message := ""
@@ -258,6 +262,7 @@ func _load_settings() -> void:
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
 	profile_name = cfg.get_value("profile", "name", "")
 	graphics = cfg.get_value("video", "graphics", "PS3")
+	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
 
 
 func _save_settings() -> void:
@@ -266,6 +271,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("profile", "name", profile_name)
 	cfg.set_value("video", "graphics", graphics)
+	cfg.set_value("profile", "look", my_look)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -313,9 +319,7 @@ func show_menu() -> void:
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_name_edit)
 	box.add_child(row)
-	var character := _paper_button("CHARACTER (COMING SOON)", _noop, 28)
-	character.disabled = true
-	box.add_child(character)
+	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
 	box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
 	box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
 	box.add_child(_paper_button("PASS & PLAY (ONE PHONE)", _on_pass_and_play_pressed, 28))
@@ -352,7 +356,7 @@ func _on_host_pressed() -> void:
 	var n := _take_name()
 	if n == "":
 		return
-	var err := session.host(n)
+	var err := session.host(n, my_look)
 	if err != "":
 		menu_message = err
 		show_menu()
@@ -404,7 +408,7 @@ func _join_typed_ip() -> void:
 func _join_ip(ip: String) -> void:
 	if ip.strip_edges() == "":
 		return
-	var err := session.join(ip, profile_name)
+	var err := session.join(ip, profile_name, my_look)
 	if err != "":
 		menu_message = err
 		show_menu()
@@ -427,7 +431,10 @@ func show_lobby() -> void:
 	box.add_child(_label("PLAYERS (%d/%d)" % [session.names.size(), Session.MAX_PLAYERS], 26, Palette.CARD_INK))
 	for i in range(session.names.size()):
 		var who: String = session.names[i]
-		box.add_child(_label("%d. %s%s" % [i + 1, who, " (HOST)" if i == 0 else ""], 30, Palette.CARD_INK))
+		var look_name := ""
+		if i < session.looks.size() and session.looks[i] is Dictionary:
+			look_name = "  " + _short_name(session.looks[i])
+		box.add_child(_label("%d. %s%s%s" % [i + 1, who, " (HOST)" if i == 0 else "", look_name], 28, Palette.CARD_INK))
 	if session.is_host():
 		var start := _paper_button("START THE GAME", session.start_match)
 		start.disabled = session.names.size() < 2
@@ -449,12 +456,143 @@ func _on_session_ended(reason: String) -> void:
 	show_menu()
 
 
+# ================================================================ customiser
+
+func _open_customiser() -> void:
+	var n := _name_edit.text.strip_edges().to_upper().left(10)
+	if n != "":
+		profile_name = n
+	_editing = my_look.duplicate()
+	show_customiser()
+
+
+## Your character: a 3D preview up top, the choices underneath.
+func show_customiser() -> void:
+	_close_overlay()
+	_clear(screen)
+	world.set_menu_mode(false)
+	world.show_preview(_editing)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 40)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+	var title := _label(str(_editing.get("name", "CUSTOM")), 44, Palette.AMBER, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.88), Palette.BUTTON_EDGE, 2, 4, 14))
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	box.add_child(_choice_row("CHARACTER", str(_editing.get("name", "CUSTOM")), _step_preset.bind(-1), _step_preset.bind(1)))
+	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
+		var names: Dictionary = part[2]
+		box.add_child(_choice_row(part[0], names[_editing[part[1]]], _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
+	box.add_child(_tag("OUTFIT: %s" % Looks.OUTFITS[int(_editing["outfit"])]["name"], 24, Palette.DIM))
+	var swatches := HBoxContainer.new()
+	swatches.add_theme_constant_override("separation", 6)
+	for i in range(Looks.OUTFITS.size()):
+		var sw := Button.new()
+		sw.custom_minimum_size = Vector2(0, 52)
+		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var col_c: Color = Looks.OUTFITS[i]["color"]
+		var edge := Palette.AMBER if i == int(_editing["outfit"]) else Palette.BUTTON_EDGE
+		sw.add_theme_stylebox_override("normal", Palette.box(col_c.darkened(0.35) if i > 0 else Color(0.2, 0.18, 0.16), edge, 3, 2, 4))
+		sw.add_theme_stylebox_override("hover", Palette.box(col_c.darkened(0.2) if i > 0 else Color(0.25, 0.22, 0.2), edge, 3, 2, 4))
+		sw.text = "-" if i == 0 else ""
+		sw.pressed.connect(_set_part.bind("outfit", i))
+		swatches.add_child(sw)
+	box.add_child(swatches)
+	var eyes := _button("GLOWING EYES: %s" % ("ON" if _editing["eyes"] else "OFF"), _set_part.bind("eyes", not _editing["eyes"]), 24)
+	eyes.custom_minimum_size = Vector2(0, 52)
+	box.add_child(eyes)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	var save := _button("SAVE", _save_customiser)
+	Palette.accent(save, Palette.AMBER)
+	var back := _button("BACK", _leave_customiser)
+	for b in [save, back]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(b)
+	box.add_child(buttons)
+
+
+## [◀] LABEL: value [▶]
+func _choice_row(label: String, value: String, on_prev: Callable, on_next: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var prev := _button(" < ", on_prev, 28)
+	prev.custom_minimum_size = Vector2(64, 52)
+	row.add_child(prev)
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 0)
+	var l := _label(label, 18, Palette.DIM, true)
+	mid.add_child(l)
+	mid.add_child(_label(value, 28, Palette.INK, true))
+	row.add_child(mid)
+	var nxt := _button(" > ", on_next, 28)
+	nxt.custom_minimum_size = Vector2(64, 52)
+	row.add_child(nxt)
+	return row
+
+
+func _step_preset(delta: int) -> void:
+	var at := -1
+	for k in range(Looks.PRESETS.size()):
+		if Looks.PRESETS[k]["name"] == _editing.get("name", ""):
+			at = k
+	if at < 0:
+		at = 0 if delta > 0 else 1
+	_editing = Looks.preset(at + delta)
+	show_customiser()
+
+
+func _step_part(delta: int, part: String, options: Array) -> void:
+	var at := options.find(_editing[part])
+	_set_part(part, options[posmod(at + delta, options.size())])
+
+
+func _set_part(part: String, value) -> void:
+	_editing[part] = value
+	_editing["name"] = "CUSTOM"
+	show_customiser()
+
+
+func _save_customiser() -> void:
+	my_look = Looks.clean(_editing)
+	if not setup_looks.is_empty():
+		setup_looks[0] = my_look.duplicate()
+	_save_settings()
+	_leave_customiser()
+
+
+func _leave_customiser() -> void:
+	world.hide_preview()
+	show_menu()
+
+
 # ================================================================ setup screen
 
 var _name_edits: Array = []
 
 
 func show_setup() -> void:
+	_fit_setup_looks()
 	_close_overlay()
 	_clear(screen)
 	var center := CenterContainer.new()
@@ -492,6 +630,9 @@ func show_setup() -> void:
 		edit.max_length = 10
 		edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(edit)
+		var who := _paper_button(_short_name(setup_looks[i]), _cycle_setup_look.bind(i), 20)
+		who.custom_minimum_size = Vector2(200, 56)
+		row.add_child(who)
 		box.add_child(row)
 		_name_edits.append(edit)
 
@@ -514,6 +655,29 @@ func show_setup() -> void:
 
 func _on_hide_toggled(on: bool) -> void:
 	hide_hands = on
+
+
+## Everyone at a pass & play table has a character: player 1 is you.
+func _fit_setup_looks() -> void:
+	while setup_looks.size() < player_names.size():
+		var i := setup_looks.size()
+		setup_looks.append(my_look.duplicate() if i == 0 else Looks.for_seat(i))
+	while setup_looks.size() > player_names.size():
+		setup_looks.pop_back()
+
+
+func _short_name(look: Dictionary) -> String:
+	return str(look.get("name", "CUSTOM")).trim_prefix("THE ")
+
+
+func _cycle_setup_look(i: int) -> void:
+	_read_names()
+	var at := -1
+	for k in range(Looks.PRESETS.size()):
+		if Looks.PRESETS[k]["name"] == setup_looks[i].get("name", ""):
+			at = k
+	setup_looks[i] = Looks.preset(at + 1)
+	show_setup()
 
 
 func _read_names() -> void:
@@ -552,6 +716,9 @@ func start_match() -> void:
 	session.leave()
 	game = Game.new()
 	game.setup(player_names)
+	_fit_setup_looks()
+	for i in range(game.players.size()):
+		game.players[i].look = setup_looks[i]
 	game.event.connect(_on_game_event)
 	_reset_match_view()
 	_build_table()

@@ -24,6 +24,16 @@ by Kay Lousberg (CC0, www.kaylousberg.com): adventurers and skeletons who sit
 and fidget at the table, stand up and cheer when they win a round, and keel
 over when they're knocked out. They live in `models/characters/`.
 
+### Characters
+
+**CHARACTER** on the main menu opens the customiser: pick one of 19 ready-made
+characters (The Gambler, The Undertaker, The Cowpoke, The Dealer…) or build
+your own from 9 bodies, 8 outfit colours, 7 hats (their own, bowler, top hat,
+cowboy hat, flat cap, beanie, none), 5 face pieces (cigarette, cigar,
+eyepatch, shades, none) and glowing eyes. Your character is saved, and other
+players see it at the table, online too. In pass & play each player picks a
+character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
+
 Change the sharpness under **GRAPHICS** on the main menu or the in-game MENU:
 **PS2** (chunkiest), **PS3** (default) or **SHARP** (full resolution, no
 dithering).
@@ -177,7 +187,7 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [x] Item cards, health and the shotgun
 - [x] Trump cards and gold hints
 - [x] Main menu, lobbies on the same Wi-Fi
-- [ ] Character customisation
+- [x] Character customisation
 - [ ] Online lobbies over the internet
 - [ ] Sound effects
 - [ ] AI players

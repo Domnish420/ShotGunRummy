@@ -270,20 +270,22 @@ static func build_figure(parent: Node3D, color: Color, style: int) -> Dictionary
 	return {"node": node, "head": head, "eyes": eyes}
 
 
-## The character models (KayKit, CC0), by name. Seats get them in this order
-## for now; character customisation will let players pick.
-const CHARACTERS := ["Barbarian", "Skeleton_Warrior", "Rogue_Hooded", "Skeleton_Mage", "Knight", "Mage", "Skeleton_Rogue", "Rogue", "Skeleton_Minion"]
+const Looks = preload("res://scripts/core/looks.gd")
 const CHAR_SCALE := 0.62
 const SEAT_HEIGHT := 0.6 # hips above the floor
-const WEAPON_WORDS := ["sword", "shield", "axe", "mug", "staff", "wand", "book", "dagger", "knife", "crossbow", "blade", "quiver", "arrow", "bow", "smoke"]
+const WEAPON_WORDS := ["sword", "shield", "axe", "mug", "staff", "wand", "book", "dagger", "knife", "crossbow", "blade", "quiver", "arrow", "bow", "smoke", "throwable"]
+const HEADWEAR_WORDS := ["_hat", "_helmet", "_hood"] # the models' own headwear
+const OUTFIT_WORDS := ["_body", "_leg", "_cape", "_cloak"]
 
 
-## A seated character in a chair, looking down -Z at the table. Returns
-## { node, head (follows the head bone), anim (AnimationPlayer), eyes: [] }.
-static func build_character(parent: Node3D, character: String, floor_y: float) -> Dictionary:
+## A character dressed in `look` (see looks.gd), looking down -Z.
+## seated = in a chair at the table; otherwise standing (for the customiser).
+## Returns { node, head (follows the head bone), anim (AnimationPlayer), eyes }.
+static func build_character(parent: Node3D, look: Dictionary, floor_y: float, seated: bool = true) -> Dictionary:
+	look = Looks.clean(look)
 	var node := Node3D.new()
 	parent.add_child(node)
-	var scene = load("res://models/characters/%s.glb" % character)
+	var scene = load("res://models/characters/%s.glb" % look["base"])
 	if not (scene is PackedScene):
 		var fallback := build_figure(parent, Color(0.2, 0.18, 0.16), 0)
 		node.queue_free()
@@ -291,25 +293,42 @@ static func build_character(parent: Node3D, character: String, floor_y: float) -
 	var model: Node3D = scene.instantiate()
 	model.rotation.y = PI # the models face +Z; the table is at -Z
 	model.scale = Vector3.ONE * CHAR_SCALE
-	# seated: hips just behind the seat point, a chair's height off the floor
-	# (in the sitting pose the hips are 0.48 up and 0.4 back, in model units)
-	var hips_y := floor_y + SEAT_HEIGHT
-	var hips_z := 0.14
-	model.position = Vector3(0, hips_y - 0.48 * CHAR_SCALE, hips_z - 0.4 * CHAR_SCALE)
+	if seated:
+		# hips just behind the seat point, a chair's height off the floor
+		# (in the sitting pose the hips are 0.48 up and 0.4 back, in model units)
+		var hips_y := floor_y + SEAT_HEIGHT
+		var hips_z := 0.14
+		model.position = Vector3(0, hips_y - 0.48 * CHAR_SCALE, hips_z - 0.4 * CHAR_SCALE)
+		var chair := tex_mat("wood", Color(0.45, 0.36, 0.28), 2.0)
+		box(node, Vector3(0.5, 0.05, 0.46), chair, Vector3(0, hips_y - 0.07, hips_z))
+		box(node, Vector3(0.48, 0.7, 0.05), chair, Vector3(0, hips_y + 0.28, hips_z + 0.24), Vector3(-0.08, 0, 0))
+		for corner in [Vector3(-0.22, 0, -0.2), Vector3(0.22, 0, -0.2), Vector3(-0.22, 0, 0.2), Vector3(0.22, 0, 0.2)]:
+			box(node, Vector3(0.04, hips_y - 0.07 - floor_y, 0.04), chair, Vector3(corner.x, (hips_y - 0.07 + floor_y) * 0.5, hips_z + corner.z))
+	else:
+		model.position = Vector3.ZERO # standing: the caller puts them on the floor
 	node.add_child(model)
+
+	var tint: Color = Looks.OUTFITS[int(look["outfit"])]["color"]
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
 		var lower := str(mi.name).to_lower()
 		for w in WEAPON_WORDS:
 			if lower.contains(w):
 				mi.visible = false
+		if look["hat"] != "own":
+			for w in HEADWEAR_WORDS:
+				if lower.ends_with(w):
+					mi.visible = false
+		if int(look["outfit"]) != 0:
+			for w in OUTFIT_WORDS:
+				if lower.contains(w):
+					var m = mi.get_active_material(0)
+					if m is StandardMaterial3D:
+						var dyed: StandardMaterial3D = m.duplicate()
+						dyed.albedo_color = dyed.albedo_color * tint
+						mi.material_override = dyed
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	# a chair under them
-	var chair := tex_mat("wood", Color(0.45, 0.36, 0.28), 2.0)
-	box(node, Vector3(0.5, 0.05, 0.46), chair, Vector3(0, hips_y - 0.07, hips_z))
-	box(node, Vector3(0.48, 0.7, 0.05), chair, Vector3(0, hips_y + 0.28, hips_z + 0.24), Vector3(-0.08, 0, 0))
-	for corner in [Vector3(-0.22, 0, -0.2), Vector3(0.22, 0, -0.2), Vector3(-0.22, 0, 0.2), Vector3(0.22, 0, 0.2)]:
-		box(node, Vector3(0.04, hips_y - 0.07 - floor_y, 0.04), chair, Vector3(corner.x, (hips_y - 0.07 + floor_y) * 0.5, hips_z + corner.z))
-	# follow the head bone, for aiming the shotgun and placing labels
+
+	# follow the head bone, for hats, face pieces, aiming and labels
 	var head := Node3D.new()
 	var skeleton: Skeleton3D = model.find_child("Skeleton3D", true, false)
 	if skeleton != null and skeleton.find_bone("head") >= 0:
@@ -320,15 +339,65 @@ static func build_character(parent: Node3D, character: String, floor_y: float) -
 	else:
 		head.position = Vector3(0, 0.55, 0.15)
 		node.add_child(head)
+	var eyes := _dress_head(head, look)
+
 	var anim: AnimationPlayer = model.find_child("AnimationPlayer", true, false)
 	if anim != null:
 		for loop_name in ["Sit_Chair_Idle", "Idle"]:
 			if anim.has_animation(loop_name):
 				anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
-		if anim.has_animation("Sit_Chair_Idle"):
-			anim.play("Sit_Chair_Idle")
+		var idle := "Sit_Chair_Idle" if seated else "Idle"
+		if anim.has_animation(idle):
+			anim.play(idle)
 			anim.seek(randf() * anim.current_animation_length, true)
-	return {"node": node, "head": head, "anim": anim, "eyes": []}
+	return {"node": node, "head": head, "anim": anim, "eyes": eyes}
+
+
+## Hats, face pieces and glowing eyes, in the head bone's space (model units:
+## the head is about 1.1 wide, its top ~0.95 above the bone, its face at +Z).
+static func _dress_head(head: Node3D, look: Dictionary) -> Array:
+	var felt_black := tex_mat("felt", Color(0.25, 0.24, 0.24), 3.0)
+	var leather := tex_mat("wood", Color(0.75, 0.55, 0.38), 3.0, 0.8)
+	match look["hat"]:
+		"bowler":
+			cyl(head, 0.62, 0.62, 0.05, 14, felt_black, Vector3(0, 0.86, 0))
+			var crown := ball(head, 0.46, 10, felt_black, Vector3(0, 0.95, 0))
+			crown.scale = Vector3(1, 0.75, 1)
+		"top_hat":
+			cyl(head, 0.64, 0.64, 0.05, 14, felt_black, Vector3(0, 0.86, 0))
+			cyl(head, 0.4, 0.42, 0.8, 12, felt_black, Vector3(0, 1.28, 0))
+			cyl(head, 0.43, 0.43, 0.1, 12, tex_mat("felt", Color(0.6, 0.15, 0.12), 3.0), Vector3(0, 0.94, 0))
+		"cowboy":
+			var brim := cyl(head, 0.78, 0.78, 0.05, 14, leather, Vector3(0, 0.84, 0))
+			brim.scale = Vector3(1.15, 1, 1)
+			cyl(head, 0.38, 0.46, 0.42, 10, leather, Vector3(0, 1.06, 0))
+		"flat_cap":
+			var cap := ball(head, 0.6, 10, tex_mat("felt", Color(0.5, 0.45, 0.38), 3.0), Vector3(0, 0.72, -0.03))
+			cap.scale = Vector3(1, 0.45, 1.05)
+			box(head, Vector3(0.62, 0.05, 0.3), tex_mat("felt", Color(0.42, 0.38, 0.32), 3.0), Vector3(0, 0.74, 0.55), Vector3(0.15, 0, 0))
+		"beanie":
+			var beanie := ball(head, 0.6, 10, tex_mat("felt", Color(0.7, 0.3, 0.25), 4.0), Vector3(0, 0.72, -0.02))
+			beanie.scale = Vector3(1, 0.62, 1)
+			ball(head, 0.12, 6, tex_mat("felt", Color(0.8, 0.75, 0.6), 4.0), Vector3(0, 1.1, -0.02))
+	match look["face"]:
+		"cigarette", "cigar":
+			var cigar: bool = look["face"] == "cigar"
+			var stick := cyl(head, 0.05 if cigar else 0.03, 0.05 if cigar else 0.03, 0.4, 6, plain(Color(0.4, 0.25, 0.12) if cigar else Color(0.92, 0.9, 0.85)), Vector3(0.12, 0.12, 0.66), Vector3(PI / 2.0 - 0.25, -0.35, 0))
+			stick.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			ball(head, 0.05 if cigar else 0.035, 5, glow(Color(1.0, 0.4, 0.1), 3.0), Vector3(0.2, 0.07, 0.84))
+		"eyepatch":
+			box(head, Vector3(0.24, 0.22, 0.05), plain(Color(0.05, 0.05, 0.05)), Vector3(0.2, 0.36, 0.54))
+			box(head, Vector3(1.12, 0.04, 0.04), plain(Color(0.05, 0.05, 0.05)), Vector3(0, 0.5, 0.5), Vector3(0, 0, -0.3))
+		"shades":
+			var lens := plain(Color(0.02, 0.02, 0.03), 0.1, 0.6)
+			for x in [-0.2, 0.2]:
+				box(head, Vector3(0.28, 0.16, 0.04), lens, Vector3(x, 0.38, 0.55))
+			box(head, Vector3(0.2, 0.04, 0.04), lens, Vector3(0, 0.42, 0.55))
+	var eyes := []
+	if look["eyes"]:
+		for x in [-0.2, 0.2]:
+			eyes.append(ball(head, 0.06, 6, glow(Color(1, 0.97, 0.85), 4.0), Vector3(x, 0.36, 0.52)))
+	return eyes
 
 
 # ================================================================ the shotgun

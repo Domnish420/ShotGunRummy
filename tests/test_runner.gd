@@ -6,6 +6,7 @@ const Cards = preload("res://scripts/core/cards.gd")
 const Game = preload("res://scripts/core/game.gd")
 const Bot = preload("res://scripts/core/bot.gd")
 const Items = preload("res://scripts/core/items.gd")
+const Looks = preload("res://scripts/core/looks.gd")
 
 var _failures := 0
 var _checks := 0
@@ -18,7 +19,8 @@ func _init() -> void:
 		"test_trump_lay_off", "test_trump_in_game", "test_trump_partition", "test_go_out_check", "test_no_placing_first_turn", "test_trump_swap", "test_no_discarding_trumps",
 		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
 		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day",
-		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down",
+		"test_looks", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -419,6 +421,23 @@ func test_double_down() -> void:
 	var r2 := g.draw_discard(1)
 	check(r2["ok"] and not r2["again"] and g.phase == "play", "second card from the discard pile, then play")
 	check(g.players[1].hand.size() == before + 2, "2 cards drawn")
+
+
+func test_looks() -> void:
+	check(Looks.PRESETS.size() >= 15, "plenty of ready-made characters")
+	for p in Looks.PRESETS:
+		var clean := Looks.clean(p)
+		check(clean["base"] == p["base"] and clean["hat"] == p["hat"], "%s survives cleaning" % p["name"])
+	var junk := Looks.clean({"base": "Dragon", "hat": "crown", "outfit": 99, "face": "mask"}, 2)
+	check(Looks.BASES.has(junk["base"]) and Looks.HATS.has(junk["hat"]) and Looks.FACES.has(junk["face"]), "junk from the network becomes a real look")
+	check(int(junk["outfit"]) < Looks.OUTFITS.size(), "outfit index stays in range")
+	var g := new_game(2)
+	g.players[1].look = Looks.preset(2)
+	var view := g.snapshot(0)
+	check(view["players"][1]["look"]["name"] == "THE UNDERTAKER", "looks travel in snapshots")
+	var mirror := Game.new()
+	mirror.load_snapshot(view)
+	check(mirror.players[1].look["hat"] == "top_hat", "and load back")
 
 
 # ------------------------------------------------------------------ table
