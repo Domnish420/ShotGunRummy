@@ -46,9 +46,8 @@ dithering).
 2. Open Godot, click **Import**, and pick `project.godot` in this folder.
 3. Press **F5** (or the ▶ Play button, top right).
 
-The window opens at phone shape (portrait). Under **PASS & PLAY**, untick **HIDE HANDS BETWEEN TURNS**
-if you're testing alone and don't want the "pass the phone"
-screen between every turn.
+The window opens at phone shape (portrait). To try it alone, use
+**PLAY ON THIS PHONE → VS AI (SOLO)**.
 
 ## Run it on your phone
 
@@ -70,11 +69,17 @@ From the main menu:
 - **JOIN A LOBBY**: lobbies on the same Wi-Fi show up automatically. If none
   appear (some routers and hotspots block this), type the IP address shown on
   the host's screen and press JOIN.
-- **PASS & PLAY**: everyone shares one phone.
+- **PLAY ON THIS PHONE**:
+  - **VS AI (SOLO)**: just you against 1–5 AI players. Pick how many and how
+    good they are (easy, normal, hard, or mixed for one of each), then
+    **DEAL ME IN**. You play as your own name and character.
+  - **PASS THE PHONE**: friends share one phone and take turns. Any seat can
+    be an AI too.
 
 ### AI players
 
-Any seat can be an AI. In **PASS & PLAY**, tap the **PERSON** button next to a
+Play them on your own with **VS AI (SOLO)**, or mix them in with people. In
+**PASS THE PHONE**, tap the **PERSON** button next to a
 player to change it to **AI: EASY**, **AI: NORMAL** or **AI: HARD** (player 1
 is always you). In a lobby the host taps **+ ADD AN AI PLAYER**, then the level
 button to change it or **X** to remove it. Online, the host's phone plays the

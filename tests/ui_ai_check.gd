@@ -1,6 +1,7 @@
 extends SceneTree
-## Pass & play against the AI: one person and three AIs (easy, normal, hard)
-## play a whole match through the real screens. The person's hand is never
+## Solo against the AI: one person and three AIs (easy, normal, hard) play a
+## whole match through the real screens (after checking the pass & play
+## setup can seat AIs too). The person's hand is never
 ## hidden (nobody to pass the phone to), the AIs play their own turns and
 ## shoot on their own, and nobody can make a move for an AI.
 ##   godot --headless --path . -s tests/ui_ai_check.gd
@@ -45,9 +46,20 @@ func _initialize() -> void:
 		main._cycle_setup_bot(3) # hard
 	check(main.setup_bots == ["", "easy", "normal", "hard"], "setup has the AIs: %s" % [main.setup_bots])
 	check(not main.player_names[1].begins_with("PLAYER"), "an AI gets a name: %s" % [main.player_names])
-	main._start_from_setup()
+	# play it through VS AI (solo): you and three AIs, one of each level
+	main.profile_name = "SAM"
+	main.show_this_phone()
+	main.show_solo()
+	main.solo_opponents = 3
+	main._set_solo_level("mixed")
+	main._start_solo()
 	var g = main.game
-	check(g.players[3].bot == "hard", "the AIs are at the table")
+	check(main.local_mode == "solo" and g.players.size() == 4, "solo deals you and 3 AIs")
+	var levels := []
+	for p in g.players:
+		levels.append(p.bot)
+	check(levels == ["", "easy", "normal", "hard"], "mixed AIs: %s" % [levels])
+	check(g.players[0].name == "SAM", "you sit in seat 1")
 
 	var ai_turns := 0
 	var ai_shots := 0
@@ -75,7 +87,7 @@ func _initialize() -> void:
 			var pick = null
 			for b in _buttons(main.overlay_layer):
 				var t: String = b.text
-				if t in ["MAIN MENU", "NEW PLAYERS", "PLAY AGAIN"]:
+				if t in ["MAIN MENU", "NEW PLAYERS", "PLAY AGAIN", "RESTART MATCH"]:
 					continue
 				if pick == null or t.begins_with("SHOOT") or t.begins_with("WATCH") or t.ends_with("SHOTGUN"):
 					pick = b

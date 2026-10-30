@@ -39,6 +39,10 @@ var _picked: Dictionary = {} # highlighted on the character select screen
 var custom_looks: Array = [] # characters you've made
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
+var solo_opponents := 3 # vs AI: how many AIs
+var solo_level := "normal" # vs AI: easy | normal | hard | mixed
+var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
+var _table: Dictionary = {} # that game's players: names, looks, bots
 var menu_message := ""
 var _pending_cb := Callable() # waiting on the host to answer this phone's action
 var _overlay_kind := ""
@@ -271,6 +275,8 @@ func _load_settings() -> void:
 	player_names = cfg.get_value("setup", "names", player_names)
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
 	setup_bots = cfg.get_value("setup", "bots", [])
+	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
+	solo_level = str(cfg.get_value("solo", "level", "normal"))
 	profile_name = cfg.get_value("profile", "name", "")
 	graphics = cfg.get_value("video", "graphics", "PS3")
 	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
@@ -284,6 +290,8 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "names", player_names)
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("setup", "bots", setup_bots)
+	cfg.set_value("solo", "opponents", solo_opponents)
+	cfg.set_value("solo", "level", solo_level)
 	cfg.set_value("profile", "name", profile_name)
 	cfg.set_value("video", "graphics", graphics)
 	cfg.set_value("profile", "look", my_look)
@@ -338,7 +346,7 @@ func show_menu() -> void:
 	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
 	box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
 	box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
-	box.add_child(_paper_button("PASS & PLAY (ONE PHONE)", _on_pass_and_play_pressed, 28))
+	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
 	box.add_child(_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24))
 	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
 
@@ -359,13 +367,124 @@ func _take_name() -> String:
 	return n
 
 
-func _on_pass_and_play_pressed() -> void:
+## Keeps the name typed on the main menu, if there is one.
+func _keep_menu_name() -> void:
+	if _name_edit == null or not is_instance_valid(_name_edit):
+		return
 	var n := _name_edit.text.strip_edges().to_upper()
 	if n != "":
 		profile_name = n.left(10)
 		player_names[0] = profile_name
 		_save_settings()
+
+
+func _on_this_phone_pressed() -> void:
+	_keep_menu_name()
+	show_this_phone()
+
+
+func _on_pass_and_play_pressed() -> void:
+	_keep_menu_name()
 	show_setup()
+
+
+## Solo against AIs, or everyone passing the phone around.
+func show_this_phone() -> void:
+	var box := _paper()
+	box.add_child(_label("ON THIS PHONE", 52, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_paper_button("VS AI (SOLO)", show_solo))
+	box.add_child(_label("Just you against AI players.", 22, Palette.CARD_INK, true))
+	box.add_child(_paper_button("PASS THE PHONE", _on_pass_and_play_pressed))
+	box.add_child(_label("Friends share this phone and take turns. You can add AIs too.", 22, Palette.CARD_INK, true))
+	box.add_child(_paper_button("BACK", show_menu, 28))
+
+
+# ================================================================ solo vs AI
+
+const SOLO_LEVELS := ["easy", "normal", "hard", "mixed"]
+
+
+func show_solo() -> void:
+	var box := _paper()
+	box.add_child(_label("VS AI", 60, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("%s, PLAYING AS %s" % [profile_name if profile_name != "" else "YOU", _short_name(my_look)], 24, Palette.CARD_INK, true))
+	var count_row := HBoxContainer.new()
+	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	count_row.add_theme_constant_override("separation", 16)
+	count_row.add_child(_tag("OPPONENTS", 30, Palette.CARD_INK))
+	count_row.add_child(_button(" - ", _change_solo_count.bind(-1)))
+	count_row.add_child(_tag(str(solo_opponents), 40, Palette.CARD_INK))
+	count_row.add_child(_button(" + ", _change_solo_count.bind(1)))
+	box.add_child(count_row)
+	box.add_child(_label("DIFFICULTY", 26, Palette.CARD_INK, true))
+	var level_row := HBoxContainer.new()
+	level_row.add_theme_constant_override("separation", 6)
+	for level in SOLO_LEVELS:
+		var b := _paper_button(str(level).to_upper(), _set_solo_level.bind(level), 22)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if level == solo_level:
+			Palette.accent(b, Palette.RED)
+		level_row.add_child(b)
+	box.add_child(level_row)
+	var about := {
+		"easy": "Sloppy players who throw items around.",
+		"normal": "Solid players who use items when they help.",
+		"hard": "Sharks: they hold out for Rummy and shoot the leader.",
+		"mixed": "A bit of everything: easy, normal and hard at one table.",
+	}
+	box.add_child(_label(about.get(solo_level, ""), 22, Palette.CARD_INK, true))
+	var go := _button("DEAL ME IN", _start_solo, 34)
+	go.add_theme_stylebox_override("normal", Palette.box(Palette.CARD_INK, Palette.CARD_INK, 2, 2, 10))
+	box.add_child(go)
+	box.add_child(_paper_button("BACK", show_this_phone, 28))
+
+
+func _change_solo_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	show_solo()
+
+
+func _set_solo_level(level: String) -> void:
+	solo_level = level
+	show_solo()
+
+
+## You plus AIs, each with its own name and character.
+func _start_solo() -> void:
+	var me := profile_name if profile_name != "" else "YOU"
+	var names := [me]
+	var looks := [my_look.duplicate()]
+	var bots := [""]
+	var used_looks := [str(my_look.get("name", ""))]
+	var name_pool: Array = Bot.NAMES.duplicate()
+	name_pool.shuffle()
+	var look_pool := range(Looks.PRESETS.size())
+	look_pool.shuffle()
+	for i in range(solo_opponents):
+		var n: String = name_pool[i]
+		while names.has(n):
+			n += "*"
+		names.append(n)
+		var look := {}
+		for k in look_pool:
+			look = Looks.preset(k)
+			if not used_looks.has(str(look.get("name", ""))):
+				break
+		used_looks.append(str(look.get("name", "")))
+		looks.append(look)
+		bots.append(Bot.LEVELS[i % Bot.LEVELS.size()] if solo_level == "mixed" else solo_level)
+	_save_settings()
+	local_mode = "solo"
+	_table = {"names": names, "looks": looks, "bots": bots}
+	start_match()
+
+
+## NEW PLAYERS after a game on this phone: back to whichever setup it came from.
+func _new_players() -> void:
+	if local_mode == "solo":
+		show_solo()
+	else:
+		show_setup()
 
 
 func _on_host_pressed() -> void:
@@ -836,7 +955,7 @@ func show_setup() -> void:
 	var sign_btn := _button("SIGN THE WAIVER", _start_from_setup, 34)
 	sign_btn.add_theme_stylebox_override("normal", Palette.box(Palette.CARD_INK, Palette.CARD_INK, 2, 2, 10))
 	box.add_child(sign_btn)
-	box.add_child(_paper_button("BACK", show_menu, 28))
+	box.add_child(_paper_button("BACK", show_this_phone, 28))
 
 
 func _on_hide_toggled(on: bool) -> void:
@@ -921,19 +1040,22 @@ func _start_from_setup() -> void:
 		used[n] = true
 		player_names[i] = n
 	_save_settings()
+	_fit_setup_looks()
+	local_mode = "pass"
+	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate()}
 	start_match()
 
 
 # ================================================================ match flow
 
+## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
 	session.leave()
 	game = Game.new()
-	game.setup(player_names)
-	_fit_setup_looks()
+	game.setup(_table["names"])
 	for i in range(game.players.size()):
-		game.players[i].look = setup_looks[i]
-		game.players[i].bot = setup_bots[i]
+		game.players[i].look = _table["looks"][i]
+		game.players[i].bot = _table["bots"][i]
 	game.event.connect(_on_game_event)
 	_reset_match_view()
 	_build_table()
@@ -2035,7 +2157,7 @@ func _show_match_end() -> void:
 		box.add_child(_button("LEAVE", show_menu))
 	else:
 		box.add_child(_button("PLAY AGAIN", _closing(start_match)))
-		box.add_child(_button("NEW PLAYERS", _closing(show_setup)))
+		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
 		box.add_child(_button("MAIN MENU", show_menu))
 
 
@@ -2088,5 +2210,5 @@ func _show_menu() -> void:
 		box.add_child(_button("LEAVE THE GAME", show_menu))
 	else:
 		box.add_child(_button("RESTART MATCH", _closing(start_match)))
-		box.add_child(_button("NEW PLAYERS", _closing(show_setup)))
+		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
 		box.add_child(_button("MAIN MENU", show_menu))
