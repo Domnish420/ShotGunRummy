@@ -7,6 +7,7 @@ const Game = preload("res://scripts/core/game.gd")
 const Bot = preload("res://scripts/core/bot.gd")
 const Items = preload("res://scripts/core/items.gd")
 const Looks = preload("res://scripts/core/looks.gd")
+const Session = preload("res://scripts/net/session.gd")
 
 var _failures := 0
 var _checks := 0
@@ -24,8 +25,11 @@ func _init() -> void:
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
-		"test_bot_matches",
+		"test_bot_matches", "test_ai_levels",
 	]:
+		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
+		if not only.is_empty() and not only.has(t):
+			continue
 		_test = t
 		call(t)
 	print("%d checks, %d failed" % [_checks, _failures])
@@ -651,3 +655,37 @@ func test_bot_matches() -> void:
 							return
 			check(g.phase == "match_over", "%d players seed %d finishes" % [n, s])
 			check(g.alive_count() == 1, "one survivor")
+
+
+## Easy, normal and hard AIs play whole matches one move at a time, the way
+## the table drives them, and every move they pick is legal.
+func test_ai_levels() -> void:
+	var wins := {"easy": 0, "normal": 0, "hard": 0}
+	for s in range(1, 13):
+		var n := 3 + s % 2
+		var g := new_game(n, s * 17)
+		for i in range(n):
+			g.players[i].bot = Bot.LEVELS[(i + s) % 3]
+		var memories := {}
+		var steps := 0
+		var refused := 0
+		while g.phase != "match_over" and steps < 30000:
+			steps += 1
+			if g.phase == "round_over":
+				g.start_round()
+				continue
+			var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+			var mem: Dictionary = memories.get_or_add(seat, {})
+			var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
+			if act.is_empty():
+				check(false, "seed %d: the AI had no move in phase %s" % [s, g.phase])
+				return
+			var res := Session.perform(g, seat, act[0], act[1], true)
+			if not res["ok"]:
+				refused += 1
+				Bot.note_failure(mem, act)
+		check(g.phase == "match_over", "seed %d: AI match finishes (round %d, phase %s, hp %s)" % [s, g.round_num, g.phase, g.players.map(func(p): return p.hp)])
+		check(refused < 20, "seed %d: AI moves are legal (%d refused)" % [s, refused])
+		if g.winner >= 0:
+			wins[g.players[g.winner].bot] += 1
+	print("  AI wins by level: %s" % [wins])

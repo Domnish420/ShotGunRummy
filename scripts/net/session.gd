@@ -18,10 +18,11 @@ signal ended(reason: String)
 
 const Game = preload("res://scripts/core/game.gd")
 const Looks = preload("res://scripts/core/looks.gd")
+const Bot = preload("res://scripts/core/bot.gd")
 
 const PORT := 47601
 const DISCOVERY_PORT := 47600
-const PROTOCOL := 4
+const PROTOCOL := 5
 const MAX_PLAYERS := 6
 const LOBBY_TIMEOUT_MS := 4000
 
@@ -30,13 +31,14 @@ var my_name := "PLAYER"
 var my_seat := -1
 var names: Array = [] # lobby players in seat order (host is seat 0)
 var looks: Array = [] # their characters, same order
+var bots: Array = [] # "" for a person, or an AI's level, same order (the host runs the AIs)
 var my_look: Dictionary = {}
 var lobbies := {} # ip -> { "name", "players", "max", "seen" }
 var game: Game = null
 var in_match := false
 var version := 0 # counts the host's updates, so phones can tell they're in sync
 
-var _peers: Array = [] # host only: peer id for each seat
+var _peers: Array = [] # host only: peer id for each seat (0 for an AI)
 var _enet: ENetMultiplayerPeer
 var _beacon: PacketPeerUDP
 var _scanner: PacketPeerUDP
@@ -76,6 +78,7 @@ func host(player_name: String, look: Dictionary = {}) -> String:
 	names = [player_name]
 	my_look = Looks.clean(look, 0)
 	looks = [my_look]
+	bots = [""]
 	_peers = [1]
 	_beacon = PacketPeerUDP.new()
 	_beacon.set_broadcast_enabled(true)
@@ -112,6 +115,7 @@ func leave() -> void:
 	version = 0
 	names = []
 	looks = []
+	bots = []
 	_peers = []
 	in_match = false
 	game = null
@@ -202,9 +206,48 @@ func _on_peer_disconnected(id: int) -> void:
 		leave()
 		ended.emit("%s left the game." % who)
 		return
+	_remove_seat(seat)
+	_send_roster()
+
+
+func _remove_seat(seat: int) -> void:
 	_peers.remove_at(seat)
 	names.remove_at(seat)
 	looks.remove_at(seat)
+	bots.remove_at(seat)
+
+
+## Host: sits an AI player at the table.
+func add_bot(level: String = "normal") -> void:
+	if mode != "host" or in_match or names.size() >= MAX_PLAYERS:
+		return
+	var pick := ""
+	for n in Bot.NAMES:
+		if not names.has(n):
+			pick = n
+			break
+	if pick == "":
+		pick = "AI %d" % names.size()
+	var look := Looks.preset((names.size() * 5 + Bot.NAMES.find(pick) * 2) % Looks.PRESETS.size())
+	names.append(pick)
+	looks.append(look)
+	bots.append(level)
+	_peers.append(0)
+	_send_roster()
+
+
+func remove_bot(seat: int) -> void:
+	if mode != "host" or in_match or seat <= 0 or seat >= bots.size() or bots[seat] == "":
+		return
+	_remove_seat(seat)
+	_send_roster()
+
+
+## Host: easy -> normal -> hard -> easy.
+func cycle_bot(seat: int) -> void:
+	if mode != "host" or in_match or seat <= 0 or seat >= bots.size() or bots[seat] == "":
+		return
+	bots[seat] = Bot.LEVELS[(Bot.LEVELS.find(bots[seat]) + 1) % Bot.LEVELS.size()]
 	_send_roster()
 
 
@@ -227,6 +270,7 @@ func _hello(player_name: String, protocol: int, look: Dictionary = {}) -> void:
 			clean += "*"
 		looks.append(Looks.clean(look, names.size()))
 		names.append(clean)
+		bots.append("")
 		_peers.append(peer)
 		_send_roster()
 
@@ -255,14 +299,15 @@ func _ended(reason: String) -> void:
 
 
 func _send_roster() -> void:
-	_roster.rpc(names, looks)
+	_roster.rpc(names, looks, bots)
 	roster_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _roster(lobby_names: Array, lobby_looks: Array = []) -> void:
+func _roster(lobby_names: Array, lobby_looks: Array = [], lobby_bots: Array = []) -> void:
 	names = lobby_names
 	looks = lobby_looks
+	bots = lobby_bots
 	roster_changed.emit()
 
 
@@ -276,10 +321,12 @@ func start_match() -> void:
 	game.setup(names)
 	for i in range(game.players.size()):
 		game.players[i].look = looks[i] if i < looks.size() else Looks.for_seat(i)
+		game.players[i].bot = str(bots[i]) if i < bots.size() else ""
 	game.event.connect(_on_host_event)
 	match_started.emit()
 	for seat in range(1, _peers.size()):
-		_match_start.rpc_id(_peers[seat], seat)
+		if _peers[seat] > 0:
+			_match_start.rpc_id(_peers[seat], seat)
 	game.start_round()
 	_flush(1, {})
 
@@ -299,6 +346,15 @@ func act(action: String, args: Array) -> void:
 		_flush(1, res)
 	elif mode == "client":
 		_request.rpc_id(1, action, args)
+
+
+## Host: does an AI player's move and tells everyone.
+func act_as(seat: int, action: String, args: Array) -> Dictionary:
+	if mode != "host" or not in_match or seat < 0 or seat >= bots.size() or bots[seat] == "":
+		return {"ok": false, "error": "Not an AI seat."}
+	var res := perform(game, seat, action, args, true)
+	_flush(0, res)
+	return res
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -336,6 +392,8 @@ func _flush(requester: int, result: Dictionary) -> void:
 	version += 1
 	for seat in range(1, _peers.size()):
 		var peer: int = _peers[seat]
+		if peer <= 0:
+			continue # an AI, played on this phone
 		_update.rpc_id(peer, version, game.snapshot(seat), events, result if peer == requester else {})
 	updated.emit(events, result if requester == 1 else {})
 

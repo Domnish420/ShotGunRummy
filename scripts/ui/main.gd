@@ -5,7 +5,8 @@ extends Control
 ## setup -> table, with overlays on top for "pass the phone", item reveals,
 ## round results, the shotgun, rules and the log.
 ##
-## In pass-and-play the table shows whoever's turn it is. Online, each phone
+## In pass-and-play the table shows whoever's turn it is (AI players play
+## themselves while it waits for the next person). Online, each phone
 ## shows its own seat and actions go to the host's game (see session.gd).
 
 const Game = preload("res://scripts/core/game.gd")
@@ -16,6 +17,7 @@ const CardView = preload("res://scripts/ui/card_view.gd")
 const World3DScene = preload("res://scripts/three/world3d.gd")
 const Session = preload("res://scripts/net/session.gd")
 const Looks = preload("res://scripts/core/looks.gd")
+const Bot = preload("res://scripts/core/bot.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -30,6 +32,7 @@ var session: Session
 var profile_name := ""
 var my_look: Dictionary = {} # your character, from the customiser
 var setup_looks: Array = [] # pass & play: each player's character
+var setup_bots: Array = [] # pass & play: "" for a person, or an AI's level
 var _editing: Dictionary = {} # the look being made in the creator
 var _editing_index := -1 # which of your characters it is (-1: a new one)
 var _picked: Dictionary = {} # highlighted on the character select screen
@@ -43,6 +46,10 @@ var _last_shot_text := ""
 var _hand_hidden := false # pass-and-play: your cards stay face down until you take the phone
 var _waiting_for_deal := false
 var _drawing_again := false # Double Down: first of the two cards is drawn
+var _viewer := 0 # pass-and-play: the person holding the phone (AIs don't)
+var _ai_wait := 0.0 # seconds until the AI's next move
+var _ai_memory := {} # seat -> what that AI remembers this turn
+var _ai_phase := ""
 var _ip_edit: LineEdit
 var _name_edit: LineEdit
 
@@ -263,6 +270,7 @@ func _load_settings() -> void:
 		return
 	player_names = cfg.get_value("setup", "names", player_names)
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
+	setup_bots = cfg.get_value("setup", "bots", [])
 	profile_name = cfg.get_value("profile", "name", "")
 	graphics = cfg.get_value("video", "graphics", "PS3")
 	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
@@ -275,6 +283,7 @@ func _save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("setup", "names", player_names)
 	cfg.set_value("setup", "hide_hands", hide_hands)
+	cfg.set_value("setup", "bots", setup_bots)
 	cfg.set_value("profile", "name", profile_name)
 	cfg.set_value("video", "graphics", graphics)
 	cfg.set_value("profile", "look", my_look)
@@ -441,13 +450,33 @@ func show_lobby() -> void:
 		var look_name := ""
 		if i < session.looks.size() and session.looks[i] is Dictionary:
 			look_name = "  " + _short_name(session.looks[i])
-		box.add_child(_label("%d. %s%s%s" % [i + 1, who, " (HOST)" if i == 0 else "", look_name], 28, Palette.CARD_INK))
+		var level: String = str(session.bots[i]) if i < session.bots.size() else ""
+		var line := _label("%d. %s%s%s" % [i + 1, who, " (HOST)" if i == 0 else "", look_name], 28, Palette.CARD_INK)
+		if level == "":
+			box.add_child(line)
+			continue
+		var row := HBoxContainer.new()
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.text = "%d. %s (AI)%s" % [i + 1, who, look_name]
+		row.add_child(line)
+		if session.is_host():
+			var lvl := _paper_button(Bot.level_label(level), session.cycle_bot.bind(i), 20)
+			lvl.custom_minimum_size = Vector2(110, 48)
+			row.add_child(lvl)
+			var drop := _paper_button("X", session.remove_bot.bind(i), 20)
+			drop.custom_minimum_size = Vector2(48, 48)
+			row.add_child(drop)
+		else:
+			row.add_child(_tag(Bot.level_label(level), 22, Palette.CARD_INK))
+		box.add_child(row)
 	if session.is_host():
+		if session.names.size() < Session.MAX_PLAYERS:
+			box.add_child(_paper_button("+ ADD AN AI PLAYER", session.add_bot.bind("normal"), 26))
 		var start := _paper_button("START THE GAME", session.start_match)
 		start.disabled = session.names.size() < 2
 		box.add_child(start)
 		if session.names.size() < 2:
-			box.add_child(_label("Waiting for at least one more player...", 22, Palette.CARD_INK, true))
+			box.add_child(_label("Waiting for at least one more player (or add an AI)...", 22, Palette.CARD_INK, true))
 	else:
 		box.add_child(_label("Waiting for the host to start...", 24, Palette.CARD_INK, true))
 	box.add_child(_paper_button("LEAVE", show_menu, 28))
@@ -784,8 +813,12 @@ func show_setup() -> void:
 		edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(edit)
 		var who := _paper_button(_short_name(setup_looks[i]), _cycle_setup_look.bind(i), 20)
-		who.custom_minimum_size = Vector2(200, 56)
+		who.custom_minimum_size = Vector2(170, 56)
 		row.add_child(who)
+		var kind := _paper_button(_seat_kind(i), _cycle_setup_bot.bind(i), 20)
+		kind.custom_minimum_size = Vector2(130, 56)
+		kind.disabled = i == 0 # player 1 is you
+		row.add_child(kind)
 		box.add_child(row)
 		_name_edits.append(edit)
 
@@ -817,6 +850,33 @@ func _fit_setup_looks() -> void:
 		setup_looks.append(my_look.duplicate() if i == 0 else Looks.for_seat(i))
 	while setup_looks.size() > player_names.size():
 		setup_looks.pop_back()
+	while setup_bots.size() < player_names.size():
+		setup_bots.append("")
+	while setup_bots.size() > player_names.size():
+		setup_bots.pop_back()
+	setup_bots[0] = ""
+
+
+func _seat_kind(i: int) -> String:
+	var level: String = setup_bots[i] if i < setup_bots.size() else ""
+	return "PERSON" if level == "" else "AI: %s" % Bot.level_label(level)
+
+
+## Person -> AI easy -> AI normal -> AI hard -> person. An AI gets a name of
+## its own unless someone typed one in.
+func _cycle_setup_bot(i: int) -> void:
+	_read_names()
+	var order := [""] + Bot.LEVELS
+	setup_bots[i] = order[(order.find(setup_bots[i]) + 1) % order.size()]
+	var current := str(player_names[i]).strip_edges().to_upper()
+	if setup_bots[i] != "" and (current == "" or current.begins_with("PLAYER")):
+		for n in Bot.NAMES:
+			if not player_names.has(n):
+				player_names[i] = n
+				break
+	elif setup_bots[i] == "" and Bot.NAMES.has(current):
+		player_names[i] = "PLAYER %d" % (i + 1)
+	show_setup()
 
 
 func _short_name(look: Dictionary) -> String:
@@ -873,6 +933,7 @@ func start_match() -> void:
 	_fit_setup_looks()
 	for i in range(game.players.size()):
 		game.players[i].look = setup_looks[i]
+		game.players[i].bot = setup_bots[i]
 	game.event.connect(_on_game_event)
 	_reset_match_view()
 	_build_table()
@@ -892,16 +953,36 @@ func _reset_match_view() -> void:
 	selected_item = ""
 	message = ""
 	_pending_cb = Callable()
+	_viewer = 0
+	_ai_memory = {}
+	_ai_wait = 1.0
+	_ai_phase = ""
 
 
 func _online() -> bool:
 	return session != null and session.is_online()
 
 
-## The seat this screen belongs to: whoever's turn it is in pass-and-play,
-## or this phone's own seat online.
+## The seat this screen belongs to: whoever's turn it is in pass-and-play
+## (or the last person to play while an AI has its turn), or this phone's own
+## seat online.
 func _me() -> int:
-	return session.my_seat if _online() else game.turn
+	if _online():
+		return session.my_seat
+	return _viewer if _is_bot(game.turn) else game.turn
+
+
+func _is_bot(seat: int) -> bool:
+	return game != null and seat >= 0 and seat < game.players.size() and game.players[seat].bot != ""
+
+
+## People still in the game at this table (pass-and-play).
+func _people_alive() -> int:
+	var n := 0
+	for p in game.players:
+		if p.alive and p.bot == "":
+			n += 1
+	return n
 
 
 func _my_turn() -> bool:
@@ -944,6 +1025,8 @@ func _act(action: String, args: Array, then: Callable) -> void:
 	var seat := game.turn
 	if action == "shoot" and game.gun != null:
 		seat = game.gun["holder"]
+	if _is_bot(seat) and action != "next_round" and action != "play_again":
+		return # the AI is playing this one
 	then.call(Session.perform(game, seat, action, args, true))
 
 
@@ -1065,12 +1148,22 @@ func _after_action() -> void:
 				lit_card = ""
 				message = ""
 				_drawing_again = false
-				if hide_hands:
-					_hand_hidden = true
-					_refresh()
-					_pass_after_deal()
-					return
-				_mark_turn_seen()
+				var private := hide_hands and _people_alive() > 1
+				if _is_bot(game.turn):
+					# the AI plays while the phone waits for the next person
+					shown_turn = turn_counter
+					if private:
+						_hand_hidden = true
+				else:
+					var new_hands := game.turn != _viewer
+					_viewer = game.turn
+					if private and (new_hands or _hand_hidden):
+						_hand_hidden = true
+						_refresh()
+						_pass_after_deal()
+						return
+					_hand_hidden = false
+					_mark_turn_seen()
 	_refresh()
 
 
@@ -1130,6 +1223,81 @@ func _handle(res: Dictionary) -> bool:
 	message = ""
 	selected = []
 	return true
+
+
+# ================================================================ AI players
+
+## Seconds the AI waits after each kind of move, so you can follow along.
+const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2}
+
+
+func _process(delta: float) -> void:
+	_drive_ai(delta)
+
+
+## The AI seat that has a move to make right now, or -1.
+func _ai_seat() -> int:
+	if game == null or round_label == null:
+		return -1
+	if game.phase == "shoot" and game.gun != null:
+		var holder := int(game.gun["holder"])
+		return holder if _is_bot(holder) else -1
+	if (game.phase == "draw" or game.phase == "play") and _is_bot(game.turn):
+		return game.turn
+	return -1
+
+
+## Plays the AIs, one move at a time. In pass-and-play this phone runs them;
+## online the host does, and everyone sees the moves like anyone else's.
+func _drive_ai(delta: float) -> void:
+	if game == null or round_label == null or (_online() and not session.is_host()):
+		return
+	var seat := _ai_seat()
+	if game.phase != _ai_phase:
+		_ai_phase = game.phase
+		if game.phase == "shoot":
+			# let everyone read the result first
+			_ai_wait = 3.5 if _online() else 1.2
+	if seat < 0:
+		_ai_wait = maxf(_ai_wait, 0.8)
+		return
+	if world.dealing or world.fx_busy or _pending_cb.is_valid():
+		return
+	if not _online():
+		# wait while the rules, log or menu are open, and for the gun to come out
+		if game.phase == "shoot":
+			if _overlay_kind != "gun" or overlay_layer.get_child_count() == 0:
+				return
+		elif overlay_layer.get_child_count() > 0:
+			return
+	_ai_wait -= delta
+	if _ai_wait > 0.0:
+		return
+	var memory: Dictionary = _ai_memory.get_or_add(seat, {})
+	var act := Bot.next_action(game, seat, game.players[seat].bot, memory)
+	if act.is_empty():
+		_ai_wait = 0.5
+		return
+	_ai_wait = float(AI_PACE.get(act[0], 1.0))
+	if _people_alive() == 0:
+		_ai_wait *= 0.4 # nobody left to watch closely
+	var res: Dictionary
+	if _online():
+		res = session.act_as(seat, act[0], act[1])
+	else:
+		res = Session.perform(game, seat, act[0], act[1], true)
+	if not res.get("ok", false):
+		Bot.note_failure(memory, act)
+		_ai_wait = 0.1
+		if not _online():
+			_after_action()
+		return
+	if _online():
+		return # the update has already redrawn everything
+	if act[0] == "shoot":
+		_after_fire(res, seat, int(act[1][0]))
+	else:
+		_after_action()
 
 
 # ================================================================ table
@@ -1339,6 +1507,8 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if world.dealing:
 		return "SHUFFLING AND DEALING..."
 	if not _my_turn():
+		if _is_bot(game.turn):
+			return "%s IS THINKING..." % _name(game.turn)
 		return "WAITING FOR %s..." % _name(game.turn)
 	if selected_item != "":
 		var item := game.find_item(seat, selected_item)
@@ -1735,7 +1905,7 @@ func _show_round_result() -> void:
 			flow.add_child(cv)
 		box.add_child(flow)
 	if game.gun != null:
-		var mine: bool = not _online() or int(game.gun["holder"]) == _me()
+		var mine: bool = (not _online() or int(game.gun["holder"]) == _me()) and not _is_bot(int(game.gun["holder"]))
 		var b := _button("%s, PICK UP THE SHOTGUN" % _name(w) if mine else "WATCH %s SHOOT" % _name(w), _show_gun)
 		Palette.accent(b, Palette.RED)
 		box.add_child(b)
@@ -1781,8 +1951,9 @@ func _show_gun(last_text: String = "") -> void:
 	if last_text != "":
 		box.add_child(_label(last_text, 34, Palette.PINK, true))
 
-	if holder >= 0 and _online() and holder != _me():
-		box.add_child(_label("Waiting for %s to pick a target..." % _name(holder), 26, Palette.INK, true))
+	if holder >= 0 and ((_online() and holder != _me()) or _is_bot(holder)):
+		var waiting := "%s is picking a target..." % _name(holder) if _is_bot(holder) else "Waiting for %s to pick a target..." % _name(holder)
+		box.add_child(_label(waiting, 26, Palette.INK, true))
 		for p in game.players:
 			var row := HBoxContainer.new()
 			row.alignment = BoxContainer.ALIGNMENT_CENTER

@@ -72,6 +72,7 @@ class Player:
 	var ultimatum: bool = false # Revolver: put cards down next turn or play roulette
 	var extra_draws: int = 0 # Double Down: cards still to draw on top of the usual 1
 	var look: Dictionary = {} # how they look at the table (see looks.gd); not used by the rules
+	var bot: String = "" # "" for a person, or the AI's difficulty: easy | normal | hard
 
 	func _init(p_seat: int, p_name: String) -> void:
 		seat = p_seat
@@ -1124,7 +1125,7 @@ func snapshot(view_seat: int) -> Dictionary:
 			"cuffed": p.cuffed, "sawed": p.sawed, "has_melded": p.has_melded,
 			"score": p.score, "rounds_won": p.rounds_won, "turns_taken": p.turns_taken,
 			"hand": p.hand.duplicate(true) if mine or p.exposed else _hidden_hand(p),
-			"exposed": p.exposed, "ultimatum": p.ultimatum, "extra_draws": p.extra_draws, "look": p.look,
+			"exposed": p.exposed, "ultimatum": p.ultimatum, "extra_draws": p.extra_draws, "look": p.look, "bot": p.bot,
 			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
 		})
 	return {
@@ -1159,6 +1160,7 @@ func load_snapshot(d: Dictionary) -> void:
 		p.ultimatum = pd["ultimatum"]
 		p.extra_draws = pd["extra_draws"]
 		p.look = pd.get("look", {})
+		p.bot = str(pd.get("bot", ""))
 		p.hand = pd["hand"]
 		p.items = pd["items"]
 		players.append(p)

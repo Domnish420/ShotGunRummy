@@ -1,6 +1,7 @@
 extends SceneTree
-## Plays a whole 3-player LAN match: one host and two players, each a full copy
-## of the game with its own network connection, all inside this one process.
+## Plays a whole 4-player LAN match: one host, two players and an AI the host
+## runs. Each phone is a full copy of the game with its own network
+## connection, all inside this one process.
 ##   godot --headless --path . -s tests/net_test.gd
 ##
 ## Checks along the way that every phone sees its own hand exactly as the host
@@ -14,6 +15,7 @@ var failures := 0
 
 
 func _initialize() -> void:
+	Engine.time_scale = 6.0 # the AI and the animations run at speed
 	for tag in ["Host", "Alex", "Jo"]:
 		var holder := Node.new()
 		holder.name = tag
@@ -78,11 +80,15 @@ func _run() -> void:
 			break
 	check(host.session.names == ["SAM", "ALEX", "JO"], "lobby has everyone: %s" % [host.session.names])
 	check(p1.session.names == host.session.names, "players see the same lobby")
+	host.session.add_bot("hard")
+	await _frames(6)
+	check(p1.session.names.size() == 4 and p1.session.bots[3] == "hard", "everyone sees the AI player: %s %s" % [p1.session.names, p1.session.bots])
 
 	host.session.start_match()
 	await _frames(10)
+	check(p1.game.players[3].bot == "hard", "the AI seat is marked")
 	check(p1.session.my_seat == 1 and p2.session.my_seat == 2, "seats assigned")
-	check(p1.game != null and p1.game.players.size() == 3, "player 1 has the table")
+	check(p1.game != null and p1.game.players.size() == 4, "player 1 has the table")
 	check(p1.game.players[0].look.get("name", "") == host.my_look.get("name", "?"), "everyone sees the host's character")
 
 	var steps := 0
@@ -156,7 +162,8 @@ func _check_views(real) -> void:
 			if other == seat:
 				continue
 			for c in g.players[other].hand:
-				if not c.get("hidden", false):
+				var revealed: bool = c.get("shown", false) or real.players[other].exposed # Flashbang, Spotlight
+				if not c.get("hidden", false) and not revealed:
 					check(false, "seat %d can see seat %d's %s" % [seat, other, c["id"]])
 					return
 			check(g.players[other].hand.size() == real.players[other].hand.size(), "card counts match")

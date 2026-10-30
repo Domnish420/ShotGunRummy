@@ -19,6 +19,7 @@ func _initialize() -> void:
 	root.add_child(main)
 	await process_frame
 	main.player_names = ["SAM", "ALEX"]
+	main.setup_bots = [] # everyone a person (settings may remember AIs)
 	main.hide_hands = false
 	main._start_from_setup()
 	var g = main.game

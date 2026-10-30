@@ -1,7 +1,7 @@
 # Shotgun Rummy
 
 Rummy for 2–6 players at a 3D table under a hanging lamp, on one phone or over
-the same Wi-Fi. Item cards bend the rules, and whoever goes out picks up the
+the same Wi-Fi, with AI players to fill the seats. Item cards bend the rules, and whoever goes out picks up the
 shotgun.
 
 You sit at the near side of the table with your hand in front of you. Tap
@@ -71,6 +71,29 @@ From the main menu:
   appear (some routers and hotspots block this), type the IP address shown on
   the host's screen and press JOIN.
 - **PASS & PLAY**: everyone shares one phone.
+
+### AI players
+
+Any seat can be an AI. In **PASS & PLAY**, tap the **PERSON** button next to a
+player to change it to **AI: EASY**, **AI: NORMAL** or **AI: HARD** (player 1
+is always you). In a lobby the host taps **+ ADD AN AI PLAYER**, then the level
+button to change it or **X** to remove it. Online, the host's phone plays the
+AIs, so it has to stay in the game.
+
+- **Easy** draws without much thought, often throws away the wrong card and
+  uses items at random.
+- **Normal** plays its cards well and uses items when they help: cigarettes when
+  it's hurt, handcuffs on whoever is closest to going out, Joker Paint when it
+  makes a meld.
+- **Hard** also holds its melds back to go out in one turn for Rummy, won't
+  throw the next player a card that fits the table, and shoots whoever is
+  winning (or whoever one shot would knock out).
+
+An AI only knows what its seat would know: its own hand, the table, cards shown
+by Spotlight or Flashbang, and the top of the stock if it used a magnifier. The
+AIs play one move at a time so you can watch them. If you're playing alone
+against AIs, your hand is never hidden. With two or more people, the phone asks
+to be passed only when it's the next person's turn.
 
 Every phone needs this project. The host's phone is the referee: other phones
 only ever receive their own hand, so nobody can peek. If anyone leaves mid-game,
@@ -148,7 +171,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/cards.gd` | Cards, sets, runs, lay-offs, deadwood. |
 | `scripts/core/items.gd` | Item list (names, icons, copies). Edit this to tune items. |
 | `scripts/core/game.gd` | The full rules: dealing, turns, items, scoring, shotgun, health. No UI, so it can be tested and reused for AI or online play later. |
-| `scripts/core/bot.gd` | A simple player the tests use. Starting point for AI players. |
+| `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |
 | `scripts/net/session.gd` | Lobbies, Wi-Fi discovery and online play (the host checks every move). |
 | `scripts/three/world3d.gd` | The 3D room: table, lamp, players, shotgun, card placement and tap picking. |
 | `scripts/three/props.gd` | The low-poly models: room, furniture, the seated characters, shotgun. |
@@ -168,12 +191,19 @@ godot --headless --path . --import
 godot --headless --path . -s tests/test_runner.gd
 ```
 
-`tests/net_test.gd` runs a host and two players in one process and plays a
-whole 3-player match over the network, checking nobody can see anyone else's
-cards:
+`tests/net_test.gd` runs a host, two players and an AI in one process and
+plays a whole 4-player match over the network, checking nobody can see anyone
+else's cards:
 
 ```
 godot --headless --path . -s tests/net_test.gd
+```
+
+`tests/ui_ai_check.gd` plays a pass & play match of one person against three
+AIs through the real screens:
+
+```
+godot --headless --path . -s tests/ui_ai_check.gd
 ```
 
 `tests/ui_smoke.gd` plays a whole 3-player match through the real screens and
@@ -192,7 +222,8 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [x] Character customisation
 - [ ] Online lobbies over the internet
 - [ ] Sound effects
-- [ ] AI players
+- [x] AI players (easy, normal, hard)
+- [ ] Voice chat (once there's internet play)
 - [ ] Extra cards (jokers, special cards)
 - [x] 3D table (phone portrait; also works on a PC screen)
 - [ ] Polished PC version
