@@ -1,8 +1,9 @@
 extends RefCounted
 ## AI players for Shotgun Blackjack (bot.gd hands over to this one).
 ##   easy:   hits below about 15 and uses items at random.
-##   normal: hits below 17, or until it beats whoever is ahead, and uses
-##           items when they help.
+##   normal: hits below 17 (12 when the dealer shows a weak card); as dealer
+##           it hits until it beats the players still in. Uses items when
+##           they help.
 ##   hard:   also counts the cards it has seen to judge the chance of going
 ##           bust, and uses items to knock out the leader's hand.
 ## It only knows what its seat would know: its own hand, face-up cards, and
@@ -42,20 +43,33 @@ static func estimate(game, seat: int) -> int:
 	return game.total(known, game.trump_rank) + unknown * 7
 
 
-## The best total anyone else is likely to finish on, as far as we can tell.
-## Players still to play are counted as reaching 18 if they're not past it.
+## The total we need to reach. A player is up against the dealer: if the
+## dealer hasn't played, count their face-down card as a 10-ish and assume
+## they'll draw to 17. The dealer wants to beat the players still in.
 static func to_beat(game, seat: int) -> int:
+	if seat != game.dealer:
+		var d = game.players[game.dealer]
+		if d.bust or not d.alive:
+			return 0 # the dealer's out: anything not bust wins
+		var est := estimate(game, game.dealer)
+		if not d.stood:
+			est = maxi(est + 3, 17) if est < 17 else est
+		return mini(est, 21)
 	var best := 0
 	for p in game.others(seat):
-		if p.bust:
-			continue
-		var est := estimate(game, p.seat)
-		if est > 21:
-			est = 19
-		if not p.stood and p.turns_taken == 0:
-			est = maxi(est, 18)
-		best = maxi(best, est)
-	return mini(best, 21)
+		if not p.bust:
+			best = maxi(best, mini(estimate(game, p.seat), 21))
+	return best
+
+
+## Is the dealer showing a weak card (2 to 6)? Then a player can sit tight
+## and let the dealer go bust.
+static func dealer_weak(game, seat: int) -> bool:
+	if seat == game.dealer:
+		return false
+	var d = game.players[game.dealer]
+	var up: int = game.showing_total(game.dealer)
+	return d.hand.size() == 2 and up >= 2 and up <= 6
 
 
 static func should_hit(game, seat: int, level: String, memory: Dictionary) -> bool:
@@ -73,12 +87,17 @@ static func should_hit(game, seat: int, level: String, memory: Dictionary) -> bo
 		"easy":
 			hit = t < 13 + game.rng.randi_range(0, 4)
 		"normal":
-			hit = t < 17 or (t < to_beat(game, seat) and t < 20)
+			if dealer_weak(game, seat):
+				hit = t < 12
+			else:
+				hit = t < 17 or (t < to_beat(game, seat) and t < 20)
 		_:
 			var bust := bust_chance(game, seat)
 			var need := to_beat(game, seat)
 			if t <= 11:
 				hit = true
+			elif dealer_weak(game, seat) and t >= 12:
+				hit = false # let the dealer bust
 			elif t < need:
 				hit = bust < 0.85 # behind: worth the risk
 			else:
@@ -162,7 +181,9 @@ static func _smart_use(game, seat: int, card: Dictionary, level: String, memory:
 	var item_id: String = card["item"]
 	var t: int = game.hand_total(seat)
 	var targets: Array = game.item_targets(seat, item_id) if Items.needs(item_id) == "player" else []
-	var leader := _leader(game, targets)
+	# the dealer is up against everyone; a player only against the dealer
+	var foes: Array = targets if seat == game.dealer else targets.filter(func(x): return x == game.dealer)
+	var leader := _leader(game, foes)
 	match item_id:
 		"cigarettes":
 			if me.hp < me.max_hp:
@@ -185,7 +206,7 @@ static func _smart_use(game, seat: int, card: Dictionary, level: String, memory:
 		"double_down":
 			# deal one more to a strong hand that has stood: it may bust
 			var best := -1
-			for s in targets:
+			for s in foes:
 				var p = game.players[s]
 				if p.stood and estimate(game, s) >= 17 and (best < 0 or estimate(game, s) > estimate(game, best)):
 					best = s
@@ -197,7 +218,7 @@ static func _smart_use(game, seat: int, card: Dictionary, level: String, memory:
 		"handcuffs":
 			# make someone stand on a weak hand
 			var weakest := -1
-			for s in targets:
+			for s in foes:
 				if weakest < 0 or estimate(game, s) < estimate(game, weakest):
 					weakest = s
 			if weakest >= 0 and estimate(game, weakest) <= 14:

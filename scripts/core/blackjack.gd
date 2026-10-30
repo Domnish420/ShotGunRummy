@@ -2,18 +2,22 @@ extends "res://scripts/core/game.gd"
 ## Shotgun Blackjack. Same table as Shotgun Rummy: a rotating dealer, items
 ## shuffled into the stock, trump cards, health and the shotgun.
 ##
-## Everyone plays against each other, not a house:
+## Everyone plays against the dealer, who is one of the players:
 ## - Everyone is dealt 2 cards (one face down, one face up) and 2 items.
-## - Starting left of the dealer (the dealer plays last), each player HITs
-##   (takes a card) as often as they like, then STANDs. Use items any time on
-##   your turn. Draw an item and you keep it and draw again.
-## - Go over 21 and you're bust: out of the round.
+## - Starting left of the dealer and going round to the left, each player
+##   HITs (takes a card) as often as they like, then STANDs. The dealer plays
+##   last. Use items any time on your turn. Draw an item and you keep it and
+##   draw again. The deal moves one seat to the right each round.
+## - Go over 21 and you're bust.
 ## - 2-10 count their number, J/Q/K 10, an ace 1 or 11. This round's trump is
 ##   wild: it counts as whatever you need (1 to 11).
-## - Highest total wins. A Blackjack beats everything, then a five-card
-##   Charlie; a tie goes to whoever holds fewer cards, then nobody.
-##   The winner gets 1 shell, +1 for a Blackjack (21 with your first 2 cards),
-##   +1 for a five-card Charlie (5 cards without going bust), max 3.
+## - Each player is compared with the dealer: bust loses; if the dealer is
+##   bust, everyone still in wins; otherwise the higher hand wins (a Blackjack,
+##   21 with your first 2 cards, beats a five-card Charlie, which beats the
+##   highest total). The same hand is a push: nobody wins.
+## - A player who beats the dealer gets 1 shell, +1 for a Blackjack, +1 for a
+##   five-card Charlie. The dealer gets 1 shell for each player they beat.
+##   Max 3 each. Everyone with shells shoots in turn, the dealer last.
 
 func _init() -> void:
 	kind = "blackjack"
@@ -25,6 +29,7 @@ func _init() -> void:
 
 
 var _order: Array = [] # seats in turn order this round (the dealer last)
+var _shooters: Array = [] # [seat, shells] still waiting for the shotgun this round
 var _hit_this_turn := false
 
 
@@ -76,6 +81,15 @@ func is_blackjack(seat: int) -> bool:
 func is_charlie(seat: int) -> bool:
 	var p: Player = players[seat]
 	return p.hand.size() >= int(options["charlie_cards"]) and hand_total(seat) <= 21
+
+
+## Has every player except the dealer gone bust? Then the dealer wins
+## without playing.
+func _all_bust_but_dealer() -> bool:
+	for p in players:
+		if p.alive and p.seat != dealer and not p.bust:
+			return false
+	return true
 
 
 ## Players still in this round: alive and not bust.
@@ -131,6 +145,7 @@ func start_round() -> Dictionary:
 	burned = []
 	gun = null
 	last_result = {}
+	_shooters = []
 	turn = _order[0]
 	_emit("round_start", {"round": round_num, "dealer": dealer, "first": turn, "trump": trump_rank})
 	_begin_turn()
@@ -151,7 +166,7 @@ func _begin_turn() -> void:
 func _next_turn() -> void:
 	if phase != "play":
 		return
-	if in_round().size() <= 1:
+	if _all_bust_but_dealer():
 		_finish_round()
 		return
 	var at := _order.find(turn)
@@ -170,45 +185,89 @@ func _next_turn() -> void:
 	_finish_round()
 
 
+## How strong a hand is, to compare it with the dealer's.
+func _rank(seat: int) -> Array:
+	return [1 if is_blackjack(seat) else 0, 1 if is_charlie(seat) else 0, hand_total(seat)]
+
+
 func _finish_round() -> void:
-	# a Blackjack beats a five-card Charlie, which beats the highest total;
-	# then fewer cards wins
-	var best := []
-	var winners := []
-	for p in in_round():
-		var rank := [1 if is_blackjack(p.seat) else 0, 1 if is_charlie(p.seat) else 0, hand_total(p.seat), -p.hand.size()]
-		if best.is_empty() or _beats(rank, best):
-			best = rank
-			winners = [p.seat]
-		elif rank == best:
-			winners.append(p.seat)
-	var top: int = best[2] if not best.is_empty() else -1
-	var w: int = winners[0] if winners.size() == 1 else -1
+	var d: Player = players[dealer]
+	var dealer_out: bool = not d.alive or d.bust
 	var hands := []
 	for p in players:
 		if p.alive:
 			for c in p.hand:
 				c["shown"] = true # everything is turned over at the end
-			hands.append({"seat": p.seat, "name": p.name, "cards": p.hand.duplicate(true), "points": hand_total(p.seat), "bust": p.bust})
-	var reason := ""
-	if w < 0:
-		reason = "Everyone went bust." if top < 0 else "A tie at %d. Nobody wins." % top
-	var result := {"round": round_num, "winner": w, "points": top, "shells": 0, "rummy": false, "blackjack": false, "charlie": false, "hands": hands, "reason": reason}
-	if w >= 0:
-		var winner_p: Player = players[w]
-		winner_p.rounds_won += 1
-		winner_p.score += top
-		result["blackjack"] = is_blackjack(w)
-		result["charlie"] = is_charlie(w)
-		var shells := 1 + (1 if result["blackjack"] else 0) + (1 if result["charlie"] else 0)
-		result["shells"] = mini(int(options["max_shells"]), shells)
+	var dealer_shells := 0
+	_shooters = []
+	var duels := []
+	for s in _order:
+		var p: Player = players[s]
+		if not p.alive or s == dealer:
+			continue
+		var outcome := "push"
+		if p.bust:
+			outcome = "lose"
+		elif dealer_out or _beats(_rank(s), _rank(dealer)):
+			outcome = "win"
+		elif _beats(_rank(dealer), _rank(s)):
+			outcome = "lose"
+		var shells := 0
+		if outcome == "win":
+			shells = mini(int(options["max_shells"]), 1 + (1 if is_blackjack(s) else 0) + (1 if is_charlie(s) else 0))
+			p.rounds_won += 1
+			p.score += hand_total(s)
+			_shooters.append([s, shells])
+		elif outcome == "lose":
+			dealer_shells += 1
+		duels.append({"seat": s, "outcome": outcome, "shells": shells})
+	dealer_shells = mini(int(options["max_shells"]), dealer_shells)
+	if dealer_shells > 0 and d.alive:
+		d.rounds_won += 1
+		d.score += hand_total(dealer)
+		_shooters.append([dealer, dealer_shells])
+	for p in players:
+		if p.alive:
+			var note := ""
+			for duel in duels:
+				if duel["seat"] == p.seat:
+					note = duel["outcome"]
+			hands.append({"seat": p.seat, "name": p.name, "cards": p.hand.duplicate(true), "points": hand_total(p.seat), "bust": p.bust, "outcome": note if p.seat != dealer else "dealer", "blackjack": is_blackjack(p.seat), "charlie": is_charlie(p.seat)})
+	var first: int = _shooters[0][0] if not _shooters.is_empty() else -1
+	var result := {
+		"round": round_num, "winner": first, "dealer": dealer, "dealer_bust": d.bust, "dealer_total": hand_total(dealer),
+		"dealer_shells": dealer_shells, "duels": duels, "shooters": _shooters.duplicate(true),
+		"points": hand_total(first) if first >= 0 else 0, "shells": _shooters[0][1] if first >= 0 else 0,
+		"rummy": false, "blackjack": first >= 0 and is_blackjack(first), "charlie": first >= 0 and is_charlie(first),
+		"hands": hands, "reason": "" if first >= 0 else "Every hand was a push. Nobody shoots.",
+	}
 	last_result = result
-	if w >= 0:
-		phase = "shoot"
-		gun = {"holder": w, "shells": result["shells"], "total": result["shells"]}
-	else:
-		phase = "round_over"
+	phase = "round_over"
+	gun = null
 	_emit("round_end", result)
+	_pass_gun()
+
+
+## Hands the shotgun to the next player waiting to shoot this round.
+func _pass_gun() -> void:
+	while not _shooters.is_empty():
+		var next: Array = _shooters.pop_front()
+		if not players[next[0]].alive:
+			continue
+		phase = "shoot"
+		gun = {"holder": next[0], "shells": next[1], "total": next[1]}
+		_emit("gun_passed", {"seat": next[0], "shells": next[1]})
+		return
+	if phase != "match_over":
+		phase = "round_over"
+		gun = null
+
+
+func shoot(shooter: int, target: int) -> Dictionary:
+	var res := super.shoot(shooter, target)
+	if res["ok"] and phase == "round_over":
+		_pass_gun() # this one's empty: next shooter
+	return res
 
 
 static func _beats(a: Array, b: Array) -> bool:
@@ -271,7 +330,7 @@ func _go_bust(p: Player) -> void:
 	_emit("bust", {"seat": p.seat, "total": hand_total(p.seat)})
 	if is_turn_of(p.seat):
 		_next_turn()
-	elif in_round().size() <= 1 and phase == "play":
+	elif _all_bust_but_dealer() and phase == "play":
 		_finish_round()
 
 
@@ -412,7 +471,7 @@ func _recheck_hands() -> void:
 		return
 	if players[me].bust:
 		_next_turn()
-	elif in_round().size() <= 1:
+	elif _all_bust_but_dealer():
 		_finish_round()
 
 
@@ -488,6 +547,7 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 func snapshot(view_seat: int) -> Dictionary:
 	var d := super.snapshot(view_seat)
 	d["order"] = _order.duplicate()
+	d["shooters"] = _shooters.duplicate(true)
 	d["hit_this_turn"] = _hit_this_turn
 	return d
 
@@ -495,4 +555,5 @@ func snapshot(view_seat: int) -> Dictionary:
 func load_snapshot(d: Dictionary) -> void:
 	super.load_snapshot(d)
 	_order = d.get("order", [])
+	_shooters = d.get("shooters", [])
 	_hit_this_turn = d.get("hit_this_turn", false)

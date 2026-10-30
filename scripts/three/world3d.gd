@@ -694,6 +694,8 @@ func _blackjack_hand(seen: Dictionary, game, p, seat_pos: Vector3, side: Vector3
 			if not (p.exposed or c.get("shown", false)):
 				all_up = false
 		note = ("%d" % showing if all_up else "SHOWING %d" % showing) + ("  STANDS" if p.stood else "")
+	if p.seat == game.dealer:
+		note = "DEALER · " + note
 	_label_at(note, _toward_center(seat_pos, 0.6) + Vector3(0, TABLE_TOP + 0.01, 0), 24, Palette.PINK if p.bust else Palette.INK)
 
 

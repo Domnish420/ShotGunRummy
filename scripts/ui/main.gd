@@ -1263,16 +1263,24 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s is down to %d health." % [_name(d["seat"]), d["hp"]])
 		"eliminated":
 			_log("%s IS OUT." % _name(d["seat"]))
+		"gun_passed":
+			_log("%s picks up the shotgun: %d shell%s." % [_name(d["seat"]), d["shells"], "" if d["shells"] == 1 else "s"])
 		"stock_reshuffled":
 			_log("The discard pile is shuffled into a new stock.")
 		"round_end":
-			if d["winner"] >= 0:
+			if _blackjack():
+				for sh in d.get("shooters", []):
+					world.cheer(sh[0])
+				_log("%s the dealer has %s." % [_name(d["dealer"]), "BUST" if d["dealer_bust"] else str(d["dealer_total"])])
+				for duel in d.get("duels", []):
+					var verdict: String = {"win": "beats the dealer", "lose": "loses to the dealer", "push": "pushes"}.get(duel["outcome"], "")
+					_log("%s %s%s." % [_name(duel["seat"]), verdict, " (%d shell%s)" % [duel["shells"], "" if duel["shells"] == 1 else "s"] if duel["shells"] > 0 else ""])
+				if d["dealer_shells"] > 0:
+					_log("The dealer gets %d shell%s." % [d["dealer_shells"], "" if d["dealer_shells"] == 1 else "s"])
+			elif d["winner"] >= 0:
 				world.cheer(d["winner"])
 			if _blackjack():
-				if d["winner"] < 0:
-					_log(str(d.get("reason", "Nobody wins.")))
-				else:
-					_log("%s wins with %d%s: %d shell%s." % [_name(d["winner"]), d["points"], " (BLACKJACK)" if d.get("blackjack", false) else (" (FIVE-CARD CHARLIE)" if d.get("charlie", false) else ""), d["shells"], "" if d["shells"] == 1 else "s"])
+				pass
 			elif d["winner"] < 0:
 				_log("The deck ran dry. Nobody scores.")
 			else:
@@ -1411,13 +1419,13 @@ func _handle(res: Dictionary) -> bool:
 # ================================================================ blackjack
 
 const BLACKJACK_RULES := [
-	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player deals each round and the player to their left goes first; the dealer plays last. Next round the deal moves one seat to the right. Everyone plays against each other: there's no house.",
+	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player is the dealer, and everyone else plays against them. The player to the dealer's left goes first, play goes round to the left, and the dealer plays last. Next round the deal moves one seat to the right.",
 	"THE DEAL. Everyone gets 2 cards, one face down and one face up, and 2 item cards. The other items are shuffled into the stock. The deck is shuffled fresh every round.",
-	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again.",
-	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST: out of the round.",
+	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
+	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings in round 13. A trump (gold star) counts as whatever you need, from 1 to 11.",
-	"WINNING. The highest total wins the round. A BLACKJACK (21 with your first 2 cards) beats everything, then a FIVE-CARD CHARLIE (5 cards without going bust). A tie goes to whoever holds fewer cards; still tied, nobody wins. If everyone else goes bust, the last one in wins.",
-	"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for a Blackjack, +1 for a five-card Charlie (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
+	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
+	"THE SHOTGUN. Beat the dealer and you get 1 shell, +1 for a Blackjack, +1 for a five-card Charlie. The dealer gets 1 shell for every player they beat. Max 3 each. Everyone with shells takes the shotgun in turn, the dealer last, and picks who to shoot. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
 ]
 
 
@@ -1469,7 +1477,9 @@ func _status_blackjack() -> String:
 			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
 	if me.ultimatum:
 		return "REVOLVER: TAKE A CARD THIS TURN, OR STAND AND SPIN THE CYLINDER"
-	return "%s, YOU HAVE %d. HIT OR STAND" % [_name(seat), game.hand_total(seat)]
+	if seat == game.dealer:
+		return "YOU'RE THE DEALER. YOU HAVE %d. HIT OR STAND" % game.hand_total(seat)
+	return "YOU HAVE %d. DEALER SHOWS %d. HIT OR STAND" % [game.hand_total(seat), game.showing_total(game.dealer)]
 
 
 func _hit() -> void:
@@ -1495,21 +1505,29 @@ func _stand() -> void:
 func _show_blackjack_result() -> void:
 	var r := game.last_result
 	var box := _open_overlay(0.94, true, "result")
-	var w: int = r["winner"]
-	if w < 0:
-		box.add_child(_title("NOBODY WINS"))
-		box.add_child(_label(str(r.get("reason", "")), 26, Palette.INK, true))
-	else:
-		if r.get("blackjack", false):
-			box.add_child(_label("BLACKJACK!", 84, Palette.GOLD, true))
-		elif r.get("charlie", false):
-			box.add_child(_label("FIVE-CARD CHARLIE!", 56, Palette.GOLD, true))
-		box.add_child(_title("%s WINS WITH %d" % [_name(w), r["points"]], Palette.AMBER))
-		box.add_child(_label("%d shell%s in the shotgun." % [r["shells"], "" if r["shells"] == 1 else "s"], 28, Palette.INK, true))
-		box.add_child(_label("(1 shell, +1 for a Blackjack, +1 for a five-card Charlie)", 20, Palette.DIM, true))
+	var dealer_seat: int = r["dealer"]
+	box.add_child(_title("%s DEALT: %s" % [_name(dealer_seat), "BUST" if r["dealer_bust"] else str(r["dealer_total"])], Palette.AMBER))
 	for h in r["hands"]:
-		var note := "BUST (%d)" % h["points"] if h.get("bust", false) else str(h["points"])
-		box.add_child(_label("%s: %s" % [h["name"], note], 24, Palette.GOLD if h["seat"] == w else Palette.INK))
+		var line := ""
+		var color := Palette.INK
+		var total_text := "BUST (%d)" % h["points"] if h.get("bust", false) else str(h["points"])
+		if h.get("blackjack", false) and not h.get("bust", false):
+			total_text = "BLACKJACK"
+		elif h.get("charlie", false) and not h.get("bust", false):
+			total_text = "%d, FIVE-CARD CHARLIE" % h["points"]
+		match h.get("outcome", ""):
+			"dealer":
+				line = "%s (DEALER): %s" % [h["name"], total_text]
+				color = Palette.AMBER
+			"win":
+				line = "%s: %s. BEATS THE DEALER" % [h["name"], total_text]
+				color = Palette.GOLD
+			"lose":
+				line = "%s: %s. LOSES" % [h["name"], total_text]
+				color = Palette.DIM
+			_:
+				line = "%s: %s. PUSH" % [h["name"], total_text]
+		box.add_child(_label(line, 24, color))
 		var flow := HFlowContainer.new()
 		flow.add_theme_constant_override("h_separation", 4)
 		for c in h["cards"]:
@@ -1519,7 +1537,16 @@ func _show_blackjack_result() -> void:
 			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			flow.add_child(cv)
 		box.add_child(flow)
-	_add_result_buttons(box, w)
+	var shooters: Array = r.get("shooters", [])
+	if shooters.is_empty():
+		box.add_child(_label(str(r.get("reason", "Nobody shoots.")), 26, Palette.INK, true))
+	else:
+		var names := []
+		for sh in shooters:
+			names.append("%s ×%d" % [_name(sh[0]), sh[1]])
+		box.add_child(_label("SHOTGUN: " + ", ".join(names), 28, Palette.RED.lightened(0.3), true))
+		box.add_child(_label("(beat the dealer: 1 shell, +1 Blackjack, +1 Charlie. The dealer: 1 shell per player beaten. Max 3.)", 20, Palette.DIM, true))
+	_add_result_buttons(box, int(game.gun["holder"]) if game.gun != null else -1)
 
 
 # ================================================================ AI players
@@ -2273,8 +2300,9 @@ func _show_gun(last_text: String = "") -> void:
 	if game.gun != null:
 		holder = game.gun["holder"]
 		shells = game.gun["shells"]
+		total = int(game.gun.get("total", total))
 	var box := _open_overlay(0.2, false, "gun", true)
-	var shooter: int = game.last_result["winner"]
+	var shooter: int = holder if holder >= 0 else int(game.last_result["winner"])
 	box.add_child(_title("%s HAS THE SHOTGUN" % _name(shooter), Palette.RED))
 	var shell_row := HBoxContainer.new()
 	shell_row.alignment = BoxContainer.ALIGNMENT_CENTER

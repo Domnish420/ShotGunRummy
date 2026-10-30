@@ -764,39 +764,60 @@ func test_bj_turns() -> void:
 	check(g.phase == "shoot" or g.phase == "round_over", "the round ends after the dealer")
 
 
+## Sets the hands for a 3-player round in turn order (the dealer last) and
+## has everyone stand.
+func _bj_round(rng_seed: int, hands: Array) -> Blackjack:
+	var g := new_bj(hands.size(), rng_seed)
+	var order := []
+	var s := g.turn
+	for i in range(hands.size()):
+		order.append(s)
+		s = g.next_alive(s)
+	check(order[-1] == g.dealer, "the dealer plays last")
+	for i in range(hands.size()):
+		g.players[order[i]].hand = cards(hands[i])
+	for i in range(hands.size()):
+		if g.phase == "play":
+			g.stand(g.turn)
+	return g
+
+
 func test_bj_winner() -> void:
-	var g := new_bj(3, 7)
-	var order := [g.turn, g.next_alive(g.turn), g.next_alive(g.next_alive(g.turn))]
-	g.players[order[0]].hand = cards("10H 9C") # 19
-	g.players[order[1]].hand = cards("AH KC") # blackjack
-	g.players[order[2]].hand = cards("10S 8D") # 18
-	for s in order:
-		g.stand(s)
-	check(g.phase == "shoot" and g.winner == -1, "someone has the gun")
-	check(g.gun["holder"] == order[1], "blackjack wins")
-	check(g.last_result["blackjack"] and g.gun["shells"] == 2, "blackjack is worth 2 shells")
-	# a tie with the same number of cards: nobody wins
-	g = new_bj(2, 9)
-	g.players[g.turn].hand = cards("10H 8C")
-	g.players[g.next_alive(g.turn)].hand = cards("9S 9D")
-	g.stand(g.turn)
-	g.stand(g.turn)
-	check(g.phase == "round_over" and g.last_result["winner"] == -1, "a tie means nobody wins")
-	# a five-card Charlie
-	g = new_bj(2, 11)
+	# 19 and 17 against the dealer's 18: one wins, one loses
+	var g := _bj_round(7, ["10H 9C", "10S 7D", "10C 8H"])
+	var first: int = g.next_alive(g.dealer)
+	var second: int = g.next_alive(first)
+	var duels: Array = g.last_result["duels"]
+	check(duels[0]["outcome"] == "win" and duels[1]["outcome"] == "lose", "each player against the dealer: %s" % [duels])
+	check(g.phase == "shoot" and g.gun["holder"] == first and g.gun["shells"] == 1, "the player who beat the dealer shoots first")
+	g.shoot(first, second)
+	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 1, "then the dealer, with a shell for the player they beat")
+	g.shoot(g.dealer, first)
+	check(g.phase == "round_over" and g.gun == null, "then the round is over")
+	# a push gives nobody anything
+	g = _bj_round(9, ["10H 8C", "9S 9D"])
+	check(g.phase == "round_over" and g.last_result["shooters"].is_empty(), "a push: nobody shoots")
+	# blackjack beats the dealer's 21 and is worth 2 shells
+	g = _bj_round(11, ["AH KC", "10S 5D 6C"])
+	check(g.gun != null and g.gun["holder"] != g.dealer and g.gun["shells"] == 2, "blackjack beats 21 for 2 shells")
+	# the dealer beats everyone: 1 shell for each
+	g = _bj_round(13, ["10H 6C", "10S 7D", "9C 8H", "10D 10C"])
+	check(g.gun != null and g.gun["holder"] == g.dealer and g.gun["shells"] == 3, "the dealer beats 3 players: 3 shells")
+	# the dealer goes bust: everyone still in wins
+	g = new_bj(3, 15)
 	var a := g.turn
-	g.players[a].hand = cards("2H 3C")
-	for c in cards("2D 3S 4H"):
-		g.stock.append(c)
-	g.hit(a)
-	g.hit(a)
-	g.hit(a)
-	check(g.players[a].stood and g.turn != a, "five cards under 21 stands")
-	g.players[g.turn].hand = cards("10S 4D")
-	g.stand(g.turn)
-	check(g.gun != null and g.gun["holder"] == a and g.last_result["charlie"], "five-card Charlie wins with a bonus shell")
-	# everyone else bust: the last one in wins straight away
-	g = new_bj(3, 13)
+	g.players[a].hand = cards("10H 2C")
+	g.stand(a)
+	var b := g.turn
+	g.players[b].hand = cards("10S 9D")
+	g.stand(b)
+	g.players[g.dealer].hand = cards("10C 6H")
+	g.stock.append(cards("KD")[0])
+	g.hit(g.dealer)
+	var shooters: Array = g.last_result["shooters"]
+	check(shooters.size() == 2 and g.last_result["dealer_bust"], "dealer bust: both players win (%s)" % [shooters])
+	# every player bust: the dealer wins without playing
+	g = new_bj(3, 17)
 	var x := g.turn
 	g.players[x].hand = cards("10H QC")
 	g.stock.append(cards("KD")[0])
@@ -805,7 +826,20 @@ func test_bj_winner() -> void:
 	g.players[y].hand = cards("10S JC")
 	g.stock.append(cards("KS")[0])
 	g.hit(y)
-	check(g.phase == "shoot" and g.gun["holder"] != x and g.gun["holder"] != y, "the last one not bust wins")
+	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 2, "everyone bust: the dealer wins 2 shells without playing")
+	# a five-card Charlie beats the dealer's 20
+	g = new_bj(2, 19)
+	var c := g.turn
+	g.players[c].hand = cards("2H 3C")
+	for card in cards("2D 3S 4H"):
+		g.stock.append(card)
+	g.hit(c)
+	g.hit(c)
+	g.hit(c)
+	check(g.players[c].stood and g.turn == g.dealer, "five cards under 21 stands")
+	g.players[g.dealer].hand = cards("10S QD")
+	g.stand(g.dealer)
+	check(g.gun != null and g.gun["holder"] == c and g.gun["shells"] == 2, "five-card Charlie beats 20 for 2 shells")
 
 
 func test_bj_items() -> void:

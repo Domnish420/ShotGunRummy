@@ -7,7 +7,7 @@ the deck that bend the rules, a trump rank that's wild, health, and a shotgun
 for whoever wins the hand.
 
 - **Shotgun Rummy**: classic Rummy. Go out first.
-- **Shotgun Blackjack**: everyone against everyone. Closest to 21 wins.
+- **Shotgun Blackjack**: everyone against the dealer, who's one of the players.
 
 Pick the game at the top of the main menu (**GAME: …**), or in a lobby (the
 host taps it to change it). A white **DEALER** chip on the table shows who
@@ -150,9 +150,10 @@ the game ends for everyone. When exporting an app for Android, tick the
 
 ## How to play Shotgun Blackjack
 
-- **The table.** The dealer moves round the table like in Rummy. The player to
-  the dealer's left goes first, and the dealer plays last. There's no house:
-  everyone plays against everyone.
+- **The table.** One player is the dealer, and everyone else plays against
+  them. The player to the dealer's left goes first, play goes round to the
+  left, and the dealer plays last. Each round the deal moves one seat to the
+  right, just like Rummy.
 - **The deal.** Everyone gets 2 cards, one face down and one face up, and 2
   item cards. The rest of the items are shuffled into the stock. The deck is
   shuffled fresh every round.
@@ -160,15 +161,18 @@ the game ends for everyone. When exporting an app for Android, tick the
   like, then **STAND**. Use items any time in your turn. Draw an item and you
   keep it and draw again.
 - **Counting.** 2–10 count their number, J/Q/K 10, an ace 1 or 11. Over 21 and
-  you're **bust**, out of the round. Reaching 21 or 5 cards stands for you.
+  you're **bust**. Reaching 21 or 5 cards stands for you.
 - **Trump cards.** The same rotating trump as Rummy (aces in round 1, then
   twos…). A trump counts as whatever you need, from 1 to 11.
-- **Winning.** Highest total wins. A **Blackjack** (21 with your first 2
-  cards) beats everything, then a **five-card Charlie** (5 cards without going
-  bust). A tie goes to whoever holds fewer cards; still tied, nobody wins. If
-  everyone else busts, the last one in wins.
-- **The shotgun.** The winner gets 1 shell, +1 for a Blackjack, +1 for a
-  five-card Charlie (max 3).
+- **Against the dealer.** Bust and you lose. If the dealer busts, everyone
+  still in wins. Otherwise the better hand wins: a **Blackjack** (21 with your
+  first 2 cards) beats a **five-card Charlie** (5 cards without going bust),
+  which beats the higher total. The same hand is a push. If every player
+  busts, the dealer wins without playing.
+- **The shotgun.** Beat the dealer and you get 1 shell, +1 for a Blackjack,
+  +1 for a five-card Charlie. The dealer gets 1 shell for every player they
+  beat. Max 3 each. Everyone with shells takes the shotgun in turn (the dealer
+  last) and picks who to shoot.
 - **Items.** The same items, adapted where they need to be: the Burner Phone
   sees someone's face-down card, Spotlight and Flashbang turn face-down cards
   up, Double Down deals a player one more card right now (even if they've
