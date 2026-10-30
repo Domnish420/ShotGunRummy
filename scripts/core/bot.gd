@@ -267,6 +267,9 @@ static func helps_hand_only(game, hand: Array, card: Dictionary) -> bool:
 ## winning; easy picks anyone.
 static func choose_target(game, seat: int, level: String = "normal") -> int:
 	var others: Array = game.others(seat)
+	if game.gun != null and game.gun.has("targets") and int(game.gun["holder"]) == seat:
+		# Blackjack: the dealer may only shoot players who lost
+		others = others.filter(func(p): return game.gun["targets"].has(p.seat))
 	if others.is_empty():
 		return -1
 	if level == "easy":

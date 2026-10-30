@@ -27,7 +27,7 @@ func _init() -> void:
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches", "test_ai_levels",
-		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_items", "test_bj_ai_matches",
+		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -783,39 +783,37 @@ func _bj_round(rng_seed: int, hands: Array) -> Blackjack:
 
 
 func test_bj_winner() -> void:
-	# 19 and 17 against the dealer's 18: one wins, one loses
+	# 19 beats the dealer's 18 (safe); 17 loses and can be shot
 	var g := _bj_round(7, ["10H 9C", "10S 7D", "10C 8H"])
 	var first: int = g.next_alive(g.dealer)
 	var second: int = g.next_alive(first)
 	var duels: Array = g.last_result["duels"]
 	check(duels[0]["outcome"] == "win" and duels[1]["outcome"] == "lose", "each player against the dealer: %s" % [duels])
-	check(g.phase == "shoot" and g.gun["holder"] == first and g.gun["shells"] == 1, "the player who beat the dealer shoots first")
-	g.shoot(first, second)
-	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 1, "then the dealer, with a shell for the player they beat")
-	g.shoot(g.dealer, first)
+	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 1, "the dealer gets a shell for the loser")
+	check(not g.shoot(g.dealer, first)["ok"], "the dealer can't shoot a player who beat them")
+	check(g.shoot(g.dealer, second)["ok"], "the dealer shoots the loser")
 	check(g.phase == "round_over" and g.gun == null, "then the round is over")
-	# a push gives nobody anything
+	check(Bot.choose_target(g, g.dealer) >= 0, "choose_target still works out of a round")
+	# a push or a win: nobody gets shot
 	g = _bj_round(9, ["10H 8C", "9S 9D"])
-	check(g.phase == "round_over" and g.last_result["shooters"].is_empty(), "a push: nobody shoots")
-	# blackjack beats the dealer's 21 and is worth 2 shells
-	g = _bj_round(11, ["AH KC", "10S 5D 6C"])
-	check(g.gun != null and g.gun["holder"] != g.dealer and g.gun["shells"] == 2, "blackjack beats 21 for 2 shells")
-	# the dealer beats everyone: 1 shell for each
+	check(g.phase == "round_over" and g.last_result["shooters"].is_empty(), "a push: nobody gets shot")
+	# the dealer beats everyone: 1 shell for each, aimed only at them
 	g = _bj_round(13, ["10H 6C", "10S 7D", "9C 8H", "10D 10C"])
-	check(g.gun != null and g.gun["holder"] == g.dealer and g.gun["shells"] == 3, "the dealer beats 3 players: 3 shells")
-	# the dealer goes bust: everyone still in wins
+	check(g.gun != null and g.gun["holder"] == g.dealer and g.gun["shells"] == 3 and g.gun["targets"].size() == 3, "the dealer beats 3 players: 3 shells")
+	check(Bot.choose_target(g, g.dealer) in g.gun["targets"], "the AI dealer aims at a loser")
+	# the dealer goes bust: players still in are safe, a player who busted isn't
 	g = new_bj(3, 15)
 	var a := g.turn
-	g.players[a].hand = cards("10H 2C")
-	g.stand(a)
+	g.players[a].hand = cards("10H QC")
+	g.stock.append(cards("5D")[0])
+	g.hit(a) # bust on 25
 	var b := g.turn
 	g.players[b].hand = cards("10S 9D")
 	g.stand(b)
 	g.players[g.dealer].hand = cards("10C 6H")
 	g.stock.append(cards("KD")[0])
 	g.hit(g.dealer)
-	var shooters: Array = g.last_result["shooters"]
-	check(shooters.size() == 2 and g.last_result["dealer_bust"], "dealer bust: both players win (%s)" % [shooters])
+	check(g.last_result["dealer_bust"] and g.gun != null and g.gun["targets"] == [a], "dealer bust: only the player who busted can be shot")
 	# every player bust: the dealer wins without playing
 	g = new_bj(3, 17)
 	var x := g.turn
@@ -826,20 +824,38 @@ func test_bj_winner() -> void:
 	g.players[y].hand = cards("10S JC")
 	g.stock.append(cards("KS")[0])
 	g.hit(y)
-	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 2, "everyone bust: the dealer wins 2 shells without playing")
-	# a five-card Charlie beats the dealer's 20
-	g = new_bj(2, 19)
-	var c := g.turn
-	g.players[c].hand = cards("2H 3C")
-	for card in cards("2D 3S 4H"):
-		g.stock.append(card)
-	g.hit(c)
-	g.hit(c)
-	g.hit(c)
-	check(g.players[c].stood and g.turn == g.dealer, "five cards under 21 stands")
-	g.players[g.dealer].hand = cards("10S QD")
-	g.stand(g.dealer)
-	check(g.gun != null and g.gun["holder"] == c and g.gun["shells"] == 2, "five-card Charlie beats 20 for 2 shells")
+	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 2, "everyone bust: the dealer gets 2 shells without playing")
+
+
+## A Blackjack shoots the dealer the moment it's dealt.
+func test_bj_blackjack_shot() -> void:
+	var shots := 0
+	var found := false
+	for seed in range(1, 400):
+		var g := Blackjack.new()
+		g.setup(["A", "B", "C", "D"], {}, seed)
+		var kinds := []
+		g.event.connect(func(kind, _d): kinds.append(kind))
+		g.start_round()
+		for k in kinds:
+			if k == "blackjack_shot":
+				shots += 1
+		if kinds.has("blackjack_shot"):
+			found = true
+			check(g.players[g.dealer].hp < g.players[g.dealer].max_hp, "the dealer took the free shot")
+			break
+	check(found, "some deal has a Blackjack")
+	# by item: Shakedown leaves a player with 2 cards making 21
+	var g := new_bj(3, 21)
+	var me := g.turn
+	var them := g.next_alive(me)
+	if them == g.dealer:
+		them = g.next_alive(them)
+	g.players[them].hand = cards("AH KC 5D")
+	var hp: int = g.players[g.dealer].hp
+	g.players[me].items = [{"id": "I-shakedown-1", "item": "shakedown"}]
+	check(g.use_item(me, "I-shakedown-1", them)["ok"], "shakedown")
+	check(g.players[g.dealer].hp == hp - 1, "a Blackjack made by an item shoots the dealer too")
 
 
 func test_bj_items() -> void:

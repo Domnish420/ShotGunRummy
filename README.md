@@ -169,10 +169,11 @@ the game ends for everyone. When exporting an app for Android, tick the
   first 2 cards) beats a **five-card Charlie** (5 cards without going bust),
   which beats the higher total. The same hand is a push. If every player
   busts, the dealer wins without playing.
-- **The shotgun.** Beat the dealer and you get 1 shell, +1 for a Blackjack,
-  +1 for a five-card Charlie. The dealer gets 1 shell for every player they
-  beat. Max 3 each. Everyone with shells takes the shotgun in turn (the dealer
-  last) and picks who to shoot.
+- **Blackjack shoots.** The moment you have a Blackjack, you shoot the
+  dealer, free (no shells used).
+- **The shotgun.** The dealer gets 1 shell for every player who lost (max 3)
+  and picks who to shoot, but only players who lost. Beat the dealer or push
+  and you're safe.
 - **Items.** The same items, adapted where they need to be: the Burner Phone
   sees someone's face-down card, Spotlight and Flashbang turn face-down cards
   up, Double Down deals a player one more card right now (even if they've

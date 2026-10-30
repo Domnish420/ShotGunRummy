@@ -1263,6 +1263,9 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s is down to %d health." % [_name(d["seat"]), d["hp"]])
 		"eliminated":
 			_log("%s IS OUT." % _name(d["seat"]))
+		"blackjack_shot":
+			_log("BLACKJACK! %s shoots the dealer, %s." % [_name(d["shooter"]), _name(d["target"])])
+			_blackjack_shot_fx(int(d["shooter"]), int(d["target"]))
 		"gun_passed":
 			_log("%s picks up the shotgun: %d shell%s." % [_name(d["seat"]), d["shells"], "" if d["shells"] == 1 else "s"])
 		"stock_reshuffled":
@@ -1425,8 +1428,24 @@ const BLACKJACK_RULES := [
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings in round 13. A trump (gold star) counts as whatever you need, from 1 to 11.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
-	"THE SHOTGUN. Beat the dealer and you get 1 shell, +1 for a Blackjack, +1 for a five-card Charlie. The dealer gets 1 shell for every player they beat. Max 3 each. Everyone with shells takes the shotgun in turn, the dealer last, and picks who to shoot. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
+	"BLACKJACK SHOOTS. The moment you have a Blackjack, you shoot the dealer, free.",
+	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (max 3) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
 ]
+
+
+## A Blackjack's free shot at the dealer, played once the cards are dealt.
+func _blackjack_shot_fx(shooter: int, target: int) -> void:
+	if world.dealing:
+		await world.deal_finished
+	if game == null:
+		return
+	world.announce("BLACKJACK!\n%s SHOOTS THE DEALER" % _name(shooter))
+	world.fire(shooter, target)
+	if target == _me():
+		_flash(Palette.RED)
+		_shake()
+	else:
+		_flash(Color.WHITE)
 
 
 func _refresh_blackjack() -> void:
@@ -1520,11 +1539,11 @@ func _show_blackjack_result() -> void:
 				line = "%s (DEALER): %s" % [h["name"], total_text]
 				color = Palette.AMBER
 			"win":
-				line = "%s: %s. BEATS THE DEALER" % [h["name"], total_text]
+				line = "%s: %s. BEATS THE DEALER, SAFE" % [h["name"], total_text]
 				color = Palette.GOLD
 			"lose":
 				line = "%s: %s. LOSES" % [h["name"], total_text]
-				color = Palette.DIM
+				color = Palette.PINK
 			_:
 				line = "%s: %s. PUSH" % [h["name"], total_text]
 		box.add_child(_label(line, 24, color))
@@ -1541,11 +1560,12 @@ func _show_blackjack_result() -> void:
 	if shooters.is_empty():
 		box.add_child(_label(str(r.get("reason", "Nobody shoots.")), 26, Palette.INK, true))
 	else:
-		var names := []
-		for sh in shooters:
-			names.append("%s ×%d" % [_name(sh[0]), sh[1]])
-		box.add_child(_label("SHOTGUN: " + ", ".join(names), 28, Palette.RED.lightened(0.3), true))
-		box.add_child(_label("(beat the dealer: 1 shell, +1 Blackjack, +1 Charlie. The dealer: 1 shell per player beaten. Max 3.)", 20, Palette.DIM, true))
+		var losers := []
+		for s in r.get("losers", []):
+			losers.append(_name(s))
+		var n: int = shooters[0][1]
+		box.add_child(_label("THE DEALER GETS %d SHELL%s TO SHOOT %s" % [n, "" if n == 1 else "S", ", ".join(losers)], 28, Palette.RED.lightened(0.3), true))
+		box.add_child(_label("(1 shell for each player who lost, max 3. Only players who lost can be shot.)", 20, Palette.DIM, true))
 	_add_result_buttons(box, int(game.gun["holder"]) if game.gun != null else -1)
 
 
@@ -2334,7 +2354,12 @@ func _show_gun(last_text: String = "") -> void:
 		if game.players[holder].sawed:
 			note = "Sawn-off barrel: the next shell hits for 2. Choose who to shoot."
 		box.add_child(_label(note, 26, Palette.INK, true))
+		var allowed: Array = game.gun.get("targets", []) if game.gun != null else []
+		if not allowed.is_empty():
+			box.add_child(_label("You can only shoot players who lost to you.", 22, Palette.DIM, true))
 		for p in game.others(holder):
+			if not allowed.is_empty() and not allowed.has(p.seat):
+				continue
 			var row := HBoxContainer.new()
 			row.add_theme_constant_override("separation", 12)
 			var b := _button("SHOOT %s" % p.name, _fire.bind(holder, p.seat))

@@ -14,10 +14,10 @@ extends "res://scripts/core/game.gd"
 ## - Each player is compared with the dealer: bust loses; if the dealer is
 ##   bust, everyone still in wins; otherwise the higher hand wins (a Blackjack,
 ##   21 with your first 2 cards, beats a five-card Charlie, which beats the
-##   highest total). The same hand is a push: nobody wins.
-## - A player who beats the dealer gets 1 shell, +1 for a Blackjack, +1 for a
-##   five-card Charlie. The dealer gets 1 shell for each player they beat.
-##   Max 3 each. Everyone with shells shoots in turn, the dealer last.
+##   highest total). The same hand is a push.
+## - The dealer gets 1 shell for each player who lost (max 3), and can only
+##   shoot players who lost.
+## - The moment a player has a Blackjack, they shoot the dealer, free.
 
 func _init() -> void:
 	kind = "blackjack"
@@ -29,7 +29,8 @@ func _init() -> void:
 
 
 var _order: Array = [] # seats in turn order this round (the dealer last)
-var _shooters: Array = [] # [seat, shells] still waiting for the shotgun this round
+var _shooters: Array = [] # [seat, shells, targets] still waiting for the shotgun this round
+var _shot_dealer := {} # seats that have had their free Blackjack shot this round
 var _hit_this_turn := false
 
 
@@ -146,8 +147,15 @@ func start_round() -> Dictionary:
 	gun = null
 	last_result = {}
 	_shooters = []
+	_shot_dealer = {}
 	turn = _order[0]
 	_emit("round_start", {"round": round_num, "dealer": dealer, "first": turn, "trump": trump_rank})
+	_blackjack_shots()
+	if phase == "match_over":
+		return _ok()
+	if not players[dealer].alive:
+		_finish_round() # a Blackjack finished the dealer off before anyone played
+		return _ok()
 	_begin_turn()
 	return _ok()
 
@@ -185,6 +193,25 @@ func _next_turn() -> void:
 	_finish_round()
 
 
+## A Blackjack shoots the dealer straight away, free: no shells used.
+## Checked after the deal and whenever an item reshuffles hands.
+func _blackjack_shots() -> void:
+	for s in _order:
+		var p: Player = players[s]
+		var d: Player = players[dealer]
+		if s == dealer or not p.alive or not d.alive or _shot_dealer.has(s) or not is_blackjack(s):
+			continue
+		_shot_dealer[s] = true
+		_emit("blackjack_shot", {"shooter": s, "target": dealer, "damage": 1})
+		damage(dealer, 1, "blackjack")
+		if phase == "match_over":
+			return
+		if not d.alive:
+			if phase == "play":
+				_finish_round() # no dealer, no round
+			return
+
+
 ## How strong a hand is, to compare it with the dealer's.
 func _rank(seat: int) -> Array:
 	return [1 if is_blackjack(seat) else 0, 1 if is_charlie(seat) else 0, hand_total(seat)]
@@ -198,7 +225,7 @@ func _finish_round() -> void:
 		if p.alive:
 			for c in p.hand:
 				c["shown"] = true # everything is turned over at the end
-	var dealer_shells := 0
+	var losers := []
 	_shooters = []
 	var duels := []
 	for s in _order:
@@ -212,20 +239,18 @@ func _finish_round() -> void:
 			outcome = "win"
 		elif _beats(_rank(dealer), _rank(s)):
 			outcome = "lose"
-		var shells := 0
 		if outcome == "win":
-			shells = mini(int(options["max_shells"]), 1 + (1 if is_blackjack(s) else 0) + (1 if is_charlie(s) else 0))
 			p.rounds_won += 1
 			p.score += hand_total(s)
-			_shooters.append([s, shells])
 		elif outcome == "lose":
-			dealer_shells += 1
-		duels.append({"seat": s, "outcome": outcome, "shells": shells})
-	dealer_shells = mini(int(options["max_shells"]), dealer_shells)
-	if dealer_shells > 0 and d.alive:
+			losers.append(s)
+		duels.append({"seat": s, "outcome": outcome, "shells": 0})
+	var dealer_shells := 0
+	if d.alive and not losers.is_empty():
+		dealer_shells = mini(int(options["max_shells"]), losers.size())
 		d.rounds_won += 1
 		d.score += hand_total(dealer)
-		_shooters.append([dealer, dealer_shells])
+		_shooters.append([dealer, dealer_shells, losers.duplicate()])
 	for p in players:
 		if p.alive:
 			var note := ""
@@ -239,7 +264,8 @@ func _finish_round() -> void:
 		"dealer_shells": dealer_shells, "duels": duels, "shooters": _shooters.duplicate(true),
 		"points": hand_total(first) if first >= 0 else 0, "shells": _shooters[0][1] if first >= 0 else 0,
 		"rummy": false, "blackjack": first >= 0 and is_blackjack(first), "charlie": first >= 0 and is_charlie(first),
-		"hands": hands, "reason": "" if first >= 0 else "Every hand was a push. Nobody shoots.",
+		"losers": losers, "hands": hands,
+		"reason": "" if first >= 0 else ("The dealer is out. Nobody shoots." if not d.alive else "Nobody lost to the dealer. Nobody gets shot."),
 	}
 	last_result = result
 	phase = "round_over"
@@ -255,7 +281,7 @@ func _pass_gun() -> void:
 		if not players[next[0]].alive:
 			continue
 		phase = "shoot"
-		gun = {"holder": next[0], "shells": next[1], "total": next[1]}
+		gun = {"holder": next[0], "shells": next[1], "total": next[1], "targets": next[2]}
 		_emit("gun_passed", {"seat": next[0], "shells": next[1]})
 		return
 	if phase != "match_over":
@@ -264,7 +290,19 @@ func _pass_gun() -> void:
 
 
 func shoot(shooter: int, target: int) -> Dictionary:
+	if gun != null and gun.has("targets") and int(gun["holder"]) == shooter and not gun["targets"].has(target):
+		return _fail("The dealer can only shoot players who lost.")
 	var res := super.shoot(shooter, target)
+	if res["ok"] and phase == "shoot" and gun != null and gun.has("targets"):
+		var anyone := false
+		for t in gun["targets"]:
+			if players[t].alive:
+				anyone = true
+		if not anyone:
+			# everyone who lost is already dead: put the gun down
+			_emit("gun_empty", {"seat": shooter})
+			phase = "round_over"
+			gun = null
 	if res["ok"] and phase == "round_over":
 		_pass_gun() # this one's empty: next shooter
 	return res
@@ -469,6 +507,9 @@ func _recheck_hands() -> void:
 			p.stood = true
 	if phase != "play":
 		return
+	_blackjack_shots()
+	if phase != "play":
+		return
 	if players[me].bust:
 		_next_turn()
 	elif _all_bust_but_dealer():
@@ -548,6 +589,7 @@ func snapshot(view_seat: int) -> Dictionary:
 	var d := super.snapshot(view_seat)
 	d["order"] = _order.duplicate()
 	d["shooters"] = _shooters.duplicate(true)
+	d["shot_dealer"] = _shot_dealer.duplicate()
 	d["hit_this_turn"] = _hit_this_turn
 	return d
 
@@ -556,4 +598,5 @@ func load_snapshot(d: Dictionary) -> void:
 	super.load_snapshot(d)
 	_order = d.get("order", [])
 	_shooters = d.get("shooters", [])
+	_shot_dealer = d.get("shot_dealer", {})
 	_hit_this_turn = d.get("hit_this_turn", false)
