@@ -30,7 +30,10 @@ var session: Session
 var profile_name := ""
 var my_look: Dictionary = {} # your character, from the customiser
 var setup_looks: Array = [] # pass & play: each player's character
-var _editing: Dictionary = {} # the look being changed in the customiser
+var _editing: Dictionary = {} # the look being made in the creator
+var _editing_index := -1 # which of your characters it is (-1: a new one)
+var _picked: Dictionary = {} # highlighted on the character select screen
+var custom_looks: Array = [] # characters you've made
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
 var menu_message := ""
@@ -263,6 +266,9 @@ func _load_settings() -> void:
 	profile_name = cfg.get_value("profile", "name", "")
 	graphics = cfg.get_value("video", "graphics", "PS3")
 	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
+	custom_looks = []
+	for c in cfg.get_value("profile", "customs", []):
+		custom_looks.append(Looks.clean(c))
 
 
 func _save_settings() -> void:
@@ -272,6 +278,7 @@ func _save_settings() -> void:
 	cfg.set_value("profile", "name", profile_name)
 	cfg.set_value("video", "graphics", graphics)
 	cfg.set_value("profile", "look", my_look)
+	cfg.set_value("profile", "customs", custom_looks)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -456,22 +463,90 @@ func _on_session_ended(reason: String) -> void:
 	show_menu()
 
 
-# ================================================================ customiser
+# ================================================================ characters
+
+## Presets first, then the player's own creations.
+func _all_characters() -> Array:
+	var out := []
+	for i in range(Looks.PRESETS.size()):
+		out.append(Looks.preset(i))
+	for c in custom_looks:
+		out.append(c)
+	return out
+
 
 func _open_customiser() -> void:
 	var n := _name_edit.text.strip_edges().to_upper().left(10)
 	if n != "":
 		profile_name = n
-	_editing = my_look.duplicate()
-	show_customiser()
+	_picked = my_look.duplicate()
+	show_character_select()
 
 
-## Your character: a 3D preview up top, the choices underneath.
-func show_customiser() -> void:
+## A 3D preview of the picked character up top; underneath, every character
+## as a tile, with a + tile at the end to make your own.
+func show_character_select() -> void:
+	var box := _character_screen(_picked)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 330)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	box.add_child(scroll)
+	var all := _all_characters()
+	var picked_tile: Control = null
+	for i in range(all.size()):
+		var look: Dictionary = all[i]
+		var tile := _button(_short_name(look), _pick_character.bind(look), 20)
+		tile.custom_minimum_size = Vector2(0, 58)
+		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tile.clip_text = true
+		var mine: bool = i >= Looks.PRESETS.size()
+		if look.get("name", "") == _picked.get("name", "") and look.get("base", "") == _picked.get("base", ""):
+			Palette.accent(tile, Palette.AMBER)
+			picked_tile = tile
+		elif mine:
+			Palette.accent(tile, Palette.PURPLE)
+		grid.add_child(tile)
+	var plus := _button("+", _create_character, 40)
+	plus.custom_minimum_size = Vector2(0, 58)
+	plus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	Palette.accent(plus, Palette.GOLD)
+	grid.add_child(plus)
+	# keep the highlighted character in view
+	if picked_tile != null:
+		scroll.ensure_control_visible.call_deferred(picked_tile)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	var choose := _button("PLAY AS %s" % _short_name(_picked), _choose_character, 24)
+	Palette.accent(choose, Palette.AMBER)
+	choose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(choose)
+	if _custom_index(_picked) >= 0:
+		var edit := _button("EDIT", _edit_character, 24)
+		var del := _button("DELETE", _delete_character, 24)
+		Palette.accent(del, Palette.RED)
+		for b in [edit, del]:
+			b.custom_minimum_size = Vector2(110, 64)
+			buttons.add_child(b)
+	box.add_child(buttons)
+	var back := _button("BACK", _leave_customiser, 24)
+	back.custom_minimum_size = Vector2(0, 52)
+	box.add_child(back)
+
+
+## The shared layout: title, the 3D preview showing through, and a panel at
+## the bottom. Returns the panel's box.
+func _character_screen(look: Dictionary) -> VBoxContainer:
 	_close_overlay()
 	_clear(screen)
 	world.set_menu_mode(false)
-	world.show_preview(_editing)
+	world.show_preview(look)
 	var margin := MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right"]:
@@ -483,7 +558,7 @@ func show_customiser() -> void:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 8)
 	margin.add_child(col)
-	var title := _label(str(_editing.get("name", "CUSTOM")), 44, Palette.AMBER, true)
+	var title := _label(str(look.get("name", "CUSTOM")), 44, Palette.AMBER, true)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 10)
 	col.add_child(title)
@@ -491,14 +566,88 @@ func show_customiser() -> void:
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(gap)
-
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.88), Palette.BUTTON_EDGE, 2, 4, 14))
 	col.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
-	box.add_child(_choice_row("CHARACTER", str(_editing.get("name", "CUSTOM")), _step_preset.bind(-1), _step_preset.bind(1)))
+	return box
+
+
+func _pick_character(look: Dictionary) -> void:
+	_picked = look.duplicate()
+	show_character_select()
+
+
+func _choose_character() -> void:
+	my_look = Looks.clean(_picked)
+	if not setup_looks.is_empty():
+		setup_looks[0] = my_look.duplicate()
+	_save_settings()
+	_leave_customiser()
+
+
+## Which of your own characters this is (-1: a preset).
+func _custom_index(look: Dictionary) -> int:
+	for i in range(custom_looks.size()):
+		if custom_looks[i].get("name", "") == look.get("name", ""):
+			return i
+	return -1
+
+
+func _create_character() -> void:
+	_editing = _picked.duplicate()
+	_editing["name"] = _fresh_custom_name()
+	_editing_index = -1
+	show_creator()
+
+
+func _edit_character() -> void:
+	_editing = _picked.duplicate()
+	_editing_index = _custom_index(_picked)
+	show_creator()
+
+
+func _delete_character() -> void:
+	var i := _custom_index(_picked)
+	if i >= 0:
+		custom_looks.remove_at(i)
+		if my_look.get("name", "") == _picked.get("name", ""):
+			my_look = Looks.preset(1)
+		_picked = my_look.duplicate()
+		_save_settings()
+	show_character_select()
+
+
+func _fresh_custom_name() -> String:
+	var n := 1
+	while true:
+		var candidate := "MY CHARACTER %d" % n
+		if _custom_index({"name": candidate}) < 0:
+			return candidate
+		n += 1
+	return "MY CHARACTER"
+
+
+var _creator_name: LineEdit
+
+
+## Make (or change) one of your own characters.
+func show_creator() -> void:
+	var box := _character_screen(_editing)
+	var name_row := HBoxContainer.new()
+	name_row.add_child(_tag("NAME", 24, Palette.DIM))
+	_creator_name = LineEdit.new()
+	_creator_name.text = str(_editing.get("name", ""))
+	_creator_name.max_length = 20
+	_creator_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_creator_name.add_theme_color_override("font_color", Palette.INK)
+	_creator_name.add_theme_stylebox_override("normal", Palette.box(Color(0, 0, 0, 0.4), Palette.BUTTON_EDGE, 2, 2, 6))
+	_creator_name.add_theme_stylebox_override("focus", Palette.box(Color(0, 0, 0, 0.5), Palette.AMBER, 2, 2, 6))
+	_creator_name.text_changed.connect(func(t: String) -> void: _editing["name"] = t.strip_edges().to_upper())
+	name_row.add_child(_creator_name)
+	box.add_child(name_row)
 	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
 		var names: Dictionary = part[2]
 		box.add_child(_choice_row(part[0], names[_editing[part[1]]], _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
@@ -522,10 +671,10 @@ func show_customiser() -> void:
 	box.add_child(eyes)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
-	var save := _button("SAVE", _save_customiser)
+	var save := _button("SAVE", _save_creation)
 	Palette.accent(save, Palette.AMBER)
-	var back := _button("BACK", _leave_customiser)
-	for b in [save, back]:
+	var cancel := _button("CANCEL", show_character_select)
+	for b in [save, cancel]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		buttons.add_child(b)
 	box.add_child(buttons)
@@ -541,25 +690,13 @@ func _choice_row(label: String, value: String, on_prev: Callable, on_next: Calla
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 0)
-	var l := _label(label, 18, Palette.DIM, true)
-	mid.add_child(l)
+	mid.add_child(_label(label, 18, Palette.DIM, true))
 	mid.add_child(_label(value, 28, Palette.INK, true))
 	row.add_child(mid)
 	var nxt := _button(" > ", on_next, 28)
 	nxt.custom_minimum_size = Vector2(64, 52)
 	row.add_child(nxt)
 	return row
-
-
-func _step_preset(delta: int) -> void:
-	var at := -1
-	for k in range(Looks.PRESETS.size()):
-		if Looks.PRESETS[k]["name"] == _editing.get("name", ""):
-			at = k
-	if at < 0:
-		at = 0 if delta > 0 else 1
-	_editing = Looks.preset(at + delta)
-	show_customiser()
 
 
 func _step_part(delta: int, part: String, options: Array) -> void:
@@ -569,16 +706,32 @@ func _step_part(delta: int, part: String, options: Array) -> void:
 
 func _set_part(part: String, value) -> void:
 	_editing[part] = value
-	_editing["name"] = "CUSTOM"
-	show_customiser()
+	show_creator()
 
 
-func _save_customiser() -> void:
-	my_look = Looks.clean(_editing)
-	if not setup_looks.is_empty():
-		setup_looks[0] = my_look.duplicate()
+func _save_creation() -> void:
+	var char_name := str(_editing.get("name", "")).strip_edges().to_upper().left(20)
+	if char_name == "":
+		char_name = _fresh_custom_name()
+	# a preset's name, or another of yours: make it unique
+	var taken := func(n: String) -> bool:
+		for p in Looks.PRESETS:
+			if p["name"] == n:
+				return true
+		var i := _custom_index({"name": n})
+		return i >= 0 and i != _editing_index
+	while taken.call(char_name):
+		char_name += "*"
+	_editing["name"] = char_name
+	var look := Looks.clean(_editing)
+	look["name"] = char_name
+	if _editing_index >= 0:
+		custom_looks[_editing_index] = look
+	else:
+		custom_looks.append(look)
+	_picked = look.duplicate()
 	_save_settings()
-	_leave_customiser()
+	show_character_select()
 
 
 func _leave_customiser() -> void:
@@ -672,11 +825,12 @@ func _short_name(look: Dictionary) -> String:
 
 func _cycle_setup_look(i: int) -> void:
 	_read_names()
+	var all := _all_characters()
 	var at := -1
-	for k in range(Looks.PRESETS.size()):
-		if Looks.PRESETS[k]["name"] == setup_looks[i].get("name", ""):
+	for k in range(all.size()):
+		if all[k].get("name", "") == setup_looks[i].get("name", ""):
 			at = k
-	setup_looks[i] = Looks.preset(at + 1)
+	setup_looks[i] = all[(at + 1) % all.size()].duplicate()
 	show_setup()
 
 

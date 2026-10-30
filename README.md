@@ -26,12 +26,14 @@ over when they're knocked out. They live in `models/characters/`.
 
 ### Characters
 
-**CHARACTER** on the main menu opens the customiser: pick one of 19 ready-made
-characters (The Gambler, The Undertaker, The Cowpoke, The Dealer…) or build
-your own from 9 bodies, 8 outfit colours, 7 hats (their own, bowler, top hat,
-cowboy hat, flat cap, beanie, none), 5 face pieces (cigarette, cigar,
-eyepatch, shades, none) and glowing eyes. Your character is saved, and other
-players see it at the table, online too. In pass & play each player picks a
+**CHARACTER** on the main menu opens character select: a grid of the 19
+ready-made characters (The Gambler, The Undertaker, The Cowpoke, The Dealer…),
+then any you've made, then a **+** box. The **+** opens the creator: name your
+character and pick from 9 bodies, 8 outfit colours, 7 hats (their own, bowler,
+top hat, cowboy hat, flat cap, beanie, none), 5 face pieces (cigarette, cigar,
+eyepatch, shades, none) and glowing eyes. Your own characters can be edited or
+deleted. Whoever you play as is saved, and other players see them at the
+table, online too. In pass & play each player picks a
 character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 
 Change the sharpness under **GRAPHICS** on the main menu or the in-game MENU:
