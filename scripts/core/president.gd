@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## Shotgun President. Same table: a rotating dealer, items, a wild trump
 ## rank, health and the shotgun.
 ##
-## - All the cards are dealt out, plus 2 items each.
+## - All the cards are dealt out, no items (clearing the pile can find one).
 ## - 3 is low, then up to K, A, and 2 is high.
 ## - The player left of the dealer leads a single, a pair, three or four of a
 ##   kind. Going round, each player must beat it with the same number of a
@@ -90,7 +90,7 @@ func start_round() -> Dictionary:
 	while not deck.is_empty():
 		players[order[i % order.size()]].hand.append(deck.pop_back())
 		i += 1
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for k in range(int(options["items_dealt"])):
 		for s in order:
 			if not items.is_empty():
@@ -178,6 +178,8 @@ func _clear_pile() -> void:
 	pile_top = {}
 	passed = {}
 	_emit("pile_cleared", {"seat": turn})
+	if players[turn].alive:
+		_loot(players[turn], 0.34) # sometimes there's an item under the pile
 
 
 func can_pass(seat: int) -> bool:

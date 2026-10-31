@@ -53,7 +53,7 @@ func start_round() -> Dictionary:
 		p.ultimatum = false
 		p.extra_draws = 0
 	var order := _seats_from(next_alive(dealer))
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for k in range(int(options["items_dealt"])):
 		for s in order:
 			if not items.is_empty():

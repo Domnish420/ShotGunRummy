@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## Shotgun Go Fish. Same table as Shotgun Rummy: a rotating dealer, items
 ## shuffled into the pond, a wild trump rank, health and the shotgun.
 ##
-## - Everyone is dealt 7 cards (5 with 4 or more players) and 2 items. The
+## - Everyone is dealt 7 cards (5 with 4 or more players) . 3 rare items hide in the pond. The
 ##   rest of the cards and items are the pond (the stock).
 ## - On your turn, ASK another player for a rank you hold. If they have any,
 ##   they hand over all of them and you go again. If not: GO FISH, draw from
@@ -111,7 +111,7 @@ func start_round() -> Dictionary:
 		p.extra_draws = 0
 	var order := _seats_from(next_alive(dealer))
 	var deck := _shuffle(Cards.create_deck())
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for i in range(hand_size_for(order.size())):
 		for s in order:
 			players[s].hand.append(deck.pop_back())

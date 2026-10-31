@@ -178,7 +178,7 @@ func rules() -> Array:
 	var g = main.game
 	var common := [
 		"THE TABLE. One player deals each round and the player to their left leads the first trick. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. The cards are dealt out evenly (any left over are set aside), plus 2 item cards each.",
+		"THE DEAL. The cards are dealt out evenly (any left over are set aside). Nobody starts with items: win a trick and you might find one (only 3 turn up each round).",
 		"TRICKS. Everyone plays one card. Follow the suit that was led if you can (the cards you can play glow gold). The highest card of the led suit wins the trick (aces high), and the winner leads the next one.",
 	]
 	if g.kind == "hearts":

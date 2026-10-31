@@ -1,7 +1,7 @@
 extends "res://scripts/core/game.gd"
 ## Shotgun Poker: Texas Hold'em where you bet shells instead of chips.
 ##
-## - Everyone gets 2 cards face down and 2 items. Five cards are dealt face up
+## - Everyone gets 2 cards face down (no items: they turn up as loot). Five cards are dealt face up
 ##   in the middle over the round: three (the flop), then one (the turn), then
 ##   one (the river), with a betting round before each and after the last.
 ## - Betting starts left of the dealer. CHECK (or CALL a raise), RAISE, or
@@ -163,7 +163,7 @@ func start_round() -> Dictionary:
 	for i in range(2):
 		for s in order:
 			players[s].hand.append(deck.pop_back())
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for k in range(int(options["items_dealt"])):
 		for s in order:
 			if not items.is_empty():
@@ -234,6 +234,10 @@ func _next_actor() -> void:
 			c["shown"] = true
 			board.append(c)
 	_emit("board", {"street": STREETS[street], "cards": board.duplicate(true)})
+	# now and then an item comes out with the cards, to someone still in
+	var live := _in_hand()
+	if not live.is_empty():
+		_loot(players[live[rng.randi_range(0, live.size() - 1)]], 0.25)
 	_start_street()
 
 

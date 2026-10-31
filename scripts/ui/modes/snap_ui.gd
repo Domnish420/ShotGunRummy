@@ -132,7 +132,7 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TABLE. 2 to 6 players. One player deals each round and the player to their left flips first. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. All the cards are dealt face down into everyone's own pile, with the items shuffled in, plus 2 items each in your hand. Nobody looks at their pile.",
+		"THE DEAL. All the cards are dealt face down into everyone's own pile, with just 3 rare items shuffled in. Nobody looks at their pile.",
 		"YOUR TURN. FLIP the top card of your pile onto the pile in the middle (tap your pile or press FLIP). Flip an item and you keep it and flip again.",
 		"SNAP! When the top two cards in the middle match, anyone can press SNAP! at any time. The first to snap wins every card in the middle.",
 		"WRONG SNAPS. Snap when they don't match and you lose 1 health (in normal mode, 2 cards from your pile go in the middle).",

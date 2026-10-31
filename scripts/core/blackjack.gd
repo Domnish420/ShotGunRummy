@@ -3,7 +3,7 @@ extends "res://scripts/core/game.gd"
 ## shuffled into the stock, trump cards, health and the shotgun.
 ##
 ## Everyone plays against the dealer, who is one of the players:
-## - Everyone is dealt 2 cards (one face down, one face up) and 2 items.
+## - Everyone is dealt 2 cards (one face down, one face up). 3 rare items hide in the stock.
 ## - Starting left of the dealer and going round to the left, each player
 ##   HITs (takes a card) as often as they like, then STANDs. The dealer plays
 ##   last. Use items any time on your turn. Draw an item and you keep it and
@@ -24,7 +24,6 @@ func _init() -> void:
 	options["trump_cards"] = false # trumps are Rummy's
 	options.merge({
 		"hand_size": 2,
-		"items_dealt": 2,
 		"charlie_cards": 5,
 	}, true)
 
@@ -128,7 +127,7 @@ func start_round() -> Dictionary:
 
 	_order = _seats_from(next_alive(dealer))
 	var deck := _shuffle(Cards.create_deck())
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	# first card face down, second face up
 	for i in range(int(options["hand_size"])):
 		for s in _order:

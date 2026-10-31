@@ -14,7 +14,7 @@ extends RefCounted
 const GAMES := {
 	"rummy": [
 		["start", "RUMMY. The aim: get rid of every card in your hand by laying them down in MELDS."],
-		["start", "Everyone gets 7 cards and 2 items. The other items are shuffled into the face-down STOCK."],
+		["start", "Everyone gets 7 cards. Nobody starts with items: just 3 rare ones are shuffled into the face-down STOCK."],
 		["start", "TRUMPS. Each round one rank is wild: aces in round 1, twos in round 2, up to kings. A trump (gold star) stands in for any card in any meld."],
 		["start", "On your first turn you can't put anything down: just draw and discard."],
 		["draw:source=stock", "YOUR TURN: draw 1 card, from the stock or the top of the discard pile."],
@@ -29,7 +29,7 @@ const GAMES := {
 	],
 	"blackjack": [
 		["start", "BLACKJACK. Everyone plays against the DEALER, who's one of the players (the white chip)."],
-		["start", "Everyone gets 2 cards, one face down and one face up, and 2 items."],
+		["start", "Everyone gets 2 cards, one face down and one face up. Only 3 rare items hide in the stock."],
 		["start", "Count your cards: 2 to 10 their number, J Q K are 10, an ace is 1 or 11. Get closer to 21 than the dealer, without going over."],
 		["hit", "HIT: take another card. As many as you like."],
 		["stand", "STAND: happy with your total, and your turn's over. 21 or 5 cards stands for you."],
@@ -39,7 +39,7 @@ const GAMES := {
 	],
 	"gofish": [
 		["start", "GO FISH. The aim: collect BOOKS, four of a kind."],
-		["start", "7 cards each (5 with 4 or more players) and 2 items. The rest are the POND."],
+		["start", "7 cards each (5 with 4 or more players). The rest are the POND, with 3 rare items hidden in it."],
 		["ask", "YOUR TURN: pick a card you hold and ASK another player for that rank."],
 		["ask:count=0", "They didn't have any: GO FISH! Draw from the pond. Fish the rank you asked for and you go again."],
 		["go_fish:lucky=true", "A lucky catch: they fished the rank they asked for, so they go again."],
@@ -48,7 +48,7 @@ const GAMES := {
 		["end", "Listen to what people ask for: they must be holding that rank. Ask them for it later!"],
 	],
 	"cheat": [
-		["start", "CHEAT. The aim: get rid of every card. All 52 are dealt out, plus 2 items each."],
+		["start", "CHEAT. The aim: get rid of every card. All 52 are dealt out."],
 		["start", "Cards go down face down in order: aces, then twos, then threes, up to kings, then round again."],
 		["play", "Put down 1 to 4 cards and say they're the rank that's due. You're allowed to LIE."],
 		["called", "CHEAT! Before playing, you can call the last player out. Their cards are turned over."],
@@ -59,7 +59,7 @@ const GAMES := {
 	],
 	"hearts": [
 		["start", "HEARTS. The aim: DON'T take hearts. Each one is 1 point, the Queen of Spades is 13. Fewest points wins."],
-		["start", "The cards are dealt out evenly, plus 2 items. One player leads a card, everyone plays one: that's a TRICK."],
+		["start", "The cards are dealt out evenly. One player leads a card, everyone plays one: that's a TRICK."],
 		["trick_card", "FOLLOW SUIT: play the suit that was led if you can (the cards you can play glow gold)."],
 		["trick_won", "The highest card of the suit led takes the trick, and everything in it. They lead next."],
 		["hearts_broken", "Hearts are BROKEN: now they can be led. Before this, nobody could lead one."],
@@ -92,7 +92,7 @@ const GAMES := {
 		["exchange", "THE SCUM PAYS UP: their best card goes to the President, who hands back their worst."],
 	],
 	"poker": [
-		["start", "POKER: Texas Hold'em, betting SHELLS instead of chips. Everyone gets 2 cards face down and 2 items."],
+		["start", "POKER: Texas Hold'em, betting SHELLS instead of chips. Everyone gets 2 cards face down."],
 		["bet:action=check", "CHECK: stay in without raising."],
 		["bet:action=raise", "RAISE: load another shell into the shotgun (up to 3). Everyone still in must CALL it, or fold."],
 		["bet:action=call", "CALL: match the raise and stay in."],
@@ -106,6 +106,7 @@ const GAMES := {
 ## The house rules every cartridge shares.
 const COMMON := [
 	["start", "THE DEALER: the white chip shows who deals. The player to their left goes first, and the deal moves one seat to the right each round."],
+	["loot", "ITEMS ARE RARE: nobody starts with any, and only 3 turn up each round. Finding one can change the game."],
 	["item_used", "ITEMS: tap one of your items, then USE ITEM. Use as many as you like on your turn, but they don't carry over to the next round."],
 	["round_end", "THE SHOTGUN: whoever wins the round is handed it, loaded with shells."],
 	["shot", "They pick who to shoot. Each shell takes 1 health, and everyone has 4."],

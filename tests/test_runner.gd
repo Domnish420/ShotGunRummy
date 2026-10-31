@@ -38,7 +38,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -463,7 +463,7 @@ func test_deal() -> void:
 	var g := new_game(4)
 	for p in g.players:
 		check(p.hand.size() == 7, "7 cards each")
-		check(p.items.size() == 2, "2 items each")
+		check(p.items.is_empty(), "nobody starts with items")
 	var playing := 0
 	var items := 0
 	for c in g.stock:
@@ -472,7 +472,7 @@ func test_deal() -> void:
 		else:
 			playing += 1
 	check(playing == 52 - 28 - 1, "the rest of the playing cards are the stock")
-	check(items == Items.create_item_deck().size() - 8, "leftover items are shuffled into the stock")
+	check(items == 3, "only 3 items are shuffled into the stock")
 	check(not g.top_discard().has("item"), "the discard pile starts with a playing card")
 
 
@@ -594,6 +594,7 @@ func test_magnifier_and_beer() -> void:
 
 func test_adrenaline() -> void:
 	var g := new_game(2)
+	_give_item(g, 1, "beer", 7)
 	var before: int = g.players[1].items.size()
 	var r := g.use_item(0, _give_item(g, 0, "adrenaline"), 1)
 	check(r["ok"], "steal")
@@ -734,7 +735,7 @@ func test_bj_deal() -> void:
 	check(g.kind == "blackjack" and g.phase == "play", "blackjack starts on someone's turn")
 	check(g.turn == g.next_alive(g.dealer), "left of the dealer goes first")
 	for p in g.players:
-		check(p.hand.size() == 2 and p.items.size() == 2, "2 cards and 2 items each")
+		check(p.hand.size() == 2 and p.items.is_empty(), "2 cards each and no items")
 		check(not p.hand[0].get("shown", false) and p.hand[1].get("shown", false), "one down, one up")
 	# what others see
 	var snap := g.snapshot(0)
@@ -1433,6 +1434,35 @@ func test_trumps_only_rummy() -> void:
 			for c in p.items + p.hand:
 				if c.has("item") and kind != "rummy":
 					check(c["item"] != "tarot" and c["item"] != "joker_paint", "%s: no trump items dealt" % kind)
+
+
+## Items are rare: nobody is dealt any, and only 3 are in play each round.
+func test_items_scarce() -> void:
+	for kind in Games.kinds():
+		for n in [2, 4, 6]:
+			if n < int(Games.LIST[kind]["min"]) or n > int(Games.LIST[kind]["max"]):
+				continue
+			var g = Games.make(kind)
+			g.setup(Array(["A", "B", "C", "D", "E", "F"]).slice(0, n), {}, 4)
+			g.start_round()
+			var total := 0
+			for c in g.stock + g.item_deck:
+				if c.has("item"):
+					total += 1
+			for p in g.players:
+				check(p.items.is_empty(), "%s: nobody starts with items" % kind)
+				for c in p.hand:
+					if c.has("item"):
+						total += 1
+			check(total == 3, "%s with %d: 3 items this round (%d)" % [kind, n, total])
+		var plain = Games.make(kind, true)
+		plain.setup(["A", "B", "C"], {}, 4)
+		plain.start_round()
+		var none := true
+		for c in plain.stock + plain.item_deck:
+			if c.has("item"):
+				none = false
+		check(none, "%s normal: no items at all" % kind)
 
 
 # ================================================================ poker

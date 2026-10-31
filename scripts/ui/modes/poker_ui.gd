@@ -127,7 +127,7 @@ func rules() -> Array:
 	return [
 		"POKER: TEXAS HOLD'EM, BETTING SHELLS. 2 to 6 players.",
 		"THE TABLE. One player deals (the dealer chip) and the player to their left bets first. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. Everyone gets 2 cards face down and 2 item cards. Five cards are dealt face up in the middle: three (the flop), one (the turn), then one (the river). There's a round of betting before each and after the last.",
+		"THE DEAL. Everyone gets 2 cards face down. Nobody starts with items: each new street someone still in might find one (only 3 turn up each round). Five cards are dealt face up in the middle: three (the flop), one (the turn), then one (the river). There's a round of betting before each and after the last.",
 		"BETTING. CHECK, or RAISE to load another shell into the shotgun (max 3). Once someone raises, everyone else still in must CALL it or FOLD.",
 		"FOLDING. Fold and you can't win the round, but you're safe: the winner can't shoot you.",
 		"WINNING. Best five-card hand from your two cards and the five in the middle. From best: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, a pair, high card. If everyone else folds, the last one in wins.",

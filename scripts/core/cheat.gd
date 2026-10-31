@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## Shotgun Cheat. Same table as Shotgun Rummy: a rotating dealer, items, a
 ## wild trump rank, health and the shotgun.
 ##
-## - All 52 cards are dealt out, plus 2 items each. The other items wait in a
+## - All 52 cards are dealt out, with no items. The round's 3 items wait in a
 ##   pile of their own.
 ## - Cards go down in rank order: aces first, then twos, up to kings, then
 ##   round again. On your turn put 1 to 4 cards face down on the pile and say
@@ -53,7 +53,7 @@ func start_round() -> Dictionary:
 		p.extra_draws = 0
 	var order := _seats_from(next_alive(dealer))
 	var deck := _shuffle(Cards.create_deck())
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	var i := 0
 	while not deck.is_empty():
 		players[order[i % order.size()]].hand.append(deck.pop_back())

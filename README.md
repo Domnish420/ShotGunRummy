@@ -176,8 +176,9 @@ the game ends for everyone. When exporting an app for Android, tick the
 - **The table.** One player deals each round and the player to their left goes
   first. Next round the deal moves one seat to the right, so whoever dealt last
   round goes first.
-- **The deal.** Everyone gets 7 playing cards and 2 item cards. The other item
-  cards are shuffled into the stock, so a draw can give you an item instead.
+- **The deal.** Everyone gets 7 playing cards. Nobody starts with items: only 3
+  item cards are shuffled into the stock each round, so a draw can now and then
+  give you an item instead.
 - **Your turn.** Draw 1 card (from the stock or the top of the discard pile),
   meld, lay off and use items as much as you like, then **discard 1 card**.
   If the stock gives you an item, keep it and draw again until you get a
@@ -211,8 +212,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   them. The player to the dealer's left goes first, play goes round to the
   left, and the dealer plays last. Each round the deal moves one seat to the
   right, just like Rummy.
-- **The deal.** Everyone gets 2 cards, one face down and one face up, and 2
-  item cards. The rest of the items are shuffled into the stock. The deck is
+- **The deal.** Everyone gets 2 cards, one face down and one face up.
+  Only 3 rare items are shuffled into the stock. The deck is
   shuffled fresh every round.
 - **Your turn.** **HIT** (or tap the stock) to take a card, as often as you
   like, then **STAND**. Use items any time in your turn. Draw an item and you
@@ -243,7 +244,7 @@ the game ends for everyone. When exporting an app for Android, tick the
 
 ## How to play Go Fish
 
-- **The deal.** 7 cards each (5 with 4 or more players) and 2 items. The rest
+- **The deal.** 7 cards each (5 with 4 or more players). The rest
   of the cards and the items are the **pond**.
 - **Your turn.** Tap a card to pick its rank, then **ASK** a player for it. If
   they have any, they hand them all over and you go again. If not, **go fish**:
@@ -261,7 +262,7 @@ the game ends for everyone. When exporting an app for Android, tick the
 
 ## How to play Cheat
 
-- **The deal.** All 52 cards are dealt out, plus 2 items each.
+- **The deal.** All 52 cards are dealt out. Catch a liar to get an item.
 - **Your turn.** Cards go down in order: aces, then twos, up to kings, then
   round again. Tap 1 to 4 cards and **PLAY** them face down as the rank that's
   due. You can lie.
@@ -281,7 +282,7 @@ the game ends for everyone. When exporting an app for Android, tick the
 ## How to play Hearts and Spades
 
 Both are trick-taking games. The cards are dealt out evenly (any left over are
-set aside), plus 2 items each. The player left of the dealer leads; everyone
+set aside). Winning a trick can find an item. The player left of the dealer leads; everyone
 plays one card, following the suit that was led if they can (playable cards
 glow gold), and the highest card of that suit takes the trick (aces high). The
 round's **trump rank is wild**: a trump can be played any time and wins the
@@ -305,7 +306,7 @@ trick (the first one played, if there's more than one).
 ## How to play Snap
 
 - **The deal.** All the cards go face down into everyone's own pile, with the
-  items shuffled in, plus 2 items each. Nobody looks at their pile.
+  3 rare items shuffled in. Nobody looks at their pile.
 - **Your turn.** **FLIP** your top card onto the middle (or tap your pile).
   Flip an item and you keep it and flip again.
 - **SNAP!** When the top two cards in the middle match (same rank, or either
@@ -323,7 +324,7 @@ trick (the first one played, if there's more than one).
 
 ## How to play President
 
-- **The deal.** All the cards are dealt out, plus 2 items each. 3 is low, then
+- **The deal.** All the cards are dealt out. Clearing the pile can find an item. 3 is low, then
   up to K, A, and 2 is high.
 - **Playing.** The leader plays a single, a pair, three or four of a kind.
   Going round, each player beats it with the same number of a higher rank, or
@@ -335,7 +336,7 @@ trick (the first one played, if there's more than one).
 
 ## How to play Poker
 
-- **The deal.** Texas Hold'em: 2 cards face down each, plus 2 items. Five
+- **The deal.** Texas Hold'em: 2 cards face down each. Items turn up as loot. Five
   cards go face up in the middle: the flop (3), the turn (1) and the river (1),
   with a round of betting before each and after the last.
 - **Betting shells.** There are no chips. **CHECK**, or **RAISE** to load
@@ -351,7 +352,8 @@ trick (the first one played, if there's more than one).
 
 ### Items (Rummy)
 
-Everyone is dealt 2 items each round; the rest are shuffled into the stock.
+Items are rare: nobody is dealt any, and only 3 are shuffled into the stock
+each round. Finding one can change the game.
 Use as many as you like on your turn. Copies are in brackets; tune them in
 `scripts/core/items.gd`.
 

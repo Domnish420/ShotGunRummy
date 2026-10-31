@@ -169,7 +169,7 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TABLE. 2 to 6 players. One player deals each round and the player to their left goes first. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. Everyone gets 7 cards (5 with 4 or more players) and 2 item cards. The rest of the cards and the items are the POND.",
+		"THE DEAL. Everyone gets 7 cards (5 with 4 or more players). The rest are the POND, with just 3 rare items hidden in it.",
 		"YOUR TURN. Tap a card to pick its rank, then ASK a player for that rank. If they have any, they hand them all over and you go again. If not, GO FISH: you draw from the pond. If you draw the rank you asked for, you go again. Otherwise your turn ends. Draw an item and you keep it and draw again.",
 		"BOOKS. Four of a kind is a BOOK, and goes down in front of you by itself.",
 		"THE END. The round ends when someone has to fish and the pond is empty, or nobody has any cards. Most books wins (a tie goes to whoever holds fewer cards).",

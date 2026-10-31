@@ -1740,6 +1740,8 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("— ROUND %d — %s deals. %s goes first." % [d["round"], _name(d["dealer"]), _name(d["first"])])
 		"turn_start":
 			turn_counter += 1
+		"loot":
+			_log("%s finds an item." % _name(d["seat"]))
 		"hit":
 			_log("%s hits: %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
 		"stand":
@@ -1833,6 +1835,8 @@ func _event_sound(kind: String, d: Dictionary) -> void:
 				get_tree().create_timer(0.25).timeout.connect(_sound.bind("your_turn"))
 		"turn_skipped":
 			_sound("item_handcuffs")
+		"loot":
+			_sound("pick_item")
 		"draw", "hit", "flip", "trick_card", "board":
 			_sound("flick")
 		"discard", "play", "president_play":
@@ -2041,7 +2045,7 @@ func _handle(res: Dictionary) -> bool:
 
 const BLACKJACK_RULES := [
 	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player is the dealer, and everyone else plays against them. The player to the dealer's left goes first, play goes round to the left, and the dealer plays last. Next round the deal moves one seat to the right.",
-	"THE DEAL. Everyone gets 2 cards, one face down and one face up, and 2 item cards. The other items are shuffled into the stock. The deck is shuffled fresh every round.",
+	"THE DEAL. Everyone gets 2 cards, one face down and one face up. Items are rare: only 3 are shuffled into the stock each round. The deck is shuffled fresh every round.",
 	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
@@ -3221,7 +3225,7 @@ func _show_rules() -> void:
 	box.add_child(_title("RULES"))
 	var lines: Array = mode_ui.rules() if mode_ui != null else (BLACKJACK_RULES if _blackjack() else [
 		"THE TABLE. 2 to 6 players, either passing one phone around (PASS & PLAY) or each on their own phone in a lobby on the same Wi-Fi. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
-		"THE DEAL. Everyone gets 7 playing cards and 2 item cards. The other item cards are shuffled into the stock, so a draw from it can give you an item instead of a playing card.",
+		"THE DEAL. Everyone gets 7 playing cards. Nobody starts with items: just 3 item cards are shuffled into the stock each round, so a draw from it can now and then give you an item instead of a playing card.",
 		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
 		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
 		"LAYING OFF. Add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",

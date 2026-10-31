@@ -125,7 +125,7 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TABLE. 2 to 6 players. One player deals each round and the player to their left leads. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. All the cards are dealt out, plus 2 item cards each.",
+		"THE DEAL. All the cards are dealt out. Nobody starts with items: clear the pile and you might find one (only 3 turn up each round).",
 		"RANKS. 3 is lowest, then up to K, then A, and 2 is the highest.",
 		"PLAYING. The leader plays a single, a pair, three or four of a kind. Going round, each player must beat it with the same number of cards of a higher rank, or PASS. Once you pass you sit out until the pile clears. When everyone else has passed, the pile clears and the last player to play leads again.",
 		"PRESIDENT AND SCUM. First to play their last card is PRESIDENT and wins. Whoever is left holding the most cards is the SCUM: next round they hand the President their best card and get the President's worst back.",

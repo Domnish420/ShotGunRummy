@@ -9,8 +9,8 @@ extends RefCounted
 ##    round goes first.
 ##
 ## Rummy (the classic card game):
-##  - Everyone gets 7 playing cards and 2 item cards. The leftover item cards
-##    are shuffled into the stock, so drawing from it can give you an item.
+##  - Everyone gets 7 playing cards. Nobody starts with items: only 3 item
+##    cards are shuffled into the stock each round, so a draw can give you one.
 ##  - Your turn: draw 1 card (stock or top of the discard pile), meld sets
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
 ##    the table, then discard 1 card. You can't discard the card you just took
@@ -83,14 +83,15 @@ class Player:
 
 ## Normal mode: the plain card game. No items, no health, no shotgun: win
 ## rounds instead, and the first to `rounds_to_win` takes the match.
-const NORMAL_MODE := {"shotgun": false, "items_dealt": 0, "items_in_stock": false}
+const NORMAL_MODE := {"shotgun": false, "items_dealt": 0, "items_in_stock": false, "items_per_round": 0}
 
 var options := {
 	"shotgun": true,
 	"rounds_to_win": 3, # normal mode
 	"hand_size": 7,
-	"items_dealt": 2,
+	"items_dealt": 0, # nobody starts a round holding items
 	"items_in_stock": true,
+	"items_per_round": 3, # items are rare: only this many turn up each round
 	"max_hp": 4,
 	"items_per_turn": 0, # 0 = no limit
 	"rummy_bonus": true,
@@ -316,7 +317,7 @@ func start_round() -> Dictionary:
 
 	var order := _seats_from(next_alive(dealer))
 	var deck := _shuffle(Cards.create_deck())
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for i in range(int(options["hand_size"])):
 		for s in order:
 			players[s].hand.append(deck.pop_back())
@@ -710,6 +711,26 @@ func _end_round(winner_seat: int, reason: String = "") -> void:
 		phase = "round_over"
 	_emit("round_end", result)
 	_check_normal_match()
+
+
+## This round's items: only a few (options.items_per_round), picked at random
+## from the item deck, so an item with more copies turns up more often. In
+## games with a stock they're shuffled into it; the others hand them out now
+## and then (see _loot).
+func _round_items() -> Array:
+	var n := int(options.get("items_per_round", 3))
+	if n <= 0:
+		return []
+	return _shuffle(Items.create_item_deck()).slice(0, n)
+
+
+## Games with nothing to draw: now and then an item turns up for `p`, while
+## this round's few last.
+func _loot(p: Player, chance: float) -> void:
+	if item_deck.is_empty() or not p.alive or not options["shotgun"] or rng.randf() >= chance:
+		return
+	p.items.append(item_deck.pop_back())
+	_emit("loot", {"seat": p.seat})
 
 
 ## Do players have cards the others mustn't see? (Snap doesn't: nobody looks.)

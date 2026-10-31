@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## What Hearts and Spades share: trick-taking on the Shotgun table.
 ##
 ## - The cards are dealt out evenly (any left over are set aside face down),
-##   plus 2 items each.
+##   no items (winning a trick can find one).
 ## - The player left of the dealer leads the first trick. Everyone plays one
 ##   card in turn; follow the suit that was led if you can. The highest card of
 ##   the led suit wins (aces high), and the winner leads the next trick.
@@ -59,7 +59,7 @@ func start_round() -> Dictionary:
 		for s in order:
 			players[s].hand.append(deck.pop_back())
 	burned = deck # left over: set aside face down
-	var items := _shuffle(Items.create_item_deck())
+	var items := _round_items()
 	for k in range(int(options["items_dealt"])):
 		for s in order:
 			if not items.is_empty():
@@ -238,6 +238,7 @@ func _settle() -> void:
 	last_trick = {"winner": w, "cards": trick.duplicate(true)}
 	_end_reveals_all()
 	_emit("trick_won", {"seat": w, "cards": cards, "tricks": tricks_won[w]})
+	_loot(players[w], 0.2) # sometimes there's an item in the trick
 	var winner_p: Player = players[w]
 	if winner_p.ultimatum:
 		winner_p.ultimatum = false

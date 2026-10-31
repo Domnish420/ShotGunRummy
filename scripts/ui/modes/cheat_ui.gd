@@ -158,7 +158,7 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TABLE. 2 to 6 players. One player deals each round and the player to their left goes first. Play goes round to the left, and next round the deal moves one seat to the right.",
-		"THE DEAL. All 52 cards are dealt out, plus 2 item cards each.",
+		"THE DEAL. All 52 cards are dealt out. Nobody starts with items: catch a liar and you get one (only 3 turn up each round).",
 		"YOUR TURN. Cards go down in order: aces, then twos, then threes, up to kings, then round again. Tap 1 to 4 cards and PLAY them face down as the rank that's due. You can lie.",
 		"CHEAT! Before you play, you can call CHEAT! on the player before you. Their cards are turned over. If any of them isn't what they said, they pick up the whole pile and you get an item. If they told the truth, you pick it up.",
 		"WINNING. Play your last card and you win, unless the next player calls CHEAT! and catches you.",
