@@ -41,6 +41,7 @@ func _initialize() -> void:
 				g.discard_pile.append(c)
 				break
 	g.melds.append({"id": "mx", "type": "run", "cards": meld_cards, "owner": 1})
+	g.players[0].items.append({"id": "I-beer-90", "item": "beer"}) # nobody is dealt items, so hand one over
 	main._refresh()
 	if main.world.dealing:
 		await main.world.deal_finished
