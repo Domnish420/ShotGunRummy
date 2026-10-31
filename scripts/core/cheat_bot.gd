@@ -26,7 +26,7 @@ static func next_action(game, seat: int, level: String, memory: Dictionary) -> A
 	if not item.is_empty():
 		return ["use_item", item]
 	if game.pending_win >= 0:
-		if level == "easy" and game.rng.randf() < 0.3:
+		if not game.can_call(seat) or (level == "easy" and game.rng.randf() < 0.3):
 			return ["let_go", []]
 		return ["call", []]
 	if game.can_call(seat) and not memory.get("decided", false):
@@ -100,7 +100,12 @@ static func choose_play(game, seat: int, level: String) -> Array:
 	if level != "easy":
 		spare.sort_custom(func(a, b): return (1 if keep.has(int(a["rank"])) else 0) < (1 if keep.has(int(b["rank"])) else 0))
 	else:
-		spare.shuffle()
+		# shuffle with the game's own dice, so a game can be replayed
+		for i in range(spare.size() - 1, 0, -1):
+			var j: int = game.rng.randi_range(0, i)
+			var tmp = spare[i]
+			spare[i] = spare[j]
+			spare[j] = tmp
 	while pick.size() < need and not spare.is_empty():
 		pick.append(spare.pop_front())
 	for c in me.hand: # still short (Double Down): anything will do

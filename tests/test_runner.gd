@@ -11,6 +11,8 @@ const Session = preload("res://scripts/net/session.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
 const GoFish = preload("res://scripts/core/gofish.gd")
 const Cheat = preload("res://scripts/core/cheat.gd")
+const Hearts = preload("res://scripts/core/hearts.gd")
+const Spades = preload("res://scripts/core/spades.gd")
 const Games = preload("res://scripts/core/games.gd")
 
 var _failures := 0
@@ -32,7 +34,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1156,7 +1158,7 @@ func test_ch_call() -> void:
 ## Every game's AI, all three levels, finishes whole matches with legal moves
 ## (the newer cartridges; Rummy and Blackjack have their own tests).
 func test_ai_all_games() -> void:
-	for kind in ["cheat"]:
+	for kind in ["cheat", "hearts", "spades"]:
 		var wins := {"easy": 0, "normal": 0, "hard": 0}
 		for s in range(1, 9):
 			var n := 2 + s % 5
@@ -1182,9 +1184,12 @@ func test_ai_all_games() -> void:
 				if act.is_empty():
 					check(false, "%s seed %d: no move in phase %s" % [kind, s, g.phase])
 					return
-				if not Session.perform(g, seat, act[0], act[1], true)["ok"]:
+				var res: Dictionary = Session.perform(g, seat, act[0], act[1], true)
+				if not res["ok"]:
 					refused += 1
 					Bot.note_failure(mem, act)
+					if refused == 25:
+						print("    %s seed %d stuck: %s %s -> %s (phase %s, %s)" % [kind, s, g.players[seat].bot, act, res["error"], g.phase, g.snapshot(seat).get("pending_win", "")])
 				if g.phase == "play":
 					var count := 0
 					for p in g.players:
@@ -1194,6 +1199,10 @@ func test_ai_all_games() -> void:
 					for c in g.stock + g.burned + g.discard_pile:
 						if not c.has("item"):
 							count += 1
+					if kind == "hearts" or kind == "spades":
+						count += g.trick.size()
+						for k in g.taken:
+							count += g.taken[k].size()
 					if count != 52:
 						check(false, "%s seed %d: %d cards in play" % [kind, s, count])
 						return
@@ -1202,3 +1211,97 @@ func test_ai_all_games() -> void:
 			if g.winner >= 0:
 				wins[g.players[g.winner].bot] += 1
 		print("  %s AI wins by level: %s" % [kind, wins])
+
+
+## Someone plays their last card, then an item empties the pile: there's
+## nothing to call, so the AI lets it go.
+func test_ch_empty_pile() -> void:
+	var g := new_ch(3, 9)
+	var a := g.turn
+	g.players[a].hand = cards("AH")
+	g.play(a, ["AH"])
+	var b := g.turn
+	g.players[b].bot = "hard"
+	g.players[b].items = [{"id": "I-garbage_day-1", "item": "garbage_day"}]
+	var other := g.next_alive(b)
+	check(g.use_item(b, "I-garbage_day-1", other)["ok"], "garbage day")
+	check(g.pending_win == a and not g.can_call(b), "nothing left to call")
+	var act := Bot.next_action(g, b, "hard", {})
+	check(act[0] == "let_go", "the AI lets it go: %s" % [act])
+
+
+# ================================================================ hearts and spades
+
+## Gives seats (in turn order from the leader) these hands.
+func _set_hands(g, hands: Array) -> Array:
+	var order := []
+	var s: int = g.turn
+	for i in range(hands.size()):
+		order.append(s)
+		g.players[s].hand = cards(hands[i])
+		s = g.next_alive(s)
+	g._start_trick(order[0])
+	return order
+
+
+func test_hearts() -> void:
+	var g := Hearts.new()
+	g.setup(["A", "B", "C", "D"], {}, 3)
+	g.start_round()
+	for p in g.players:
+		check(p.hand.size() == 13, "13 cards each with 4 players")
+	g.trump_rank = 7
+	var o := _set_hands(g, ["2C 5H", "9C QS", "KC 3H", "4D 6D"])
+	check(not g.play_card(o[0], "5H")["ok"], "hearts can't be led before they're broken")
+	check(g.play_card(o[0], "2C")["ok"], "lead a club")
+	check(not g.play_card(o[1], "QS")["ok"], "must follow suit")
+	g.play_card(o[1], "9C")
+	g.play_card(o[2], "KC")
+	var hp: int = g.players[o[2]].hp
+	g.play_card(o[3], "4D")
+	check(g.tricks_won[o[2]] == 1 and g.turn == o[2], "the king of clubs takes it and leads")
+	# trumps beat everything, played any time
+	g.players[o[2]].hand = cards("3H 7C")
+	g.players[o[3]].hand = cards("6D 7D")
+	g.players[o[0]].hand = cards("5H 8H")
+	g.players[o[1]].hand = cards("QS 2S")
+	g.broken = true
+	g._start_trick(o[2])
+	g.play_card(o[2], "3H")
+	check(g.legal_cards(o[3]).size() == 2, "no hearts: anything goes")
+	g.play_card(o[3], "7D") # a trump
+	g.play_card(o[0], "8H")
+	g.play_card(o[1], "QS")
+	check(g.tricks_won.get(o[3], 0) == 1, "the trump wins the trick")
+	check(g.players[o[3]].hp == g.players[o[3]].max_hp - 1, "taking the Queen of Spades costs 1 health")
+	check(g.points(o[3]) == 15, "2 hearts + the queen = 15 points")
+
+
+func test_spades() -> void:
+	var g := Spades.new()
+	g.setup(["A", "B", "C"], {}, 5)
+	g.start_round()
+	check(g.bidding and g.burned.size() == 1, "3 players: 17 each, 1 set aside, and bidding first")
+	var first := g.turn
+	check(not g.play_card(first, g.players[first].hand[0]["id"])["ok"], "no playing before bidding")
+	g.bid(g.turn, 1)
+	g.bid(g.turn, 0)
+	g.bid(g.turn, 2)
+	check(not g.bidding and g.turn == first, "bidding done: the leader plays")
+	g.trump_rank = 13
+	var o := _set_hands(g, ["AH 2S", "3H 4S", "5D 6C"])
+	g.play_card(o[0], "AH")
+	g.play_card(o[1], "3H")
+	g.play_card(o[2], "5D")
+	check(g.tricks_won[o[0]] == 1, "ace of hearts wins")
+	g.players[o[0]].hand = cards("9H 2S")
+	g.players[o[1]].hand = cards("4S 8C")
+	g.players[o[2]].hand = cards("JH 6C")
+	g._start_trick(o[0])
+	check(not g.play_card(o[0], "2S")["ok"], "spades can't be led until broken")
+	g.play_card(o[0], "9H")
+	g.play_card(o[1], "4S") # can't follow: trumps it with a spade
+	g.play_card(o[2], "JH")
+	check(g.tricks_won.get(o[1], 0) == 1, "a spade beats the jack of hearts")
+	check(g.round_score(o[0]) == 10, "bid 1, took 1: 10")
+	check(g.round_score(o[1]) == -50, "bid nil, took 1: -50")

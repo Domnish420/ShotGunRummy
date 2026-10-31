@@ -537,8 +537,8 @@ func _sync_figures(game, viewer: int) -> void:
 		if p.alive:
 			var life := "HP %d/%d" % [p.hp, p.max_hp] if game.options.get("shotgun", true) else "WINS %d" % p.rounds_won
 			lines.append("%s  %d CARDS" % [life, p.hand.size()])
-			if game.kind == "gofish":
-				lines.append("%d BOOKS" % game.books_of(p.seat).size())
+			if game.has_method("table_note"):
+				lines.append(game.table_note(p.seat))
 			var flags := []
 			if p.cuffed:
 				flags.append("CUFFED")
@@ -685,6 +685,9 @@ func sync(s: Dictionary) -> void:
 			_place(seen, c["id"], c, TABLE_CARD, _flat(pos, 0.0, true), true, true, "meld", m["id"], "target" if is_target else "", Cards.is_wild(c, trump_rank), stock_xf)
 		_label_at(game.players[m["owner"]].name, Vector3(base.x, TABLE_TOP + 0.01, base.z + 0.14), 22, Palette.DIM)
 
+	if game.kind == "hearts" or game.kind == "spades":
+		_trick_cards(seen, game, viewer, stock_xf)
+
 	# other players' hands and items, face down in front of them
 	for p in game.players:
 		if p.seat == viewer:
@@ -753,6 +756,36 @@ func sync(s: Dictionary) -> void:
 	_sync_gun(game, viewer)
 	_sync_spots(game, viewer)
 	_sync_dealer_chip(game, viewer)
+
+
+## Hearts and Spades: the trick in the middle, each card in front of whoever
+## played it. Between tricks the last one stays until the next card is played.
+## Tricks taken pile up face down in front of the winner.
+func _trick_cards(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> void:
+	var n: int = game.players.size()
+	var entries: Array = game.trick
+	var done := false
+	if entries.is_empty() and not game.last_trick.is_empty() and game.phase == "play":
+		entries = game.last_trick["cards"]
+		done = true
+	for t in entries:
+		var seat_pos := seat_position(int(t["seat"]), viewer, n)
+		var pos := _toward_center(seat_pos, 0.58)
+		pos.y = TABLE_TOP + 0.004
+		var yaw := atan2(-seat_pos.x, -seat_pos.z)
+		var c: Dictionary = t["card"]
+		var lit := "gold" if done and int(t["seat"]) == int(game.last_trick["winner"]) else ""
+		_place(seen, c["id"], c, TABLE_CARD, _flat(pos, yaw, true), true, true, "", "", lit, game.is_trump(c), spawn)
+	if done:
+		_label_at("%s TAKES IT" % game.players[int(game.last_trick["winner"])].name, Vector3(0, TABLE_TOP + 0.01, 0.12), 26, Palette.GOLD)
+	for p in game.players:
+		var won: int = int(game.tricks_won.get(p.seat, 0))
+		var seat_pos := seat_position(p.seat, viewer, n)
+		var side := Vector3.UP.cross(seat_pos.normalized()).normalized()
+		for i in range(mini(won, 6)):
+			var pos := _toward_center(seat_pos, 0.3) + side * 0.28
+			pos.y = TABLE_TOP + 0.002 + 0.003 * i
+			_place(seen, "won-%d-%d" % [p.seat, i], {}, OPP_CARD, _flat(pos, atan2(-seat_pos.x, -seat_pos.z) + i * 0.15, false), false, true, "", "", "", false, spawn)
 
 
 ## Cheat: the pile, face down and messy, with what's due next.

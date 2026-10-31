@@ -11,8 +11,11 @@ for whoever wins the hand.
 - **Shotgun Go Fish**: ask for cards, collect books of four.
 - **Shotgun Cheat**: play cards face down and lie about them. Get caught and
   pick up the pile.
+- **Shotgun Hearts**: don't take hearts, and stay away from the Queen of
+  Spades.
+- **Shotgun Spades**: everyone for themselves. Bid your tricks, then make it.
 
-Coming next: Hearts, Spades, Snap and President.
+Coming next: Snap and President.
 
 ### Cartridges
 
@@ -238,6 +241,30 @@ the game ends for everyone. When exporting an app for Android, tick the
   top card into your hand, Double Down makes someone put down 2+ cards, and the
   Revolver makes a caught liar spin as well.
 
+## How to play Shotgun Hearts and Spades
+
+Both are trick-taking games. The cards are dealt out evenly (any left over are
+set aside), plus 2 items each. The player left of the dealer leads; everyone
+plays one card, following the suit that was led if they can (playable cards
+glow gold), and the highest card of that suit takes the trick (aces high). The
+round's **trump rank is wild**: a trump can be played any time and wins the
+trick (the first one played, if there's more than one).
+
+- **Hearts.** Each heart taken is 1 point, the Queen of Spades 13; fewest
+  points wins. Hearts can't be led until one has been played. Taking the Queen
+  of Spades costs **1 health** on the spot. Take every point card and you
+  **shoot the moon**: 3 shells. Otherwise the winner gets 1 shell, +1 for
+  taking no points.
+- **Spades.** Everyone plays for themselves (2–6 players). Before the first
+  trick everyone **bids** how many tricks they'll take (0 is nil). Spades beat
+  the other suits and can't be led until one has been played. Make your bid:
+  10 a trick, +1 for each extra; miss it: −10 a trick; nil: ±50. Best round
+  score wins, with 1 shell, +1 for making the bid exactly, +1 for making nil.
+- **Items.** No stock or discard pile here, so the items that need one (and
+  the ones that skip turns or move cards in and out) are left out. The Revolver
+  makes someone spin if they win the next trick, and Double Down makes someone
+  play their highest card next.
+
 ### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
@@ -279,6 +306,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/blackjack_bot.gd` | The Blackjack AI. |
 | `scripts/core/gofish.gd`, `gofish_bot.gd` | Go Fish's rules and AI. |
 | `scripts/core/cheat.gd`, `cheat_bot.gd` | Cheat's rules and AI. |
+| `scripts/core/tricks.gd`, `hearts.gd`, `spades.gd`, `tricks_bot.gd` | Trick-taking, Hearts and Spades, and their AI. |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |

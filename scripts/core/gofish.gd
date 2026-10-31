@@ -24,6 +24,11 @@ func _init() -> void:
 	kind = "gofish"
 
 
+## Under the player's name at the table.
+func table_note(seat: int) -> String:
+	return "%d BOOKS" % books_of(seat).size()
+
+
 func hand_size_for(n: int) -> int:
 	return 7 if n <= 3 else 5
 

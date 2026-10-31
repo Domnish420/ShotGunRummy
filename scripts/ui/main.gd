@@ -24,6 +24,7 @@ const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
 const Games = preload("res://scripts/core/games.gd")
 const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
 const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
+const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -1943,6 +1944,8 @@ func _make_mode_ui():
 			return GoFishUI.new(self)
 		"cheat":
 			return CheatUI.new(self)
+		"hearts", "spades":
+			return TricksUI.new(self)
 	return null
 
 

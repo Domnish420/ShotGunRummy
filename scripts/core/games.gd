@@ -13,12 +13,16 @@ const Game = preload("res://scripts/core/game.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
 const GoFish = preload("res://scripts/core/gofish.gd")
 const Cheat = preload("res://scripts/core/cheat.gd")
+const Hearts = preload("res://scripts/core/hearts.gd")
+const Spades = preload("res://scripts/core/spades.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
 	"blackjack": {"name": "BLACKJACK", "color": Color(0.1, 0.32, 0.18), "min": 2, "max": 6},
 	"gofish": {"name": "GO FISH", "color": Color(0.12, 0.3, 0.55), "min": 2, "max": 6},
 	"cheat": {"name": "CHEAT", "color": Color(0.5, 0.36, 0.08), "min": 2, "max": 6},
+	"hearts": {"name": "HEARTS", "color": Color(0.62, 0.15, 0.32), "min": 2, "max": 6},
+	"spades": {"name": "SPADES", "color": Color(0.16, 0.16, 0.2), "min": 2, "max": 6},
 }
 
 ## Shotgun matches of a game to finish before its normal mode unlocks.
@@ -55,6 +59,10 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = GoFish.new()
 		"cheat":
 			g = Cheat.new()
+		"hearts":
+			g = Hearts.new()
+		"spades":
+			g = Spades.new()
 		_:
 			g = Game.new()
 	if normal:

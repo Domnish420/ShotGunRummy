@@ -91,8 +91,27 @@ const CHEAT := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it always tells the truth.", "copies": 1},
 }
 
+## Hearts and Spades: no stock or discard pile, and every trick needs a card
+## from everyone, so items that skip turns or move cards in and out are out.
+const TRICKS := {
+	"beer": {"copies": 0},
+	"magnifier": {"copies": 0},
+	"handcuffs": {"copies": 0},
+	"shakedown": {"copies": 0},
+	"switcheroo": {"copies": 0},
+	"sticky_fingers": {"copies": 0},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"copies": 0},
+	"bad_trade": {"copies": 1},
+	"spotlight": {"text": "A player's whole hand is shown to everyone until the trick ends.", "copies": 2},
+	"flashbang": {"text": "Every other player shows 2 random cards until the trick ends."},
+	"revolver": {"text": "If a player of your choice wins the next trick they play Russian roulette (1 in 6: lose 2 health).", "copies": 2},
+	"double_down": {"text": "A player of your choice must play their highest card next.", "copies": 2},
+	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: play it any time, it wins the trick.", "copies": 1},
+}
+
 ## Each game's changes to the items, by game.
-const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT}
+const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS}
 
 ## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.

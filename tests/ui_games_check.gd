@@ -7,8 +7,9 @@ extends SceneTree
 const Bot = preload("res://scripts/core/bot.gd")
 const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 const CheatBot = preload("res://scripts/core/cheat_bot.gd")
+const TricksBot = preload("res://scripts/core/tricks_bot.gd")
 
-const KINDS := ["gofish", "cheat"]
+const KINDS := ["gofish", "cheat", "hearts", "spades"]
 
 var fails := 0
 var main
@@ -105,6 +106,15 @@ func _play(kind: String, what: String) -> void:
 					main.mode_ui._call_pressed()
 				else:
 					main.selected = CheatBot.choose_play(g, 0, "normal")
+					main.mode_ui._first_pressed()
+			"hearts", "spades":
+				if g.kind == "spades" and g.bidding:
+					main.mode_ui._bid(TricksBot.choose_bid(g, 0, "normal"))
+				else:
+					var legal: Array = g.legal_cards(0)
+					if legal.is_empty():
+						continue
+					main.selected = [TricksBot.choose_card(g, 0, "normal", legal)["id"]]
 					main.mode_ui._first_pressed()
 	check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
 	check(my_moves > 0, "%s %s: you played" % [kind, what])
