@@ -41,9 +41,14 @@ the mode. In a lobby the host taps the cartridge to change it. A white
 - **Normal mode** is the plain card game: no items, no health, no shotgun. Win
   rounds instead; the first to 3 takes the match. It unlocks for a cartridge
   after you've finished 3 shotgun games of it.
-- **The DEMO** teaches each game in normal mode, against two easy AIs, with
-  tips on screen about what to do right now. The game offers one the first
-  time you open it.
+- **The DEMO** teaches each game. First it plays itself (every seat, yours
+  too, slowed down, and the same game every time) and explains each rule the
+  moment it comes up: a card pops up at the top, the game waits, and it moves
+  on by itself or when you tap NEXT. It's played in shotgun mode, so items and
+  the shotgun get explained too. After the watched round, any rule that didn't
+  come up gets its card, then you play 3 practice rounds against two easy
+  players with tips on screen. The game offers one the first time you open it.
+  Every game's lessons, and when they pop up, are in `scripts/ui/demo_lessons.gd`.
 
 ## Graphics
 
@@ -412,6 +417,13 @@ screens, a shotgun match and then its tutorial:
 
 ```
 godot --headless --path . -s tests/ui_games_check.gd
+```
+
+`tests/ui_demo_check.gd` watches every cartridge's demo and checks every
+rule gets explained:
+
+```
+godot --headless --path . -s tests/ui_demo_check.gd
 ```
 
 `tests/ui_blackjack_check.gd` plays Blackjack solo against two AIs

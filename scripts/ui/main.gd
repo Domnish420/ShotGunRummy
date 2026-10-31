@@ -23,6 +23,7 @@ const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
 
 const Games = preload("res://scripts/core/games.gd")
 const Chiptune = preload("res://scripts/audio/chiptune.gd")
+const DemoLessons = preload("res://scripts/ui/demo_lessons.gd")
 const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
 const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
 const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
@@ -53,7 +54,16 @@ var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
 var game_kind := "rummy" # which cartridge: see games.gd
 var normal_mode := false # the plain game: no items, no shotgun
-var tutorial := false # this game is the tutorial: normal mode with tips
+var tutorial := false # this game is the demo (watching it, or the practice)
+var demo_stage := "" # "watch": it plays itself and explains; "practice": your go
+const DEMO_ROUNDS := 3 # practice rounds after watching
+var _lessons: Array = [] # [trigger, text, done] for this demo
+var _lesson_queue: Array = [] # { text, then } waiting to be shown
+var _lesson_panel: PanelContainer
+var _lesson_text: Label
+var _lesson_time := 0.0 # seconds left on the card showing
+var _lesson_then := Callable()
+var _demo_wait := 0.0
 var played := {} # kind -> shotgun matches finished (normal mode unlocks)
 var tutorial_offered := false
 var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
@@ -186,6 +196,8 @@ func _ready() -> void:
 	overlay_layer = _full(Control.new())
 	overlay_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay_layer)
+
+	_build_lesson_panel()
 
 	flash_rect = ColorRect.new()
 	flash_rect.color = Color(1, 1, 1, 0)
@@ -440,6 +452,10 @@ func show_menu() -> void:
 	round_label = null
 	mode_ui = null
 	tutorial = false
+	demo_stage = ""
+	_lesson_queue = []
+	if _lesson_panel != null:
+		_lesson_panel.visible = false
 	world.hide_carousel()
 	world.set_menu_mode(true)
 	var box := _paper()
@@ -656,7 +672,9 @@ func _offer_tutorial() -> void:
 	box.add_child(_button("NO THANKS", _closing(_noop)))
 
 
-## DEMO: normal mode against two easy AIs, with tips on screen.
+## DEMO: first it plays itself (the same game every time, in shotgun
+## mode) and explains each rule as it comes up, then you play a few
+## practice rounds with tips.
 func _start_demo() -> void:
 	world.carousel_insert()
 	world.set_cartridge(game_kind)
@@ -670,8 +688,134 @@ func _start_tutorial() -> void:
 	var names := [me, "DOC", "PEARL"]
 	var looks := [my_look.duplicate(), Looks.preset(4), Looks.preset(9)]
 	local_mode = "solo"
-	_table = {"names": names, "looks": looks, "bots": ["", "easy", "easy"], "kind": game_kind, "normal": true, "tutorial": true}
+	demo_stage = "watch"
+	_lessons = []
+	for l in DemoLessons.for_game(game_kind):
+		_lessons.append([l[0], l[1], false])
+	_lesson_queue = []
+	# everyone, you too, is played for you; the same shuffle every time
+	_table = {"names": names, "looks": looks, "bots": ["normal", "normal", "normal"], "kind": game_kind, "normal": false, "tutorial": true, "seed": absi(hash(game_kind)) % 100000}
 	start_match()
+	for l in _lessons:
+		if l[0] == "start":
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+
+
+## A lesson's moment came: queue it (each one only once).
+func _demo_event(kind: String, d: Dictionary) -> void:
+	if demo_stage != "watch":
+		return
+	for l in _lessons:
+		if not l[2] and DemoLessons.matches(l[0], kind, d):
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+
+
+## The watched round is over: whatever didn't come up, then over to you.
+func _end_watch() -> void:
+	demo_stage = "recap"
+	for l in _lessons:
+		if not l[2]:
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+	_lesson_queue.append({"text": DemoLessons.PRACTICE % DEMO_ROUNDS, "then": _start_practice})
+
+
+func _start_practice() -> void:
+	demo_stage = "practice"
+	_table["bots"] = ["", "easy", "easy"]
+	_table.erase("seed")
+	start_match()
+
+
+## The card at the top that explains a rule. The game waits while it's up;
+## it moves on by itself after a few seconds, or tap NEXT.
+func _build_lesson_panel() -> void:
+	var layer := _full(MarginContainer.new())
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		layer.add_theme_constant_override("margin_" + side, 24)
+	layer.add_theme_constant_override("margin_top", 110)
+	add_child(layer) # above the table and the pop-ups
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(col)
+	_lesson_panel = PanelContainer.new()
+	_lesson_panel.add_theme_stylebox_override("panel", Palette.box(Color(0.06, 0.05, 0.04, 0.92), Palette.GOLD, 3, 2, 10))
+	_lesson_panel.visible = false
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	_lesson_panel.add_child(inner)
+	inner.add_child(_label("DEMO", 20, Palette.GOLD, true))
+	_lesson_text = _label("", 26, Palette.INK, true)
+	inner.add_child(_lesson_text)
+	var next := _button("NEXT ▸", _next_lesson, 24)
+	next.custom_minimum_size = Vector2(0, 50)
+	inner.add_child(next)
+	col.add_child(_lesson_panel)
+
+
+func _drive_lessons(delta: float) -> void:
+	if _lesson_panel == null or not is_instance_valid(_lesson_panel) or game == null:
+		return
+	if _lesson_panel.visible:
+		_lesson_time -= delta
+		if _lesson_time <= 0.0:
+			_next_lesson()
+		return
+	if _lesson_queue.is_empty() or world.dealing:
+		return
+	var l: Dictionary = _lesson_queue.pop_front()
+	_lesson_text.text = l["text"]
+	_lesson_then = l.get("then", Callable())
+	_lesson_time = 3.0 + l["text"].length() * 0.045
+	_lesson_panel.visible = true
+	_sound("pick_item")
+
+
+func _next_lesson() -> void:
+	if _lesson_panel == null or not _lesson_panel.visible:
+		return
+	_lesson_panel.visible = false
+	var then := _lesson_then
+	_lesson_then = Callable()
+	if then.is_valid():
+		then.call()
+
+
+func _lesson_showing() -> bool:
+	return _lesson_panel != null and is_instance_valid(_lesson_panel) and _lesson_panel.visible
+
+
+## While watching: press the buttons for you (watch the shotgun, then on to
+## your practice).
+func _drive_demo(delta: float) -> void:
+	if demo_stage != "watch" or game == null or _lesson_showing():
+		return
+	if overlay_layer.get_child_count() == 0 or (_overlay_kind != "result" and _overlay_kind != "gun"):
+		_demo_wait = 2.5
+		return
+	_demo_wait -= delta
+	if _demo_wait > 0.0:
+		return
+	_demo_wait = 2.5
+	if game.gun != null and _overlay_kind == "result":
+		_show_gun()
+	elif game.gun == null and (game.phase == "round_over" or game.phase == "match_over"):
+		_close_overlay()
+		_end_watch()
+
+
+## Practice over: well done.
+func _finish_demo() -> void:
+	demo_stage = ""
+	var box := _open_overlay(0.96, false, "match")
+	box.add_child(_title("YOU'VE GOT IT", Palette.GOLD))
+	box.add_child(_label("That's %s. Ready to play it for real?" % Games.label(game.kind), 28, Palette.INK, true))
+	box.add_child(_button("PLAY %s" % Games.label(game.kind), _closing(show_play_choice)))
+	box.add_child(_button("WATCH THE DEMO AGAIN", _closing(_start_tutorial)))
+	box.add_child(_button("MAIN MENU", show_menu))
 
 
 func _blackjack() -> bool:
@@ -1443,7 +1587,9 @@ func start_match() -> void:
 	world.hide_carousel()
 	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
 	tutorial = bool(_table.get("tutorial", false))
-	game.setup(_table["names"])
+	if not tutorial:
+		demo_stage = ""
+	game.setup(_table["names"], {}, int(_table.get("seed", -1)))
 	for i in range(game.players.size()):
 		game.players[i].look = _table["looks"][i]
 		game.players[i].bot = _table["bots"][i]
@@ -1553,6 +1699,7 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 	if mode_ui != null:
 		mode_ui.on_event(kind, d)
 	_event_sound(kind, d)
+	_demo_event(kind, d)
 	match kind:
 		"roulette":
 			world.roulette(d["seat"], d["hit"])
@@ -1905,7 +2052,7 @@ func _blackjack_shot_fx(shooter: int, target: int) -> void:
 func _refresh_coach() -> void:
 	if coach_label == null:
 		return
-	coach_label.visible = tutorial and not _hand_hidden
+	coach_label.visible = tutorial and demo_stage == "practice" and not _hand_hidden
 	if not coach_label.visible:
 		return
 	var tip := ""
@@ -2081,6 +2228,8 @@ const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld
 
 
 func _process(delta: float) -> void:
+	_drive_lessons(delta)
+	_drive_demo(delta)
 	_drive_ai(delta)
 
 
@@ -2112,7 +2261,7 @@ func _drive_ai(delta: float) -> void:
 	if seat < 0:
 		_ai_wait = maxf(_ai_wait, 0.8)
 		return
-	if world.dealing or world.fx_busy or _pending_cb.is_valid():
+	if world.dealing or world.fx_busy or _pending_cb.is_valid() or _lesson_showing():
 		return
 	if not _online():
 		# wait while the rules, log or menu are open, and for the gun to come out
@@ -2130,7 +2279,9 @@ func _drive_ai(delta: float) -> void:
 		_ai_wait = 0.5
 		return
 	_ai_wait = float(AI_PACE.get(act[0], 1.0))
-	if _people_alive() == 0:
+	if demo_stage == "watch":
+		_ai_wait *= 1.5 # slow enough to follow
+	elif _people_alive() == 0:
 		_ai_wait *= 0.4 # nobody left to watch closely
 	var res: Dictionary
 	if _online():
@@ -2905,6 +3056,12 @@ func _add_result_buttons(box: VBoxContainer, w: int) -> void:
 
 ## NEXT ROUND button, or a waiting note on phones that aren't the host.
 func _add_next_round(box: VBoxContainer) -> void:
+	if demo_stage == "practice" and game.round_num >= DEMO_ROUNDS:
+		box.add_child(_button("FINISH THE DEMO", _closing(_finish_demo)))
+		return
+	if demo_stage == "watch":
+		box.add_child(_label("The demo carries on by itself...", 24, Palette.DIM, true))
+		return
 	if not _online() or session.is_host():
 		box.add_child(_button("NEXT ROUND", _next_round))
 	else:
@@ -3016,6 +3173,9 @@ func _after_fire(res: Dictionary, shooter: int, target: int) -> void:
 
 
 func _show_match_end() -> void:
+	if demo_stage == "practice":
+		_finish_demo()
+		return
 	var box := _open_overlay(0.97, true, "match")
 	if game.winner >= 0:
 		box.add_child(_title("%s WALKS OUT" % _name(game.winner), Palette.AMBER))

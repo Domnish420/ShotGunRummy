@@ -65,10 +65,34 @@ func _initialize() -> void:
 		main.show_menu()
 		main.show_cartridges()
 		main._start_demo()
-		check(main.tutorial and not main.game.options["shotgun"], "%s tutorial is normal mode" % kind)
+		await _watch_demo(kind)
+		check(main.demo_stage == "practice" and main.tutorial, "%s demo: after watching, it's your go" % kind)
 		await _play(kind, "tutorial")
 	print("GAMES CHECK OK" if fails == 0 else "%d failures" % fails)
 	quit(1 if fails > 0 else 0)
+
+
+## The demo plays itself, explaining every rule, then hands over.
+func _watch_demo(kind: String) -> void:
+	var g = main.game
+	check(main.demo_stage == "watch" and g.players[0].bot != "", "%s demo: it plays itself, your seat too" % kind)
+	var seen := 0
+	var last := ""
+	for step in range(200000):
+		await process_frame
+		if main._lesson_showing() and main._lesson_text.text != last:
+			last = main._lesson_text.text
+			seen += 1
+		if main.demo_stage == "practice":
+			break
+	var total: int = main._lessons.size()
+	var left := 0
+	for l in main._lessons:
+		if not l[2]:
+			left += 1
+	check(left == 0, "%s demo: every rule was explained (%d left)" % [kind, left])
+	check(seen >= total, "%s demo: %d lessons shown of %d" % [kind, seen, total])
+	print("%s demo: %d lessons, watched %d rounds" % [kind, seen, g.round_num])
 
 
 func _play(kind: String, what: String) -> void:
@@ -79,6 +103,8 @@ func _play(kind: String, what: String) -> void:
 		await process_frame
 		if g.phase == "match_over" and main._overlay_kind == "match":
 			break
+		if what == "tutorial" and main.demo_stage == "" and main._overlay_kind == "match":
+			break # the demo's finished
 		if main.tutorial and main.coach_label.visible and main.coach_label.text.begins_with("TIP"):
 			coached = true
 		if main.overlay_layer.get_child_count() > 0:
@@ -151,7 +177,10 @@ func _play(kind: String, what: String) -> void:
 				else:
 					main.selected = ids
 					main.mode_ui._play_pressed()
-	check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
+	if what == "tutorial":
+		check(main.demo_stage == "" and g.round_num >= 1, "%s demo: the practice finishes (round %d)" % [kind, g.round_num])
+	else:
+		check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
 	check(my_moves > 0, "%s %s: you played" % [kind, what])
 	if what == "tutorial":
 		check(coached, "%s tutorial: tips showed" % kind)
