@@ -1,7 +1,11 @@
 extends RefCounted
 ## How a player looks: which base model, outfit colour, hat, face piece and
 ## glowing eyes. A look is a Dictionary:
-##   { "base": "Rogue", "outfit": 1, "hat": "bowler", "face": "cigarette", "eyes": false }
+##   { "base": "Rogue", "outfit": 1, "hat": "bowler", "face": "cigarette", "eyes": false,
+##     "face_side": "left", "face_angle": 0, "face_height": 0 }
+## The face_ keys place the face piece: which side (the character's own left
+## or right: which eye the patch is on, which corner of the mouth), and its
+## angle and height, from -2 to 2.
 ##
 ## PRESETS are ready-made characters built from the base models. The customiser
 ## starts from one and lets players change any part.
@@ -82,5 +86,10 @@ static func clean(look, fallback_seat: int = 0) -> Dictionary:
 	if FACES.has(look.get("face", "")):
 		out["face"] = look["face"]
 	out["eyes"] = bool(look.get("eyes", false))
+	# where the face piece sits: which side (the character's own), its angle
+	# and its height, each a few steps either way
+	out["face_side"] = "right" if str(look.get("face_side", "left")) == "right" else "left"
+	out["face_angle"] = clampi(int(look.get("face_angle", 0)), -2, 2)
+	out["face_height"] = clampi(int(look.get("face_height", 0)), -2, 2)
 	out["name"] = str(look.get("name", "CUSTOM")).left(24)
 	return out

@@ -66,7 +66,20 @@ then any you've made, then a **+** box. The **+** opens the creator: name your
 character and pick from 9 bodies, 8 outfit colours, 7 hats (their own, bowler,
 top hat, cowboy hat, flat cap, beanie, none), 5 face pieces (cigarette, cigar,
 eyepatch, shades, none) and glowing eyes. Your own characters can be edited or
-deleted. Whoever you play as is saved, and other players see them at the
+deleted. For the face piece you also pick **which side** (the eye the patch
+covers, the corner of the mouth the cigarette sits in), its **angle** (how
+the cigarette droops, how steep the strap runs, the glasses' tilt) and its
+**height**.
+
+**Face anchors.** Face pieces don't sit at fixed spots: each model has
+anchors measured off its real head by `tools/make_face_anchors.gd` (eyes,
+the rims round them, nose, brow, mouth corners, crown, ears, and the head's
+outline all the way round at several heights), saved in
+`models/characters/face_anchors.json`. Every cosmetic sits on those, so it
+rests on the surface instead of floating or sinking in, straps and glasses'
+arms follow the shape of the head, and a new model only needs the tool run
+once (`godot --headless --path . -s tools/make_face_anchors.gd`). Points can
+be nudged by hand in the JSON. Whoever you play as is saved, and other players see them at the
 table, online too. In pass & play each player picks a
 character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 

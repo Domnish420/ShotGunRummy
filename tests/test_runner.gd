@@ -17,6 +17,7 @@ const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Games = preload("res://scripts/core/games.gd")
+const FaceAnchors = preload("res://scripts/three/face_anchors.gd")
 
 var _failures := 0
 var _checks := 0
@@ -30,7 +31,7 @@ func _init() -> void:
 		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
 		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day",
 		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down",
-		"test_looks", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_looks", "test_face_anchors", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -1489,3 +1490,24 @@ func test_poker_betting() -> void:
 	g.fold(g.turn)
 	g.fold(g.turn)
 	check(g.phase == "round_over" and g.gun == null, "everyone folded: the raiser wins, nobody gets shot")
+
+
+## Every model has its face anchors (tools/make_face_anchors.gd), on the
+## head, the right way round, and looks keep where the face piece sits.
+func test_face_anchors() -> void:
+	for base in Looks.BASES:
+		check(FaceAnchors.has_model(base), "%s has face anchors (run tools/make_face_anchors.gd)" % base)
+		for name_ in ["eye_left", "eye_right", "cover_left", "cover_right", "nose", "mouth_left", "mouth_right", "crown"]:
+			var a := FaceAnchors.anchor(base, name_)
+			check(a["pos"].length() < 1.2 and a["normal"].length() > 0.9, "%s %s is on the head" % [base, name_])
+		var l := FaceAnchors.anchor(base, "eye_left")
+		var r := FaceAnchors.anchor(base, "eye_right")
+		check(l["pos"].x > 0.0 and r["pos"].x < 0.0 and l["normal"].z > 0.5, "%s: eyes face forward, left is +x" % base)
+		var c := FaceAnchors.anchor(base, "cover_left")
+		check(c["pos"].z >= l["pos"].z, "%s: a patch rests on the rim, not in the eye" % base)
+		for deg in [0.0, 90.0, 180.0, 270.0]:
+			var p := FaceAnchors.around(base, deg, 0.4)
+			check(p["pos"].length() > 0.2 and p["pos"].length() < 0.9, "%s: the outline at %d degrees" % [base, deg])
+	var look := Looks.clean({"base": "Rogue", "face": "eyepatch", "face_side": "right", "face_angle": 7, "face_height": -1})
+	check(look["face_side"] == "right" and look["face_angle"] == 2 and look["face_height"] == -1, "a look keeps the side, angle and height (clamped)")
+	check(Looks.clean({"face_side": "upside down"})["face_side"] == "left", "a bad side goes back to left")

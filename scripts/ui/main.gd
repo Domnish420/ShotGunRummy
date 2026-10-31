@@ -1161,6 +1161,16 @@ func show_creator() -> void:
 	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
 		var names: Dictionary = part[2]
 		box.add_child(_choice_row(part[0], names[_editing[part[1]]], _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
+	# where the face piece sits
+	var face: String = _editing.get("face", "none")
+	if face != "none":
+		if face != "shades":
+			var side_word := "THEIR LEFT" if _editing.get("face_side", "left") == "left" else "THEIR RIGHT"
+			var which := "EYE" if face == "eyepatch" else "MOUTH"
+			box.add_child(_choice_row("  " + which, side_word, _flip_face_side, _flip_face_side))
+		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT"}.get(face, "ANGLE")
+		box.add_child(_choice_row("  " + angle_word, _step_word(int(_editing.get("face_angle", 0))), _nudge_face.bind("face_angle", -1), _nudge_face.bind("face_angle", 1)))
+		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
 	box.add_child(_tag("OUTFIT: %s" % Looks.OUTFITS[int(_editing["outfit"])]["name"], 24, Palette.DIM))
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 6)
@@ -1213,6 +1223,21 @@ func _step_part(delta: int, part: String, options: Array) -> void:
 	_sound("part")
 	var at := options.find(_editing[part])
 	_set_part(part, options[posmod(at + delta, options.size())])
+
+
+## -2..2 shown as a little bar: "-- ·" ... "· ++".
+static func _step_word(v: int) -> String:
+	return ["--", "-", "MIDDLE", "+", "++"][clampi(v + 2, 0, 4)]
+
+
+func _flip_face_side() -> void:
+	_sound("part")
+	_set_part("face_side", "right" if _editing.get("face_side", "left") == "left" else "left")
+
+
+func _nudge_face(key: String, delta: int) -> void:
+	_sound("part")
+	_set_part(key, clampi(int(_editing.get(key, 0)) + delta, -2, 2))
 
 
 func _set_part(part: String, value) -> void:
