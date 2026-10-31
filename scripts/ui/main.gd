@@ -585,6 +585,7 @@ const BubbleWord = preload("res://scripts/ui/bubble_word.gd")
 func _bubble(word: String, on_press: Callable, color: Color, font_size: int = 52) -> Button:
 	var b := BubbleWord.new()
 	b.setup(word, on_press, color, font_size)
+	b.pressed.connect(_sound.bind("tick"))
 	return b
 
 

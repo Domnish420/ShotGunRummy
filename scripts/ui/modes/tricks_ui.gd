@@ -79,6 +79,7 @@ func on_pick(hit: Dictionary) -> void:
 		"item":
 			main._toggle_item(hit["id"])
 		"hand":
+			main._sound("tap")
 			if not main._my_turn() or _bidding():
 				main.message = "It's %s's turn." % main._name(g.turn) if not main._my_turn() else "Bid first."
 			else:
