@@ -72,6 +72,21 @@ static func cyl(parent: Node3D, top: float, bottom: float, height: float, sides:
 	return mesh(parent, c, mat, pos, rot)
 
 
+## A cylinder from point `a` to point `b`.
+static func _rod(parent: Node3D, a: Vector3, b: Vector3, radius: float, mat: Material) -> MeshInstance3D:
+	var c := CylinderMesh.new()
+	c.top_radius = radius
+	c.bottom_radius = radius
+	c.height = a.distance_to(b)
+	c.radial_segments = 6
+	c.rings = 1
+	var mi := mesh(parent, c, mat, (a + b) * 0.5)
+	var y := (b - a).normalized()
+	var x := y.cross(Vector3.UP if absf(y.y) < 0.9 else Vector3.RIGHT).normalized()
+	mi.basis = Basis(x, y, x.cross(y).normalized() * -1.0)
+	return mi
+
+
 static func ball(parent: Node3D, radius: float, sides: int, mat: Material, pos: Vector3) -> MeshInstance3D:
 	var s := SphereMesh.new()
 	s.radius = radius
@@ -379,20 +394,54 @@ static func _dress_head(head: Node3D, look: Dictionary) -> Array:
 			var beanie := ball(head, 0.6, 10, tex_mat("felt", Color(0.7, 0.3, 0.25), 4.0), Vector3(0, 0.72, -0.02))
 			beanie.scale = Vector3(1, 0.62, 1)
 			ball(head, 0.12, 6, tex_mat("felt", Color(0.8, 0.75, 0.6), 4.0), Vector3(0, 1.1, -0.02))
+	# the face, measured off the models (in the head bone's units): where the
+	# front of the face is, how wide the head is, and where the eyes and mouth sit
+	var skull: bool = str(look.get("base", "")).begins_with("Skeleton")
+	var front := 0.47 if skull else 0.53
+	var half := 0.42 if skull else 0.49 # at eye level (the ears stick out past this)
+	var back := 0.47 if skull else 0.5
+	var eye_y := 0.37 if skull else 0.36
+	var mouth_y := 0.16 if skull else 0.14
+	var black := plain(Color(0.05, 0.05, 0.05))
 	match look["face"]:
 		"cigarette", "cigar":
+			# from the corner of the mouth, angled out and down a little, the
+			# lit end glowing on the tip
 			var cigar: bool = look["face"] == "cigar"
-			var stick := cyl(head, 0.05 if cigar else 0.03, 0.05 if cigar else 0.03, 0.4, 6, plain(Color(0.4, 0.25, 0.12) if cigar else Color(0.92, 0.9, 0.85)), Vector3(0.12, 0.12, 0.66), Vector3(PI / 2.0 - 0.25, -0.35, 0))
-			stick.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			ball(head, 0.05 if cigar else 0.035, 5, glow(Color(1.0, 0.4, 0.1), 3.0), Vector3(0.2, 0.07, 0.84))
+			var r := 0.055 if cigar else 0.03
+			var lips := Vector3(0.14, mouth_y, front - 0.02)
+			var tip := lips + Vector3(0.12, -0.1, 0.34 if cigar else 0.3)
+			_rod(head, lips, tip, r, plain(Color(0.38, 0.22, 0.1) if cigar else Color(0.93, 0.91, 0.86)))
+			if not cigar:
+				_rod(head, lips, lips.lerp(tip, 0.3), r + 0.004, plain(Color(0.85, 0.55, 0.25))) # the filter
+			var ash := _rod(head, tip.lerp(lips, 0.06), tip, r + 0.002, glow(Color(1.0, 0.4, 0.1), 3.0))
+			ash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		"eyepatch":
-			box(head, Vector3(0.24, 0.22, 0.05), plain(Color(0.05, 0.05, 0.05)), Vector3(0.2, 0.36, 0.54))
-			box(head, Vector3(1.12, 0.04, 0.04), plain(Color(0.05, 0.05, 0.05)), Vector3(0, 0.5, 0.5), Vector3(0, 0, -0.3))
+			# a patch flat over the right eye, a strap round the head on a slant
+			var patch := box(head, Vector3(0.26, 0.22, 0.04), black, Vector3(0.2, eye_y, front + 0.01))
+			patch.scale = Vector3(1, 1, 1)
+			var strap := TorusMesh.new()
+			strap.inner_radius = 0.97
+			strap.outer_radius = 1.0
+			strap.rings = 20
+			strap.ring_segments = 4
+			var band := mesh(head, strap, black, Vector3(0, eye_y + 0.07, 0.0), Vector3(0, 0, -0.38))
+			# squash the ring to hug the head, pressing in a touch
+			band.scale = Vector3(half, 0.6, (front + back) * 0.5)
+			band.position.z = (front - back) * 0.5
 		"shades":
+			# lenses on the nose, a bridge between them, arms back to the ears
 			var lens := plain(Color(0.02, 0.02, 0.03), 0.1, 0.6)
+			var z := front + 0.015
 			for x in [-0.2, 0.2]:
-				box(head, Vector3(0.28, 0.16, 0.04), lens, Vector3(x, 0.38, 0.55))
-			box(head, Vector3(0.2, 0.04, 0.04), lens, Vector3(0, 0.42, 0.55))
+				box(head, Vector3(0.27, 0.15, 0.03), lens, Vector3(x, eye_y, z))
+			box(head, Vector3(0.14, 0.035, 0.03), lens, Vector3(0, eye_y + 0.04, z))
+			for side in [-1.0, 1.0]:
+				# a hinge bending round the side of the face, then the arm to the ear
+				var hinge := Vector3(side * 0.33, eye_y + 0.04, z)
+				var temple := Vector3(side * (half + 0.01), eye_y + 0.04, front - 0.16)
+				_rod(head, hinge, temple, 0.016, lens)
+				_rod(head, temple, Vector3(side * (half + 0.01), eye_y + 0.02, -0.08), 0.016, lens)
 	var eyes := []
 	if look["eyes"]:
 		for x in [-0.2, 0.2]:
