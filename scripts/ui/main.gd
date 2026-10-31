@@ -22,6 +22,7 @@ const Blackjack = preload("res://scripts/core/blackjack.gd")
 const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
 
 const Games = preload("res://scripts/core/games.gd")
+const Chiptune = preload("res://scripts/audio/chiptune.gd")
 const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
 const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
 const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
@@ -56,6 +57,9 @@ var played := {} # kind -> shotgun matches finished (normal mode unlocks)
 var tutorial_offered := false
 var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
 var coach_label: Label
+var _sfx: Dictionary = {} # name -> AudioStream
+var _sfx_players: Array = []
+var _jingle_player: AudioStreamPlayer
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -105,6 +109,47 @@ var use_btn: Button
 var discard_btn: Button
 var sort_btn: Button
 var hint_btn: Button
+
+
+## Plays a little sound: "tick", "swish", "clunk", "select" or
+## "jingle:<cartridge>".
+func _sound(name_: String) -> void:
+	if not _sfx.has(name_):
+		match name_:
+			"tick":
+				_sfx[name_] = Chiptune.tick()
+			"swish":
+				_sfx[name_] = Chiptune.swish()
+			"clunk":
+				_sfx[name_] = Chiptune.clunk()
+			"select":
+				_sfx[name_] = Chiptune.select()
+			_:
+				if name_.begins_with("jingle:"):
+					_sfx[name_] = Chiptune.jingle(name_.trim_prefix("jingle:"))
+	var stream: AudioStream = _sfx.get(name_, null)
+	if stream == null:
+		return
+	if name_.begins_with("jingle:"):
+		if _jingle_player == null:
+			_jingle_player = AudioStreamPlayer.new()
+			_jingle_player.volume_db = -6.0
+			add_child(_jingle_player)
+		_jingle_player.stream = stream # a new tune cuts off the last one
+		_jingle_player.play()
+		return
+	for pl in _sfx_players:
+		if not pl.playing:
+			pl.stream = stream
+			pl.play()
+			return
+	if _sfx_players.size() < 4:
+		var pl := AudioStreamPlayer.new()
+		pl.volume_db = -4.0
+		add_child(pl)
+		_sfx_players.append(pl)
+		pl.stream = stream
+		pl.play()
 
 
 func _ready() -> void:
@@ -365,10 +410,11 @@ func show_menu() -> void:
 	round_label = null
 	mode_ui = null
 	tutorial = false
+	world.hide_carousel()
 	world.set_menu_mode(true)
 	var box := _paper()
 	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_paper_button("CARTRIDGE: %s  ▸" % _game_title(game_kind, normal_mode), show_cartridges, 26))
+	box.add_child(_paper_button("CARTRIDGES: %s  ▸" % _game_title(game_kind, normal_mode), show_cartridges, 26))
 	world.set_cartridge(game_kind)
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
@@ -410,42 +456,106 @@ func _normal_unlocked(kind: String) -> bool:
 
 # ================================================================ cartridges
 
-## The cartridge shelf: pick a game, how to play it, or its tutorial.
+## The cartridges: swipe through them (each plays its little tune), then
+## PLAY or DEMO. The words float; there are no boxes here.
 func show_cartridges() -> void:
-	if _name_edit != null and is_instance_valid(_name_edit):
+	if _name_edit != null and is_instance_valid(_name_edit) and _name_edit.is_inside_tree():
 		var typed := _name_edit.text.strip_edges().to_upper().left(10)
 		if typed != "":
 			profile_name = typed
-	var box := _paper(660)
-	box.add_child(_label("CARTRIDGES", 52, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_label("Pick a game to slot into the table.", 22, Palette.CARD_INK, true))
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	for kind in Games.kinds():
-		var b := _button(Games.label(kind), _pick_cartridge.bind(kind), 22)
-		b.custom_minimum_size = Vector2(196, 92)
-		var col := Games.color(kind)
-		var edge := Palette.GOLD if kind == game_kind else col.darkened(0.5)
-		b.add_theme_stylebox_override("normal", Palette.box(col, edge, 4 if kind == game_kind else 2, 2, 8))
-		b.add_theme_stylebox_override("hover", Palette.box(col.lightened(0.1), edge, 4 if kind == game_kind else 2, 2, 8))
-		grid.add_child(b)
-	box.add_child(grid)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var shotgun := _paper_button("SHOTGUN", _set_normal.bind(false), 24)
-	var plain_text := "NORMAL" if _normal_unlocked(game_kind) else "NORMAL 🔒 %d/%d" % [int(played.get(game_kind, 0)), Games.UNLOCK_NORMAL_AFTER]
-	var plain := _paper_button(plain_text, _set_normal.bind(true), 24)
+	_close_overlay()
+	_clear(screen)
+	var kinds := Games.kinds()
+	var at := maxi(0, kinds.find(game_kind))
+	if world._carousel.is_empty():
+		world.show_carousel(kinds, at)
+		_sound("jingle:" + game_kind)
+	else:
+		world.carousel_to(at)
+	# swipes anywhere move the carousel
+	var swipe := _full(Control.new())
+	swipe.mouse_filter = Control.MOUSE_FILTER_STOP
+	swipe.gui_input.connect(_on_carousel_input)
+	screen.add_child(swipe)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_BEGIN
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 60)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label(_game_title(game_kind, normal_mode), 40, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 40)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 34))
+	var plain := _bubble("NORMAL" if _normal_unlocked(game_kind) else "NORMAL 🔒%d/%d" % [int(played.get(game_kind, 0)), Games.UNLOCK_NORMAL_AFTER], _set_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 34)
 	plain.disabled = not _normal_unlocked(game_kind)
-	for b in [shotgun, plain]:
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(b)
-	Palette.accent(plain if normal_mode else shotgun, Palette.RED)
-	box.add_child(row)
-	box.add_child(_label("NORMAL is the plain game: no items, no shotgun, first to 3 rounds. It unlocks after %d shotgun games of that cartridge." % Games.UNLOCK_NORMAL_AFTER, 20, Palette.CARD_INK, true))
-	box.add_child(_paper_button("TUTORIAL: LEARN %s" % Games.label(game_kind), _start_tutorial, 24))
-	box.add_child(_paper_button("DONE", show_menu, 28))
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the cartridges show through here
+	var arrows := HBoxContainer.new()
+	arrows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrows.add_child(_bubble("◀", _scroll_cartridges.bind(-1), Palette.INK, 60))
+	var mid := Control.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrows.add_child(mid)
+	arrows.add_child(_bubble("▶", _scroll_cartridges.bind(1), Palette.INK, 60))
+	col.add_child(arrows)
+	var words := HBoxContainer.new()
+	words.alignment = BoxContainer.ALIGNMENT_CENTER
+	words.add_theme_constant_override("separation", 70)
+	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_child(_bubble("PLAY", _cartridge_play, Palette.GOLD, 72))
+	words.add_child(_bubble("DEMO", _start_demo, Color(0.55, 0.85, 1.0), 72))
+	col.add_child(words)
+	col.add_child(_bubble("BACK", _leave_cartridges, Palette.DIM, 36))
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 40)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+
+
+const BubbleWord = preload("res://scripts/ui/bubble_word.gd")
+
+
+func _bubble(word: String, on_press: Callable, color: Color, font_size: int = 52) -> Button:
+	var b := BubbleWord.new()
+	b.setup(word, on_press, color, font_size)
+	return b
+
+
+var _swipe_from := Vector2.ZERO
+
+
+func _on_carousel_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_swipe_from = event.position
+		else:
+			var dx: float = event.position.x - _swipe_from.x
+			if absf(dx) > 50.0:
+				_scroll_cartridges(-1 if dx > 0 else 1)
+	elif event is InputEventKey and event.pressed:
+		if event.keycode == KEY_LEFT:
+			_scroll_cartridges(-1)
+		elif event.keycode == KEY_RIGHT:
+			_scroll_cartridges(1)
+
+
+func _scroll_cartridges(step: int) -> void:
+	var kinds := Games.kinds()
+	var at := posmod(kinds.find(game_kind) + step, kinds.size())
+	_pick_cartridge(kinds[at])
 
 
 func _pick_cartridge(kind: String) -> void:
@@ -453,26 +563,73 @@ func _pick_cartridge(kind: String) -> void:
 	if not _normal_unlocked(kind):
 		normal_mode = false
 	_save_settings()
-	world.set_cartridge(kind)
+	world.carousel_to(Games.kinds().find(kind))
+	_sound("swish")
+	_sound("jingle:" + kind)
 	show_cartridges()
 
 
 func _set_normal(on: bool) -> void:
 	normal_mode = on and _normal_unlocked(game_kind)
 	_save_settings()
+	_sound("tick")
 	show_cartridges()
 
 
-## First time in: point people at the tutorials.
+func _leave_cartridges() -> void:
+	world.hide_carousel()
+	_sound("tick")
+	show_menu()
+
+
+## PLAY: slot it in, then how do you want to play?
+func _cartridge_play() -> void:
+	world.carousel_insert()
+	world.set_cartridge(game_kind)
+	_sound("clunk")
+	show_play_choice()
+
+
+func show_play_choice() -> void:
+	world.hide_carousel()
+	_close_overlay()
+	_clear(screen)
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen.add_child(_full(center))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_child(col)
+	var title := _label(_game_title(game_kind, normal_mode), 44, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	col.add_child(_bubble("VS AI", show_solo, Palette.GOLD, 58))
+	col.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 44))
+	col.add_child(_bubble("HOST A LOBBY", _on_host_pressed, Color(0.55, 0.85, 1.0), 44))
+	col.add_child(_bubble("JOIN A LOBBY", _on_join_pressed, Color(0.55, 0.85, 1.0), 44))
+	col.add_child(_bubble("BACK", show_cartridges, Palette.DIM, 34))
+
+
+## First time in: point people at the demos.
 func _offer_tutorial() -> void:
 	var box := _open_overlay(0.94, false, "menu")
 	box.add_child(_title("FIRST TIME HERE?"))
-	box.add_child(_label("Every cartridge has a tutorial: a quick normal game against easy AIs, with tips as you go.", 26, Palette.INK, true))
-	box.add_child(_button("PICK A TUTORIAL", _closing(show_cartridges)))
+	box.add_child(_label("Every cartridge has a DEMO: a quick normal game against easy AIs, with tips as you go.", 26, Palette.INK, true))
+	box.add_child(_button("PICK A DEMO", _closing(show_cartridges)))
 	box.add_child(_button("NO THANKS", _closing(_noop)))
 
 
-## The tutorial: normal mode against two easy AIs, with tips on screen.
+## DEMO: normal mode against two easy AIs, with tips on screen.
+func _start_demo() -> void:
+	world.carousel_insert()
+	world.set_cartridge(game_kind)
+	_sound("clunk")
+	world.hide_carousel()
+	_start_tutorial()
+
+
 func _start_tutorial() -> void:
 	var me := profile_name if profile_name != "" else "YOU"
 	var names := [me, "DOC", "PEARL"]
@@ -492,7 +649,9 @@ func _noop() -> void:
 
 ## Reads the name box; returns "" (and complains) if it's empty.
 func _take_name() -> String:
-	var n := _name_edit.text.strip_edges().to_upper().left(10)
+	var n := profile_name
+	if _name_edit != null and is_instance_valid(_name_edit) and _name_edit.is_inside_tree():
+		n = _name_edit.text.strip_edges().to_upper().left(10)
 	if n == "":
 		menu_message = "Sign your name first."
 		show_menu()
@@ -1208,6 +1367,7 @@ func _start_from_setup() -> void:
 ## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
 	session.leave()
+	world.hide_carousel()
 	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
 	tutorial = bool(_table.get("tutorial", false))
 	game.setup(_table["names"])

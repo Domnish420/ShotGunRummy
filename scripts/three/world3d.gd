@@ -18,6 +18,7 @@ const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Games = preload("res://scripts/core/games.gd")
+const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -36,6 +37,7 @@ const DEAL_STEP := 0.09 # seconds between dealt cards
 const TRUMP_NAMES := ["", "ACES", "TWOS", "THREES", "FOURS", "FIVES", "SIXES", "SEVENS", "EIGHTS", "NINES", "TENS", "JACKS", "QUEENS", "KINGS"]
 
 var textures: CardTextures
+var cartridge_art: CartridgeArt
 var camera: Camera3D
 var lamp: SpotLight3D
 var shotgun: Node3D
@@ -76,6 +78,9 @@ func _ready() -> void:
 	_font = load("res://fonts/VT323.woff2") as Font
 	textures = CardTextures.new()
 	add_child(textures)
+	cartridge_art = CartridgeArt.new()
+	add_child(cartridge_art)
+	cartridge_art.built.connect(_on_cartridge_art)
 	textures.built.connect(_on_textures_built)
 	_build_room()
 	_cards_root = Node3D.new()
@@ -86,6 +91,20 @@ func _ready() -> void:
 	add_child(shotgun)
 	_rest_gun(true)
 	textures.build()
+	cartridge_art.build()
+
+
+## The label art is ready: paint it onto the cartridges already made.
+func _on_cartridge_art() -> void:
+	var carts: Array = _carousel.duplicate()
+	if _cartridge != null:
+		carts.append(_cartridge)
+	for c in carts:
+		var lm: StandardMaterial3D = c.get_meta("label")
+		var art: Texture2D = cartridge_art.texture(c.get_meta("kind"))
+		if art != null:
+			lm.albedo_texture = art
+			lm.albedo_color = Color.WHITE
 
 
 func _on_textures_built() -> void:
@@ -235,30 +254,52 @@ func _build_console() -> void:
 	_console.add_child(_mesh(led, _glow(Color(1.0, 0.15, 0.1), 3.0), Vector3(0.082, 0.025, 0.056)))
 
 
-## A cartridge: a chunky plastic block with a label, in the game's colour.
+## A cartridge in the style of the early-2000s handhelds: a wide grey
+## plastic shell (tinted with the game's colour) with the stepped top corner,
+## grip ridges and a big label with the game's title art. About 0.3 wide.
 func _build_cartridge(kind: String) -> Node3D:
 	var c := Node3D.new()
 	var col: Color = Games.color(kind)
-	var shell := BoxMesh.new()
-	shell.size = Vector3(0.15, 0.1, 0.022)
-	c.add_child(_mesh(shell, _mat(col, 0.45, 0.05), Vector3(0, 0.05, 0)))
-	# grip ridges along the top
-	for i in range(5):
+	var plastic := _mat(Color(0.55, 0.55, 0.58).lerp(col, 0.35), 0.42, 0.05)
+	var dark := _mat(Color(0.3, 0.3, 0.33).lerp(col, 0.25).darkened(0.2), 0.5)
+	# the body: full width at the bottom, a step cut out of the top right
+	var lower := BoxMesh.new()
+	lower.size = Vector3(0.3, 0.155, 0.028)
+	c.add_child(_mesh(lower, plastic, Vector3(0, 0.0775, 0)))
+	var upper := BoxMesh.new()
+	upper.size = Vector3(0.24, 0.035, 0.028)
+	c.add_child(_mesh(upper, plastic, Vector3(-0.03, 0.1725, 0)))
+	# grip ridges on the step
+	for i in range(4):
 		var ridge := BoxMesh.new()
-		ridge.size = Vector3(0.13, 0.004, 0.026)
-		c.add_child(_mesh(ridge, _mat(col.darkened(0.3), 0.6), Vector3(0, 0.082 + i * 0.006, 0)))
-	var sticker := BoxMesh.new()
-	sticker.size = Vector3(0.12, 0.05, 0.002)
-	c.add_child(_mesh(sticker, _mat(Color(0.92, 0.88, 0.78), 0.8), Vector3(0, 0.045, 0.012)))
-	var title := Label3D.new()
-	title.font = _font
-	title.text = "SHOTGUN\n" + Games.label(kind)
-	title.font_size = 34
-	title.pixel_size = 0.0011
-	title.modulate = col.darkened(0.4)
-	title.outline_size = 0
-	title.position = Vector3(0, 0.045, 0.0135)
-	c.add_child(title)
+		ridge.size = Vector3(0.05, 0.004, 0.03)
+		c.add_child(_mesh(ridge, dark, Vector3(0.122, 0.14 + i * 0.008, 0)))
+	# the edge connector along the bottom, gold contacts showing
+	var edge := BoxMesh.new()
+	edge.size = Vector3(0.22, 0.012, 0.022)
+	c.add_child(_mesh(edge, dark, Vector3(0, 0.003, 0)))
+	for i in range(10):
+		var pin := BoxMesh.new()
+		pin.size = Vector3(0.012, 0.01, 0.023)
+		c.add_child(_mesh(pin, _mat(Color(0.85, 0.65, 0.2), 0.3, 0.8), Vector3(-0.1 + i * 0.022, 0.004, 0)))
+	# the label, recessed a touch into the front
+	var frame := BoxMesh.new()
+	frame.size = Vector3(0.255, 0.155, 0.004)
+	c.add_child(_mesh(frame, dark, Vector3(-0.012, 0.098, 0.0135)))
+	var label := QuadMesh.new()
+	label.size = Vector2(0.245, 0.145)
+	var lm := StandardMaterial3D.new()
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	var art: Texture2D = cartridge_art.texture(kind) if cartridge_art != null else null
+	if art != null:
+		lm.albedo_texture = art
+	else:
+		lm.albedo_color = col
+	var lmesh := _mesh(label, lm, Vector3(-0.012, 0.098, 0.016))
+	c.add_child(lmesh)
+	c.set_meta("label", lm)
+	c.set_meta("kind", kind)
 	return c
 
 
@@ -275,9 +316,10 @@ func set_cartridge(kind: String) -> void:
 		t.tween_property(old, "position", old.position + Vector3(1.6, 0.6, -0.4), 0.35).set_ease(Tween.EASE_IN)
 		t.tween_callback(old.queue_free)
 	_cartridge = _build_cartridge(kind)
+	_cartridge.scale = Vector3.ONE * 0.52
 	_console.add_child(_cartridge)
-	var home := Vector3(0, 0.02, -0.01)
-	_cartridge.rotation.x = -0.35 # leaning back so it doesn't block the far side
+	var home := Vector3(0, 0.015, -0.01)
+	_cartridge.rotation.x = -0.45 # leaning back so it doesn't block the far side
 	_cartridge.position = home + Vector3(0, 0.6, 0)
 	var t2 := _cartridge.create_tween()
 	t2.tween_interval(0.15)
@@ -381,6 +423,7 @@ func _flicker() -> void:
 
 
 func _process(delta: float) -> void:
+	_spin_carousel(delta)
 	if not _preview.is_empty():
 		_preview["node"].rotate_y(delta * 0.5)
 		return
@@ -1411,3 +1454,88 @@ func shake(amount: float = 0.03) -> void:
 		var off := Vector3(randf_range(-amount, amount), randf_range(-amount, amount), 0)
 		t.tween_property(camera, "transform", _cam_home.translated_local(off), 0.035)
 	t.tween_property(camera, "transform", _cam_home, 0.06)
+
+
+# ================================================================ the cartridge carousel
+
+var _carousel: Array = [] # cartridges floating in front of the camera
+var _carousel_at := 0
+var _carousel_light: OmniLight3D
+var _carousel_t := 0.0
+
+
+## Lays the cartridges out in a row in front of the camera, `index` in the
+## middle and big, the others smaller off to the sides.
+func show_carousel(kinds: Array, index: int) -> void:
+	hide_carousel()
+	for k in kinds:
+		var c := _build_cartridge(k)
+		camera.add_child(c)
+		_carousel.append(c)
+	_carousel_light = OmniLight3D.new()
+	_carousel_light.position = Vector3(0.25, 0.35, -0.35)
+	_carousel_light.omni_range = 2.0
+	_carousel_light.light_energy = 1.6
+	_carousel_light.light_color = Color(1.0, 0.92, 0.8)
+	camera.add_child(_carousel_light)
+	_carousel_at = index
+	_place_carousel(true)
+
+
+func carousel_to(index: int) -> void:
+	_carousel_at = index
+	_place_carousel(false)
+
+
+func _carousel_xf(i: int) -> Transform3D:
+	var rel := i - _carousel_at
+	var big := rel == 0
+	# the one on show fills most of the screen; its neighbours peek in
+	var x := signf(rel) * (0.5 + (absf(rel) - 1.0) * 0.3) if not big else 0.0
+	var s := 1.9 if big else 1.0
+	var basis := Basis(Vector3.UP, -signf(rel) * 0.55).scaled(Vector3.ONE * s)
+	return Transform3D(basis, Vector3(x, -0.2 + (0.0 if big else 0.06), -0.82 - absf(rel) * 0.12))
+
+
+func _place_carousel(instant: bool) -> void:
+	for i in range(_carousel.size()):
+		var c: Node3D = _carousel[i]
+		var xf := _carousel_xf(i)
+		c.visible = absi(i - _carousel_at) <= 2
+		if instant:
+			c.transform = xf
+		else:
+			_tween(c, "transform", xf, 0.0, 0.25)
+
+
+## The middle cartridge bobs and turns a little, like it's on show.
+func _spin_carousel(delta: float) -> void:
+	if _carousel.is_empty():
+		return
+	_carousel_t += delta
+	var c: Node3D = _carousel[_carousel_at]
+	if c.has_meta("tween") and (c.get_meta("tween") as Tween).is_running():
+		return
+	var xf := _carousel_xf(_carousel_at)
+	xf.basis = (Basis(Vector3.UP, sin(_carousel_t * 1.3) * 0.18) * Basis(Vector3.RIGHT, sin(_carousel_t * 0.9) * 0.05)).scaled(Vector3.ONE * 1.9)
+	xf.origin.y += sin(_carousel_t * 2.0) * 0.008
+	c.transform = xf
+
+
+## PLAY: the middle cartridge drops away (into the console on the table).
+func carousel_insert() -> void:
+	if _carousel.is_empty():
+		return
+	var c: Node3D = _carousel[_carousel_at]
+	var t := c.create_tween()
+	t.tween_property(c, "position", c.position + Vector3(0, 0.05, 0), 0.12)
+	t.tween_property(c, "position", c.position + Vector3(0, -0.6, 0.1), 0.25).set_ease(Tween.EASE_IN)
+
+
+func hide_carousel() -> void:
+	for c in _carousel:
+		c.queue_free()
+	_carousel = []
+	if _carousel_light != null:
+		_carousel_light.queue_free()
+		_carousel_light = null

@@ -5,6 +5,7 @@ extends SceneTree
 ##   godot --headless --path . -s tests/ui_games_check.gd [-- gofish ...]
 
 const Bot = preload("res://scripts/core/bot.gd")
+const Games = preload("res://scripts/core/games.gd")
 const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 const TricksBot = preload("res://scripts/core/tricks_bot.gd")
@@ -48,7 +49,9 @@ func _initialize() -> void:
 		main.show_menu()
 		main.show_cartridges()
 		main._pick_cartridge(kind)
-		check(main.game_kind == kind and main.world._cartridge_kind == kind, "%s cartridge slotted in" % kind)
+		check(main.game_kind == kind and main.world._carousel.size() == Games.kinds().size(), "%s: swiped to it on the carousel" % kind)
+		main._cartridge_play()
+		check(main.world._cartridge_kind == kind and main.world._carousel.is_empty(), "%s: PLAY slots it into the table" % kind)
 		main.normal_mode = false
 		main.solo_opponents = 2
 		main._set_solo_level("mixed")
@@ -57,7 +60,7 @@ func _initialize() -> void:
 		await _play(kind, "shotgun")
 		main.show_menu()
 		main.show_cartridges()
-		main._start_tutorial()
+		main._start_demo()
 		check(main.tutorial and not main.game.options["shotgun"], "%s tutorial is normal mode" % kind)
 		await _play(kind, "tutorial")
 	print("GAMES CHECK OK" if fails == 0 else "%d failures" % fails)

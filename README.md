@@ -23,26 +23,25 @@ other games don't).
 
 ### Cartridges
 
-Each game is a cartridge. **CARTRIDGE: …** on the main menu opens the shelf:
-tap one and it slots into the console in the middle of the table. In a lobby
-the host taps the cartridge to change it. A white **DEALER** chip on the table
-shows who deals; it slides to the next dealer each round.
+Each game is a cartridge in the style of the early-2000s handhelds: a big
+wide plastic cart with its title drawn like a handheld game logo. **CARTRIDGES**
+on the main menu brings them up in front of you: swipe (or tap the arrows) to
+scroll through them. Each one ticks past and plays its own little tune (made
+in code for now, in `scripts/audio/chiptune.gd`, until the real music). The
+words float instead of sitting in boxes: **PLAY** slots the cartridge into
+the console in the middle of the table and asks how you want to play (VS AI,
+pass the phone, host or join); **DEMO** teaches it. **SHOTGUN / NORMAL** picks
+the mode. In a lobby the host taps the cartridge to change it. A white
+**DEALER** chip on the table shows who deals.
 
-### Normal mode and tutorials
+### Normal mode and demos
 
 - **Normal mode** is the plain card game: no items, no health, no shotgun. Win
   rounds instead; the first to 3 takes the match. It unlocks for a cartridge
-  after you've finished 3 shotgun games of it (the shelf shows how many).
-- **Tutorials** teach each game in normal mode, against two easy AIs, with tips
-  on screen about what to do right now. The game offers one the first time you
-  open it; after that it's **TUTORIAL** on the cartridge shelf.
-
-You sit at the near side of the table with your hand in front of you. Tap
-cards to select them, tap the stock or discard pile to draw, and tap a meld on
-the table to lay off onto it. The other players sit around the table with
-their health and card counts above their heads.
-
-Built with [Godot 4](https://godotengine.org/) (4.4 or newer; the latest 4.x is best).
+  after you've finished 3 shotgun games of it.
+- **The DEMO** teaches each game in normal mode, against two easy AIs, with
+  tips on screen about what to do right now. The game offers one the first
+  time you open it.
 
 ## Graphics
 
