@@ -14,8 +14,9 @@ for whoever wins the hand.
 - **Shotgun Hearts**: don't take hearts, and stay away from the Queen of
   Spades.
 - **Shotgun Spades**: everyone for themselves. Bid your tricks, then make it.
-
-Coming next: Snap and President.
+- **Shotgun Snap**: flip, watch, and snap first. Snap wrong and it hurts.
+- **Shotgun President**: beat the pile or pass. First out is President; the
+  Scum pays up next round.
 
 ### Cartridges
 
@@ -265,6 +266,37 @@ trick (the first one played, if there's more than one).
   makes someone spin if they win the next trick, and Double Down makes someone
   play their highest card next.
 
+## How to play Shotgun Snap
+
+- **The deal.** All the cards go face down into everyone's own pile, with the
+  items shuffled in, plus 2 items each. Nobody looks at their pile.
+- **Your turn.** **FLIP** your top card onto the middle (or tap your pile).
+  Flip an item and you keep it and flip again.
+- **SNAP!** When the top two cards in the middle match (same rank, or either
+  is a trump), anyone can press **SNAP!** at any time. First to snap wins the
+  middle. The AIs snap too, quicker the harder they are.
+- **Wrong snaps** cost 1 health (in normal mode, 2 cards from your pile go in
+  the middle).
+- **The end.** When every pile has run out there's one last chance to snap,
+  then **COUNT UP**: most cards won takes the shotgun, 1 shell +1 for every 10
+  cards ahead.
+- **On one phone**, whoever grabs it first presses SNAP! and says who they are.
+- **Items.** The magnifier and the phone peek at the next card in a pile,
+  Sticky Fingers steals 3 won cards, Double Down makes someone flip 2, and
+  Joker Paint turns the top card wild: a snap for whoever's quickest.
+
+## How to play Shotgun President
+
+- **The deal.** All the cards are dealt out, plus 2 items each. 3 is low, then
+  up to K, A, and 2 is high.
+- **Playing.** The leader plays a single, a pair, three or four of a kind.
+  Going round, each player beats it with the same number of a higher rank, or
+  **PASS**es (and sits out until the pile clears). When everyone else has
+  passed, the last player to play leads again.
+- **President.** First out wins, with 1 shell for every 2 other players (1 to
+  3). Whoever's left holding the most is the **Scum**: next round they hand the
+  President their best card and get the worst one back.
+
 ### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
@@ -307,6 +339,8 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/gofish.gd`, `gofish_bot.gd` | Go Fish's rules and AI. |
 | `scripts/core/cheat.gd`, `cheat_bot.gd` | Cheat's rules and AI. |
 | `scripts/core/tricks.gd`, `hearts.gd`, `spades.gd`, `tricks_bot.gd` | Trick-taking, Hearts and Spades, and their AI. |
+| `scripts/core/snap.gd`, `snap_bot.gd` | Snap's rules and AI (main.gd times the AIs' snaps). |
+| `scripts/core/president.gd`, `president_bot.gd` | President's rules and AI. |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |

@@ -110,8 +110,37 @@ const TRICKS := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: play it any time, it wins the trick.", "copies": 1},
 }
 
+const SNAP := {
+	"beer": {"copies": 0},
+	"magnifier": {"text": "Secretly look at your next card."},
+	"phone": {"text": "See another player's next card."},
+	"handcuffs": {"text": "A player of your choice skips their next flip."},
+	"shakedown": {"copies": 0},
+	"spotlight": {"copies": 0},
+	"flashbang": {"copies": 0},
+	"revolver": {"text": "If a player of your choice snaps wrong, they also play Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"text": "A player of your choice flips 2 cards on their next turn."},
+	"sticky_fingers": {"text": "Steal 3 of another player's won cards.", "needs": "player", "copies": 1},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"copies": 0},
+	"joker_paint": {"text": "The top card in the middle turns wild: it matches anything. Get ready to SNAP!", "needs": "", "copies": 2},
+}
+
+const PRESIDENT := {
+	"beer": {"copies": 0},
+	"magnifier": {"copies": 0},
+	"handcuffs": {"text": "A player of your choice passes their next turn."},
+	"shakedown": {"text": "Shove your worst card onto a player of your choice."},
+	"revolver": {"text": "If a player of your choice passes on their next turn, they play Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"copies": 0},
+	"sticky_fingers": {"copies": 0},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"copies": 0},
+	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it fills in any set.", "copies": 1},
+}
+
 ## Each game's changes to the items, by game.
-const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS}
+const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT}
 
 ## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.

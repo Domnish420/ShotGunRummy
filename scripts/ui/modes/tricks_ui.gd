@@ -212,5 +212,7 @@ func coach() -> String:
 		if not g.legal_cards(seat).any(func(c): return str(c["suit"]) == g.led_suit()):
 			return "You can't follow suit: throw away the Queen of Spades or a high heart onto someone else's trick!"
 		return "Play a card lower than the best one in the trick, so you don't win it."
+	if int(g.bids.get(seat, 0)) == 0:
+		return "You bid nil: don't win a single trick. Play low."
 	var need: bool = int(g.tricks_won.get(seat, 0)) < int(g.bids.get(seat, 0))
-	return "You still need tricks: play a card that can win this one." if need else "You've made your bid: play low and let others win."
+	return "You still need tricks: play a card that can win this one." if need else "You've made your bid. Extra tricks still score +1 each."

@@ -13,6 +13,8 @@ const GoFish = preload("res://scripts/core/gofish.gd")
 const Cheat = preload("res://scripts/core/cheat.gd")
 const Hearts = preload("res://scripts/core/hearts.gd")
 const Spades = preload("res://scripts/core/spades.gd")
+const Snap = preload("res://scripts/core/snap.gd")
+const President = preload("res://scripts/core/president.gd")
 const Games = preload("res://scripts/core/games.gd")
 
 var _failures := 0
@@ -34,7 +36,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1158,7 +1160,7 @@ func test_ch_call() -> void:
 ## Every game's AI, all three levels, finishes whole matches with legal moves
 ## (the newer cartridges; Rummy and Blackjack have their own tests).
 func test_ai_all_games() -> void:
-	for kind in ["cheat", "hearts", "spades"]:
+	for kind in ["cheat", "hearts", "spades", "snap", "president"]:
 		var wins := {"easy": 0, "normal": 0, "hard": 0}
 		for s in range(1, 9):
 			var n := 2 + s % 5
@@ -1178,6 +1180,11 @@ func test_ai_all_games() -> void:
 				if g.phase == "round_over":
 					g.start_round()
 					continue
+				if kind == "snap" and g.phase == "play" and g.snap_ready():
+					# the quickest player snaps (main.gd times the AIs' reactions)
+					var alive: Array = g.alive_players()
+					g.snap(alive[g.rng.randi_range(0, alive.size() - 1)].seat)
+					continue
 				var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
 				var mem: Dictionary = memories.get_or_add(seat, {})
 				var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
@@ -1193,7 +1200,12 @@ func test_ai_all_games() -> void:
 				if g.phase == "play":
 					var count := 0
 					for p in g.players:
-						count += p.hand.size()
+						for c in p.hand:
+							if not c.has("item"):
+								count += 1
+					if kind == "snap":
+						for k in g.won:
+							count += g.won[k].size()
 					for m in g.melds:
 						count += m["cards"].size()
 					for c in g.stock + g.burned + g.discard_pile:
@@ -1305,3 +1317,80 @@ func test_spades() -> void:
 	check(g.tricks_won.get(o[1], 0) == 1, "a spade beats the jack of hearts")
 	check(g.round_score(o[0]) == 10, "bid 1, took 1: 10")
 	check(g.round_score(o[1]) == -50, "bid nil, took 1: -50")
+
+
+# ================================================================ snap
+
+func test_snap() -> void:
+	var g := Snap.new()
+	g.setup(["A", "B", "C"], {}, 4)
+	g.start_round()
+	var total := 0
+	for p in g.players:
+		for c in p.hand:
+			if not c.has("item"):
+				total += 1
+	check(total == 52, "every card is in someone's pile")
+	check(g.snapshot(0)["players"][0]["hand"][0].get("hidden", false), "nobody sees their own pile")
+	g.trump_rank = 13
+	var a := g.turn
+	g.players[a].hand = cards("5D 7C")
+	g.flip(a)
+	var b := g.turn
+	g.players[b].hand = cards("9S 7H")
+	check(not g.snap_ready(), "one card: nothing to snap")
+	g.flip(b)
+	check(g.snap_ready(), "7 on 7: snap!")
+	var c := g.turn
+	check(g.snap(c)["good"] and g.won[c].size() == 2 and g.discard_pile.is_empty(), "anyone can snap, any time, and wins the middle")
+	var hp: int = g.players[a].hp
+	check(not g.snap(a)["good"] and g.players[a].hp == hp - 1, "a wrong snap costs 1 health")
+	# a trump matches anything
+	g.discard_pile = cards("4H KD")
+	check(g.snap_ready(), "a trump on top matches")
+	# the end: most cards won
+	g = Snap.new()
+	g.setup(["A", "B"], {}, 6)
+	g.start_round()
+	a = g.turn
+	b = g.next_alive(a)
+	g.players[a].hand = cards("2C")
+	g.players[b].hand = cards("2D")
+	g.won[a] = cards("3C 3D 3H")
+	g.flip(a)
+	g.flip(b)
+	check(g.last_call and g.snap_ready(), "last flip: one last chance to snap")
+	g.snap(b)
+	g.finish(g.turn)
+	check(g.phase == "shoot" and g.gun["holder"] == a, "most cards won takes the shotgun")
+
+
+# ================================================================ president
+
+func test_president() -> void:
+	var g := President.new()
+	g.setup(["A", "B", "C"], {}, 8)
+	g.start_round()
+	g.trump_rank = 13
+	var o := [g.turn, g.next_alive(g.turn), g.next_alive(g.next_alive(g.turn))]
+	g.players[o[0]].hand = cards("5H 5C 9D")
+	g.players[o[1]].hand = cards("4H 4C 7D 7S KS")
+	g.players[o[2]].hand = cards("2H 2C 3D")
+	check(not g.play(o[0], ["5H", "9D"])["ok"], "a pair must be the same rank")
+	check(g.play(o[0], ["5H", "5C"])["ok"] and g.turn == o[1], "lead a pair of 5s")
+	check(not g.play(o[1], ["4H", "4C"])["ok"], "4s don't beat 5s")
+	check(not g.play(o[1], ["7D"])["ok"], "it has to be a pair")
+	check(g.play(o[1], ["7D", "KS"])["ok"], "a 7 and a trump make a pair of 7s")
+	check(g.play(o[2], ["2H", "2C"])["ok"], "2s are high")
+	g.pass_turn(g.turn)
+	g.pass_turn(g.turn)
+	check(g.pile_top.is_empty() and g.turn == o[2], "everyone passed: the pile clears and the 2s lead")
+	g.play(o[2], ["3D"])
+	check(g.phase == "shoot" and g.gun["holder"] == o[2], "first out is President")
+	check(g.scum == o[1], "most cards left is the Scum")
+	g.gun = null
+	g.phase = "round_over"
+	var swaps := []
+	g.event.connect(func(kind, d): if kind == "exchange": swaps.append(d))
+	g.start_round()
+	check(swaps.size() == 1 and swaps[0]["president"] == o[2] and swaps[0]["scum"] == o[1], "next round the Scum pays the President")

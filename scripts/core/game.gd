@@ -710,6 +710,11 @@ func _end_round(winner_seat: int, reason: String = "") -> void:
 	_check_normal_match()
 
 
+## Do players have cards the others mustn't see? (Snap doesn't: nobody looks.)
+func has_private_hands() -> bool:
+	return true
+
+
 ## Normal mode: has someone won enough rounds to take the match?
 func _check_normal_match() -> void:
 	if options["shotgun"] or phase == "match_over":

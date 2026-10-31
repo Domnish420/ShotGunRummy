@@ -25,6 +25,9 @@ const Games = preload("res://scripts/core/games.gd")
 const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
 const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
 const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
+const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
+const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
+const SnapBot = preload("res://scripts/core/snap_bot.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -1302,6 +1305,8 @@ func _act(action: String, args: Array, then: Callable) -> void:
 	var seat := game.turn
 	if action == "shoot" and game.gun != null:
 		seat = game.gun["holder"]
+	if action == "snap":
+		seat = _me() # Snap: anyone, any time
 	if _is_bot(seat) and action != "next_round" and action != "play_again":
 		return # the AI is playing this one
 	then.call(Session.perform(game, seat, action, args, true))
@@ -1455,7 +1460,7 @@ func _after_action() -> void:
 				lit_card = ""
 				message = ""
 				_drawing_again = false
-				var private := hide_hands and _people_alive() > 1
+				var private := hide_hands and _people_alive() > 1 and game.has_private_hands()
 				if _is_bot(game.turn):
 					# the AI plays while the phone waits for the next person
 					shown_turn = turn_counter
@@ -1737,7 +1742,7 @@ func _show_blackjack_result() -> void:
 # ================================================================ AI players
 
 ## Seconds the AI waits after each kind of move, so you can follow along.
-const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2}
+const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 1.5, "finish": 1.5}
 
 
 func _process(delta: float) -> void:
@@ -1761,6 +1766,8 @@ func _ai_seat() -> int:
 func _drive_ai(delta: float) -> void:
 	if game == null or round_label == null or (_online() and not session.is_host()):
 		return
+	if game.kind == "snap":
+		_drive_snaps(delta)
 	var seat := _ai_seat()
 	if game.phase != _ai_phase:
 		_ai_phase = game.phase
@@ -1807,6 +1814,41 @@ func _drive_ai(delta: float) -> void:
 		_after_fire(res, seat, int(act[1][0]))
 	else:
 		_after_action()
+
+
+var _snap_flips := -1
+var _snap_timers := {} # AI seat -> seconds until it snaps
+
+
+## Snap: the AIs snap out of turn. Each flip gives every AI a reaction time;
+## the quickest one snaps (easy ones sometimes snap at nothing).
+func _drive_snaps(delta: float) -> void:
+	if game.phase != "play" or world.dealing or _pending_cb.is_valid():
+		return
+	if not _online() and overlay_layer.get_child_count() > 0:
+		return
+	if game.flips != _snap_flips:
+		_snap_flips = game.flips
+		_snap_timers = {}
+		for p in game.players:
+			if not p.alive or p.bot == "":
+				continue
+			if game.snap_ready():
+				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot)
+			elif game.rng.randf() < SnapBot.false_snap_chance(p.bot):
+				_snap_timers[p.seat] = game.rng.randf_range(0.4, 1.0)
+	if not game.snap_ready() and game.discard_pile.size() < 2:
+		_snap_timers = {}
+	for s in _snap_timers.keys():
+		_snap_timers[s] -= delta
+		if _snap_timers[s] <= 0.0:
+			_snap_timers = {}
+			if _online():
+				session.act_as(s, "snap", [])
+			else:
+				Session.perform(game, s, "snap", [], true)
+				_after_action()
+			return
 
 
 # ================================================================ table
@@ -1946,6 +1988,10 @@ func _make_mode_ui():
 			return CheatUI.new(self)
 		"hearts", "spades":
 			return TricksUI.new(self)
+		"snap":
+			return SnapUI.new(self)
+		"president":
+			return PresidentUI.new(self)
 	return null
 
 

@@ -8,8 +8,9 @@ const Bot = preload("res://scripts/core/bot.gd")
 const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 const TricksBot = preload("res://scripts/core/tricks_bot.gd")
+const PresidentBot = preload("res://scripts/core/president_bot.gd")
 
-const KINDS := ["gofish", "cheat", "hearts", "spades"]
+const KINDS := ["gofish", "cheat", "hearts", "spades", "snap", "president"]
 
 var fails := 0
 var main
@@ -86,6 +87,9 @@ func _play(kind: String, what: String) -> void:
 			if pick != null and step % 5 == 0:
 				pick.pressed.emit()
 			continue
+		if kind == "snap" and g.phase == "play" and g.snap_ready() and not main.world.dealing and step % 9 == 0 and g.flips % 2 == 0:
+			main.mode_ui._snap_pressed() # race the AIs
+			continue
 		if not g.is_turn_of(0) or main.world.dealing or main.world.fx_busy or step % 3 != 0:
 			continue
 		my_moves += 1
@@ -116,8 +120,23 @@ func _play(kind: String, what: String) -> void:
 						continue
 					main.selected = [TricksBot.choose_card(g, 0, "normal", legal)["id"]]
 					main.mode_ui._first_pressed()
+			"snap":
+				main.mode_ui._flip_pressed()
+			"president":
+				var ids: Array = PresidentBot.choose_play(g, 0, "normal")
+				if ids.is_empty():
+					main.mode_ui._pass_pressed()
+				else:
+					main.selected = ids
+					main.mode_ui._play_pressed()
 	check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
 	check(my_moves > 0, "%s %s: you played" % [kind, what])
 	if what == "tutorial":
 		check(coached, "%s tutorial: tips showed" % kind)
+	if kind == "snap":
+		var ai_snaps := 0
+		for line in main.log_lines:
+			if line.contains(" SNAPS ") and not line.begins_with("SAM"):
+				ai_snaps += 1
+		check(ai_snaps > 0, "snap %s: the AIs snap out of turn" % what)
 	print("%s %s: %d rounds, winner %s" % [kind, what, g.round_num, g.players[g.winner].name if g.winner >= 0 else "-"])

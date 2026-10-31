@@ -3,8 +3,8 @@ extends RefCounted
 ##   easy:   plays a random legal card (and bids roughly in Spades).
 ##   normal: Hearts: ducks under tricks with points, dumps the Queen of
 ##           Spades and high hearts when it can't follow. Spades: bids from
-##           its high cards and spades, then wins tricks until it has its bid
-##           and ducks after.
+##           its high cards and spades, then wins every trick it can (extra
+##           tricks still score), unless it bid nil.
 ##   hard:   also saves its trumps for when they matter and plays last in a
 ##           trick to win it as cheaply as possible.
 
@@ -46,10 +46,12 @@ static func choose_bid(game, seat: int, level: String) -> int:
 			if v >= 12:
 				est += 1.0
 		elif v == 14:
-			est += 0.9
+			est += 0.95
 		elif v == 13:
-			est += 0.6
-	est += maxf(0.0, spades - 3) * 0.8
+			est += 0.7
+		elif v == 12:
+			est += 0.3
+	est += maxf(0.0, spades - hand.size() / 4.0) * 0.8
 	var n := int(round(est))
 	if level == "easy":
 		n += game.rng.randi_range(-1, 1)
@@ -141,7 +143,9 @@ static func _hearts_card(game, seat: int, level: String, sorted: Array, winners:
 
 
 static func _spades_card(game, seat: int, level: String, sorted: Array, winners: Array, losers: Array, plain: Array) -> Dictionary:
-	var need: bool = int(game.tricks_won.get(seat, 0)) < int(game.bids.get(seat, 0))
+	# extra tricks only ever add points (there are no bags), so keep winning,
+	# unless we bid nil
+	var need: bool = int(game.bids.get(seat, 0)) > 0
 	if need:
 		if game.trick.is_empty():
 			# lead our strongest plain card

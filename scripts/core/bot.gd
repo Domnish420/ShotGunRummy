@@ -20,6 +20,8 @@ const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
 const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 const TricksBot = preload("res://scripts/core/tricks_bot.gd")
+const SnapBot = preload("res://scripts/core/snap_bot.gd")
+const PresidentBot = preload("res://scripts/core/president_bot.gd")
 
 const LEVELS := ["easy", "normal", "hard"]
 const ITEMS_PER_TURN := {"easy": 1, "normal": 2, "hard": 3}
@@ -41,6 +43,10 @@ static func next_action(game, seat: int, level: String = "normal", memory: Dicti
 			return CheatBot.next_action(game, seat, level, memory)
 		"hearts", "spades":
 			return TricksBot.next_action(game, seat, level, memory)
+		"snap":
+			return SnapBot.next_action(game, seat, level, memory)
+		"president":
+			return PresidentBot.next_action(game, seat, level, memory)
 	var me = game.players[seat]
 	var key := "%d-%d-%d" % [game.round_num, seat, me.turns_taken]
 	if memory.get("turn", "") != key:
@@ -122,7 +128,7 @@ static func _apply(game, seat: int, act: Array) -> Dictionary:
 			return game.discard(seat, args[0])
 		"shoot":
 			return game.shoot(seat, args[0])
-		"ask", "play", "call", "let_go", "bid":
+		"ask", "play", "call", "let_go", "bid", "flip", "snap", "finish", "pass":
 			return game.perform_action(seat, act[0], args)
 		"hit":
 			return game.hit(seat)

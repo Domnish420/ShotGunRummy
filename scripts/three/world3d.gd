@@ -658,6 +658,9 @@ func sync(s: Dictionary) -> void:
 	if game.kind == "cheat":
 		_cheat_pile(seen, game, discard_base, stock_xf)
 		pile = []
+	elif game.kind == "president":
+		_president_pile(seen, game, stock_xf)
+		pile = []
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
 		var c: Dictionary = pile[i]
@@ -687,6 +690,8 @@ func sync(s: Dictionary) -> void:
 
 	if game.kind == "hearts" or game.kind == "spades":
 		_trick_cards(seen, game, viewer, stock_xf)
+	if game.kind == "snap":
+		_snap_piles(seen, game, viewer, stock_xf)
 
 	# other players' hands and items, face down in front of them
 	for p in game.players:
@@ -700,6 +705,8 @@ func sync(s: Dictionary) -> void:
 		if game.kind == "blackjack":
 			_blackjack_hand(seen, game, p, seat_pos, side, yaw, stock_xf)
 			hand = []
+		elif game.kind == "snap":
+			hand = [] # drawn as a pile by _snap_piles
 		for i in range(hand.size()):
 			var pos := center + side * ((i - (hand.size() - 1) * 0.5) * 0.035)
 			pos.y = TABLE_TOP + 0.002 + 0.001 * i
@@ -786,6 +793,52 @@ func _trick_cards(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> vo
 			var pos := _toward_center(seat_pos, 0.3) + side * 0.28
 			pos.y = TABLE_TOP + 0.002 + 0.003 * i
 			_place(seen, "won-%d-%d" % [p.seat, i], {}, OPP_CARD, _flat(pos, atan2(-seat_pos.x, -seat_pos.z) + i * 0.15, false), false, true, "", "", "", false, spawn)
+
+
+## Snap: everyone's pile face down in front of them (yours too), and the
+## cards they've won stacked beside it. A gold SNAP! shows on a match.
+func _snap_piles(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> void:
+	var n: int = game.players.size()
+	for p in game.players:
+		var seat_pos := seat_position(p.seat, viewer, n)
+		var side := Vector3.UP.cross(seat_pos.normalized()).normalized()
+		var yaw := atan2(-seat_pos.x, -seat_pos.z)
+		var t := 0.55 if p.seat == viewer else 0.36
+		var base := _toward_center(seat_pos, t)
+		if p.seat == viewer:
+			base += Vector3(-0.3, 0, 0) # off to the left, clear of your items
+		var count: int = p.hand.size()
+		for i in range(mini(count, 12)):
+			var pos := base
+			pos.y = TABLE_TOP + 0.002 + 0.0025 * i
+			_place(seen, "snappile-%d-%d" % [p.seat, i], {}, TABLE_CARD if p.seat == viewer else OPP_CARD, _flat(pos, yaw, false), false, true, "stock" if p.seat == viewer and i == mini(count, 12) - 1 else "", "", "amber" if p.seat == viewer and i == mini(count, 12) - 1 and game.is_turn_of(viewer) else "", false, spawn)
+		var won: int = game.won.get(p.seat, []).size()
+		for i in range(mini(won, 8)):
+			var pos := base + side * (0.2 if p.seat == viewer else 0.16)
+			pos.y = TABLE_TOP + 0.002 + 0.0025 * i
+			_place(seen, "snapwon-%d-%d" % [p.seat, i], {}, OPP_CARD, _flat(pos, yaw + 0.3, false), false, true, "", "", "", false, spawn)
+		if p.seat == viewer:
+			_label_at("YOUR PILE %d · WON %d" % [count, won], base + Vector3(0.08, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
+	if game.snap_ready() and game.phase == "play":
+		_label_at("SNAP!", Vector3(0.2, TABLE_TOP + 0.02, 0.18), 48, Palette.GOLD)
+
+
+## President: the set to beat, face up in the middle, and who played it.
+func _president_pile(seen: Dictionary, game, spawn: Transform3D) -> void:
+	var top: Dictionary = game.pile_top
+	if top.is_empty():
+		if game.phase == "play":
+			_label_at("NEW LEAD", Vector3(0.22, TABLE_TOP + 0.01, 0.0), 30, Palette.DIM)
+		return
+	var ids: Array = top["ids"]
+	var cards := []
+	for c in game.discard_pile:
+		if ids.has(c["id"]):
+			cards.append(c)
+	for i in range(cards.size()):
+		var pos := Vector3(0.14 + i * 0.07, TABLE_TOP + 0.003 + i * 0.002, -0.02)
+		_place(seen, cards[i]["id"], cards[i], TABLE_CARD, _flat(pos, (i - cards.size() * 0.5) * 0.08, true), true, true, "", "", "", game.is_trump(cards[i]), spawn)
+	_label_at(game.players[int(top["seat"])].name, Vector3(0.22, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
 
 
 ## Cheat: the pile, face down and messy, with what's due next.
