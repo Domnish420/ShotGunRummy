@@ -294,6 +294,8 @@ static func make(name_: String) -> AudioStreamWAV:
 			_note(out, 4200.0, 0.03, "noise", 0.12, -0.5)
 		"tap":
 			_note(out, 1200.0, 0.025, "pulse", 0.14)
+		"type": # a key pressed
+			_note(out, 1600.0 + randf() * 400.0, 0.018, "pulse", 0.1)
 		"pick_item":
 			_note(out, _hz(7), 0.04, "tri", 0.25)
 			_note(out, _hz(14), 0.05, "tri", 0.2)

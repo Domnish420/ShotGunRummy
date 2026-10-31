@@ -312,6 +312,12 @@ func _button(text: String, on_press: Callable, font_size: int = 30) -> Button:
 	return b
 
 
+## A soft blip for each key typed into a name box.
+func _typing_sounds(edit: LineEdit) -> void:
+	edit.text_changed.connect(func(_t: String) -> void: _sound("type"))
+	edit.text_submitted.connect(func(_t: String) -> void: _sound("select"))
+
+
 func _plain_button(text: String, on_press: Callable, font_size: int = 30) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -467,6 +473,7 @@ func show_menu() -> void:
 	var row := HBoxContainer.new()
 	row.add_child(_tag("NAME", 30, Palette.CARD_INK))
 	_name_edit = LineEdit.new()
+	_typing_sounds(_name_edit)
 	_name_edit.text = profile_name
 	_name_edit.placeholder_text = "SIGN HERE"
 	_name_edit.max_length = 10
@@ -1006,6 +1013,7 @@ func show_join() -> void:
 	box.add_child(_label("OR JOIN BY IP (shown on the host's screen)", 22, Palette.CARD_INK, true))
 	var row := HBoxContainer.new()
 	_ip_edit = LineEdit.new()
+	_typing_sounds(_ip_edit)
 	_ip_edit.placeholder_text = "192.168.1.20"
 	_ip_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_ip_edit)
@@ -1298,6 +1306,7 @@ func show_creator() -> void:
 	var name_row := HBoxContainer.new()
 	name_row.add_child(_tag("NAME", 24, Palette.DIM))
 	_creator_name = LineEdit.new()
+	_typing_sounds(_creator_name)
 	_creator_name.text = str(_editing.get("name", ""))
 	_creator_name.max_length = 20
 	_creator_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1332,6 +1341,7 @@ func show_creator() -> void:
 		sw.add_theme_stylebox_override("normal", Palette.box(col_c.darkened(0.35) if i > 0 else Color(0.2, 0.18, 0.16), edge, 3, 2, 4))
 		sw.add_theme_stylebox_override("hover", Palette.box(col_c.darkened(0.2) if i > 0 else Color(0.25, 0.22, 0.2), edge, 3, 2, 4))
 		sw.text = "-" if i == 0 else ""
+		sw.pressed.connect(_sound.bind("part"))
 		sw.pressed.connect(_set_part.bind("outfit", i))
 		swatches.add_child(sw)
 	box.add_child(swatches)
@@ -1464,6 +1474,7 @@ func show_setup() -> void:
 		var row := HBoxContainer.new()
 		row.add_child(_tag("%d." % (i + 1), 30, Palette.CARD_INK))
 		var edit := LineEdit.new()
+		_typing_sounds(edit)
 		edit.text = str(player_names[i])
 		edit.placeholder_text = "SIGN HERE"
 		edit.max_length = 10
@@ -1488,6 +1499,7 @@ func show_setup() -> void:
 	hide_box.add_theme_color_override("font_hover_pressed_color", Palette.CARD_INK)
 	hide_box.add_theme_font_size_override("font_size", 26)
 	hide_box.toggled.connect(_on_hide_toggled)
+	hide_box.toggled.connect(func(_on: bool) -> void: _sound("tick"))
 	box.add_child(hide_box)
 
 	var sign_btn := _button("SIGN THE WAIVER", _start_from_setup, 34)
@@ -2461,6 +2473,7 @@ func _build_table() -> void:
 				b.pressed.disconnect(c["callable"])
 			b.text = spec[0]
 			b.visible = spec[0] != "" and (b != use_btn or game.options["shotgun"])
+			b.pressed.connect(_sound.bind("tick"))
 			if spec[1].is_valid():
 				b.pressed.connect(spec[1])
 			if spec[2] != null:
