@@ -101,6 +101,20 @@ dithering).
 The window opens at phone shape (portrait). To try it alone, use
 **PLAY ON THIS PHONE → VS AI (SOLO)**.
 
+## Build a Windows .exe or a web version
+
+`export_presets.cfg` has two ready-made exports (Godot's export templates
+need installing once: **Editor → Manage Export Templates → Download**):
+
+- **Windows Desktop**: one `ShotgunCards.exe` with everything packed inside.
+  **Project → Export → Windows Desktop → Export Project**, or
+  `godot --headless --export-release "Windows Desktop" build/windows/ShotgunCards.exe`
+- **Web**: for itch.io and other sites that run games in the browser.
+  `godot --headless --export-release "Web" build/web/index.html`, then zip
+  what's in `build/web/` and upload it. Browsers can't open the connections
+  Wi-Fi lobbies use, so the web version is solo and pass & play only (the
+  lobby buttons are hidden there).
+
 ## Run it on your phone
 
 **Android, quickest:** turn on Developer options and USB debugging on the phone,

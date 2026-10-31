@@ -474,8 +474,12 @@ func show_menu() -> void:
 	row.add_child(_name_edit)
 	box.add_child(row)
 	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
-	box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
-	box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
+	if OS.has_feature("web"):
+		# browsers can't open the connections lobbies use
+		box.add_child(_label("Lobbies with friends need the download version. Here you can play on this device.", 22, Palette.CARD_INK, true))
+	else:
+		box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
+		box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
 	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
@@ -657,8 +661,9 @@ func show_play_choice() -> void:
 	col.add_child(title)
 	col.add_child(_bubble("VS AI", show_solo, Palette.GOLD, 58))
 	col.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 44))
-	col.add_child(_bubble("HOST A LOBBY", _on_host_pressed, Color(0.55, 0.85, 1.0), 44))
-	col.add_child(_bubble("JOIN A LOBBY", _on_join_pressed, Color(0.55, 0.85, 1.0), 44))
+	if not OS.has_feature("web"): # browsers can't open the connections lobbies use
+		col.add_child(_bubble("HOST A LOBBY", _on_host_pressed, Color(0.55, 0.85, 1.0), 44))
+		col.add_child(_bubble("JOIN A LOBBY", _on_join_pressed, Color(0.55, 0.85, 1.0), 44))
 	col.add_child(_bubble("BACK", show_cartridges, Palette.DIM, 34))
 
 
