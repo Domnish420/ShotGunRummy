@@ -21,6 +21,7 @@ extends "res://scripts/core/game.gd"
 
 func _init() -> void:
 	kind = "blackjack"
+	options["trump_cards"] = false # trumps are Rummy's
 	options.merge({
 		"hand_size": 2,
 		"items_dealt": 2,

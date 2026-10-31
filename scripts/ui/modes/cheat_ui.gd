@@ -162,7 +162,6 @@ func rules() -> Array:
 		"THE DEAL. All 52 cards are dealt out, plus 2 item cards each.",
 		"YOUR TURN. Cards go down in order: aces, then twos, then threes, up to kings, then round again. Tap 1 to 4 cards and PLAY them face down as the rank that's due. You can lie.",
 		"CHEAT! Before you play, you can call CHEAT! on the player before you. Their cards are turned over. If any of them isn't what they said, they pick up the whole pile and you get an item. If they told the truth, you pick it up.",
-		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings. A trump always counts as the rank you said: it's never a lie.",
 		"WINNING. Play your last card and you win, unless the next player calls CHEAT! and catches you.",
 		"THE SHOTGUN. The winner gets 1 shell, +1 for every 15 cards the others are left holding (max 3), and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]

@@ -1,5 +1,5 @@
 extends "res://scripts/ui/modes/table_mode.gd"
-## President at the table: tap a set (same rank, trumps fill in) and PLAY it
+## President at the table: tap a set (same rank) and PLAY it
 ## over the pile, or PASS.
 
 const RANK_WORDS := {3: "3s", 4: "4s", 5: "5s", 6: "6s", 7: "7s", 8: "8s", 9: "9s", 10: "10s", 11: "JACKS", 12: "QUEENS", 13: "KINGS", 14: "ACES", 15: "2s", 16: "TRUMPS"}
@@ -129,7 +129,6 @@ func rules() -> Array:
 		"THE DEAL. All the cards are dealt out, plus 2 item cards each.",
 		"RANKS. 3 is lowest, then up to K, then A, and 2 is the highest.",
 		"PLAYING. The leader plays a single, a pair, three or four of a kind. Going round, each player must beat it with the same number of cards of a higher rank, or PASS. Once you pass you sit out until the pile clears. When everyone else has passed, the pile clears and the last player to play leads again.",
-		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings. Trumps are wild: they fill in any set (a 9 and a trump is a pair of 9s). Trumps on their own beat everything.",
 		"PRESIDENT AND SCUM. First to play their last card is PRESIDENT and wins. Whoever is left holding the most cards is the SCUM: next round they hand the President their best card and get the President's worst back.",
 		"THE SHOTGUN. The President gets 1 shell for every 2 other players (at least 1, at most 3) and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]
@@ -140,7 +139,7 @@ func coach() -> String:
 	if g.phase != "play":
 		return ""
 	if not main._my_turn():
-		return "Watch which big cards (aces, 2s, trumps) have been played already."
+		return "Watch which big cards (aces and 2s) have been played already."
 	if g.pile_top.is_empty():
 		return "You're leading: get rid of your lowest cards. Pairs and threes of the same rank go together."
 	return "Beat %s with the same number of higher cards, or PASS to save your good cards." % _describe(g.pile_top).to_lower()

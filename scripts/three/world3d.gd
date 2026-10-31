@@ -1291,13 +1291,24 @@ func _build_shotgun() -> Node3D:
 	return g
 
 
+## Out of sight under the table: the shotgun only comes out for the winner.
+const GUN_AWAY := Vector3(0.0, -1.4, 0.0)
+
+
 func _rest_gun(instant: bool = false) -> void:
 	_gun_pose = "rest"
-	var xf := Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.0, TABLE_TOP + 0.035, -0.86))
-	if instant:
+	var xf := Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.FORWARD, PI * 0.5), GUN_AWAY)
+	if instant or not shotgun.visible:
 		shotgun.transform = xf
-	else:
-		_tween(shotgun, "transform", xf)
+		shotgun.visible = false
+		return
+	# taken away: it drops out of sight, then hides
+	_tween(shotgun, "transform", xf)
+	var t := shotgun.create_tween()
+	t.tween_interval(MOVE_TIME + 0.05)
+	t.tween_callback(func() -> void:
+		if _gun_pose == "rest":
+			shotgun.visible = false)
 
 
 func _holder_pose(holder: int, aim: Vector3) -> Transform3D:
@@ -1329,20 +1340,29 @@ func _sync_gun(game, viewer: int) -> void:
 		var aim := Vector3(0, 0.45, 0) if holder == viewer else _head_of(viewer)
 		var pose := "held%d" % holder
 		if _gun_pose != pose:
+			if not shotgun.visible:
+				# handed over: it comes up from under the table in front of them
+				var start := _holder_pose(holder, aim)
+				start.origin.y -= 0.9
+				shotgun.transform = start
+				shotgun.visible = true
 			_gun_pose = pose
-			_tween(shotgun, "transform", _holder_pose(holder, aim))
+			_tween(shotgun, "transform", _holder_pose(holder, aim), 0.0, 0.5)
 	elif _gun_pose != "rest" and game.phase != "match_over":
 		_rest_gun()
 
 
 ## Bang. Swings to the target, kicks back, flashes, and the target jolts.
-func fire(shooter: int, target: int) -> void:
+func fire(shooter: int, target: int, blank: bool = false) -> void:
 	var aim := _head_of(target)
 	var pose := _holder_pose(shooter, aim)
 	_gun_pose = "fired"
 	var t := create_tween()
 	t.tween_property(shotgun, "transform", pose, 0.18)
-	t.tween_callback(_bang.bind(target))
+	if blank:
+		t.tween_callback(announce.bind("CLICK."))
+	else:
+		t.tween_callback(_bang.bind(target))
 	var kicked := pose
 	kicked.origin += pose.basis.z * 0.12
 	kicked.basis = kicked.basis * Basis(Vector3.RIGHT, 0.35)

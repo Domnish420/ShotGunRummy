@@ -21,6 +21,7 @@ var last_call := false # every pile is empty: snap now or never
 
 func _init() -> void:
 	kind = "snap"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 func table_note(seat: int) -> String:

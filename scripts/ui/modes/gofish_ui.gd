@@ -172,7 +172,6 @@ func rules() -> Array:
 		"THE DEAL. Everyone gets 7 cards (5 with 4 or more players) and 2 item cards. The rest of the cards and the items are the POND.",
 		"YOUR TURN. Tap a card to pick its rank, then ASK a player for that rank. If they have any, they hand them all over and you go again. If not, GO FISH: you draw from the pond. If you draw the rank you asked for, you go again. Otherwise your turn ends. Draw an item and you keep it and draw again.",
 		"BOOKS. Four of a kind is a BOOK, and goes down in front of you by itself.",
-		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings. Trumps are wild for books: three of a rank plus a trump, or two plus two trumps, make a book. Nobody can ask for the trump rank, and trumps are never handed over.",
 		"THE END. The round ends when someone has to fish and the pond is empty, or nobody has any cards. Most books wins (a tie goes to whoever holds fewer cards).",
 		"THE SHOTGUN. The winner gets 1 shell for every book they're ahead of the next player (at least 1, at most 3) and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]

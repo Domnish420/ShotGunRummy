@@ -24,6 +24,7 @@ var caught := {} # seat -> times caught lying this round
 
 func _init() -> void:
 	kind = "cheat"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 func rank_name(rank: int) -> String:

@@ -11,6 +11,7 @@ extends "res://scripts/core/tricks.gd"
 
 func _init() -> void:
 	kind = "hearts"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 static func points_of(card: Dictionary) -> int:

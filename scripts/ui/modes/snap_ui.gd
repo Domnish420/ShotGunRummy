@@ -136,7 +136,6 @@ func rules() -> Array:
 		"THE DEAL. All the cards are dealt face down into everyone's own pile, with the items shuffled in, plus 2 items each in your hand. Nobody looks at their pile.",
 		"YOUR TURN. FLIP the top card of your pile onto the pile in the middle (tap your pile or press FLIP). Flip an item and you keep it and flip again.",
 		"SNAP! When the top two cards in the middle match, anyone can press SNAP! at any time. The first to snap wins every card in the middle.",
-		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings. A trump matches anything.",
 		"WRONG SNAPS. Snap when they don't match and you lose 1 health (in normal mode, 2 cards from your pile go in the middle).",
 		"THE END. When everyone's pile has run out, whoever won the most cards wins: 1 shell, +1 for every 10 cards ahead (max 3).",
 		"ON ONE PHONE. With more than one person, whoever grabs the phone first presses SNAP! and says who they are.",
@@ -151,4 +150,4 @@ func coach() -> String:
 		return "The top two cards match! Press SNAP! before the AIs do."
 	if main._my_turn():
 		return "Your turn: FLIP your top card onto the middle. Then watch for two in a row that match."
-	return "Watch the middle. Same rank twice in a row, or a trump (gold star), and you SNAP!"
+	return "Watch the middle. Same rank twice in a row and you SNAP!"

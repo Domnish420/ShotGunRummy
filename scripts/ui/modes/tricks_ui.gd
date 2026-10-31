@@ -180,7 +180,6 @@ func rules() -> Array:
 		"THE TABLE. One player deals each round and the player to their left leads the first trick. Play goes round to the left, and next round the deal moves one seat to the right.",
 		"THE DEAL. The cards are dealt out evenly (any left over are set aside), plus 2 item cards each.",
 		"TRICKS. Everyone plays one card. Follow the suit that was led if you can (the cards you can play glow gold). The highest card of the led suit wins the trick (aces high), and the winner leads the next one.",
-		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings. A trump can be played any time, even if you could follow suit, and wins the trick. If two are played, the first one wins.",
 	]
 	if g.kind == "hearts":
 		return ["HEARTS: DON'T TAKE HEARTS. 3 to 6 players."] + common + [
@@ -191,7 +190,7 @@ func rules() -> Array:
 		]
 	return ["SPADES: EVERYONE FOR THEMSELVES. 2 to 6 players."] + common + [
 		"BIDDING. Before the first trick everyone bids how many tricks they'll take. 0 is NIL.",
-		"SPADES ARE TRUMPS. A spade beats any other suit (but not a trump card). Spades can't be led until one has been played.",
+		"SPADES ARE TRUMPS. A spade beats any other suit. Spades can't be led until one has been played.",
 		"SCORING. Make your bid: 10 per trick bid, +1 for each extra. Miss it: -10 per trick bid. Nil: +50 if you take none, -50 if you take any.",
 		"THE SHOTGUN. Best score this round wins, with 1 shell, +1 for making your bid exactly, +1 for making nil. Everyone has 4 health. Last one standing walks out.",
 	]

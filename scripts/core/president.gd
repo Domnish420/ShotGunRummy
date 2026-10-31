@@ -23,6 +23,7 @@ var scum := -1 # last round's most cards
 
 func _init() -> void:
 	kind = "president"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 func table_note(seat: int) -> String:

@@ -57,6 +57,9 @@ static func _use(game, seat: int, card: Dictionary, level: String) -> Array:
 		"cigarettes":
 			if me.hp < me.max_hp:
 				return [id, -1, ""]
+		"blank":
+			if me.hp <= 2:
+				return [id, -1, ""]
 		"medicine":
 			if me.hp >= 2 and me.hp <= me.max_hp - 2:
 				return [id, -1, ""]

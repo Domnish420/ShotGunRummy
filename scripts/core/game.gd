@@ -118,6 +118,7 @@ var melds: Array = [] # { id, type, cards, owner }
 var burned: Array = [] # cards out of play this round (beer, eliminated hands)
 var item_deck: Array = []
 var gun = null # { holder, shells, total } while someone holds the shotgun
+var blank_loaded := false # Blank Shell: the next shot fired does nothing
 var last_result: Dictionary = {}
 var winner := -1
 var trump_rank := 0 # this round's wild rank, 0 = none
@@ -164,6 +165,7 @@ func reset_match() -> void:
 	melds = []
 	burned = []
 	gun = null
+	blank_loaded = false
 	last_result = {}
 	winner = -1
 
@@ -842,6 +844,9 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 		"saw":
 			if p.sawed:
 				return "The barrel is already sawn off."
+		"blank":
+			if blank_loaded:
+				return "There's already a blank in the shotgun."
 		"dumpster_dive", "garbage_day":
 			if discard_pile.is_empty():
 				return "The discard pile is empty."
@@ -906,6 +911,9 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 	match item_id:
 		"cigarettes":
 			return {"text": "%s lights a cigarette. +1 health" % p.name, "hp_delta": 1}
+		"blank":
+			blank_loaded = true
+			return {"text": "%s slips something into the shotgun" % p.name}
 		"beer":
 			var burnt := _burn_top()
 			return {"text": "%s cracks a beer and burns %s off the stock" % [p.name, card_label(burnt)], "reveal": burnt, "private": false}
@@ -1134,8 +1142,13 @@ func shoot(shooter: int, target: int) -> Dictionary:
 	var dmg := 2 if s.sawed else 1
 	s.sawed = false
 	gun["shells"] = int(gun["shells"]) - 1
-	_emit("shot", {"shooter": shooter, "target": target, "damage": dmg})
-	damage(target, dmg, "shotgun")
+	var blank := blank_loaded
+	blank_loaded = false
+	if blank:
+		dmg = 0
+	_emit("shot", {"shooter": shooter, "target": target, "damage": dmg, "blank": blank})
+	if not blank:
+		damage(target, dmg, "shotgun")
 	if phase != "match_over" and int(gun["shells"]) <= 0:
 		gun = null
 		phase = "round_over"
@@ -1165,7 +1178,7 @@ func snapshot(view_seat: int) -> Dictionary:
 		"kind": kind, "options": options.duplicate(true), "players": ps, "round_num": round_num, "dealer": dealer,
 		"turn": turn, "phase": phase, "stock": _hidden(stock.size(), "s"),
 		"discard_pile": discard_pile.duplicate(true), "melds": melds.duplicate(true),
-		"burned": _hidden(burned.size(), "b"), "gun": gun.duplicate() if gun != null else null,
+		"burned": _hidden(burned.size(), "b"), "gun": gun.duplicate() if gun != null else null, "blank_loaded": blank_loaded,
 		"last_result": last_result.duplicate(true), "winner": winner, "trump_rank": trump_rank,
 		"drawn_from_discard": drawn_from_discard, "items_used_this_turn": items_used_this_turn,
 		"placed_this_turn": placed_this_turn,
@@ -1209,6 +1222,7 @@ func load_snapshot(d: Dictionary) -> void:
 	melds = d["melds"]
 	burned = d["burned"]
 	gun = d["gun"]
+	blank_loaded = d.get("blank_loaded", false)
 	last_result = d["last_result"]
 	winner = d["winner"]
 	trump_rank = d["trump_rank"]

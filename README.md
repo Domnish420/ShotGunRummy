@@ -3,8 +3,11 @@
 Card games for 2–6 players at a 3D table under a hanging lamp, on one phone or
 over the same Wi-Fi, with AI players to fill the seats. Every game plays by the
 same house rules: a dealer that moves round the table, item cards shuffled into
-the deck that bend the rules, a trump rank that's wild, health, and a shotgun
-for whoever wins the hand.
+the deck that bend the rules, health, and a shotgun for whoever wins the hand.
+Items never carry over: every round deals fresh ones. The shotgun isn't on the
+table: the winner is handed it at the end of the round, and it's taken away
+once they've fired. Rummy also has its rotating wild **trump** rank (the
+other games don't).
 
 - **Shotgun Rummy**: classic Rummy. Go out first.
 - **Shotgun Blackjack**: everyone against the dealer, who's one of the players.
@@ -322,6 +325,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | 🚮 Garbage Day (1) | A player of your choice takes the whole discard pile. |
 | 🔦 Spotlight (1) | A player's whole hand is shown to everyone until their next turn ends. |
 | 💥 Flashbang (1) | Every other player shows 2 random cards until their next turn ends. |
+| 🎯 Blank Shell (1) | Very rare. Slips a blank into the shotgun: the next shot fired does no damage. In every game. |
 | 🔫 Revolver (1) | A player must put cards down on their next turn, or play Russian roulette (1 in 6: lose 2 health). |
 | 🎲 Double Down (1) | A player must draw 2 cards on their next turn, from either pile. |
 | 🔮 Tarot Card (1) | The trump moves to the next rank for the rest of the round. Melds on the table keep their trumps. |

@@ -180,6 +180,9 @@ static func _pick_item(game, seat: int, level: String, memory: Dictionary) -> Ar
 			"cigarettes":
 				if me.hp < me.max_hp:
 					pick = [id, -1, ""]
+			"blank":
+				if me.hp <= 2:
+					pick = [id, -1, ""]
 			"medicine":
 				if me.hp >= 2 and me.hp <= me.max_hp - 2:
 					pick = [id, -1, ""]

@@ -36,7 +36,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_blank_shell", "test_trumps_only_rummy", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1079,6 +1079,9 @@ func test_normal_mode() -> void:
 			if g.phase == "round_over":
 				g.start_round()
 				continue
+			if kind == "snap" and g.snap_ready():
+				g.snap(g.alive_players()[g.rng.randi_range(0, g.alive_count() - 1)].seat)
+				continue
 			var mem: Dictionary = memories.get_or_add(g.turn, {})
 			var act := Bot.next_action(g, g.turn, "normal", mem)
 			if act.is_empty() or not Session.perform(g, g.turn, act[0], act[1], true)["ok"]:
@@ -1394,3 +1397,35 @@ func test_president() -> void:
 	g.event.connect(func(kind, d): if kind == "exchange": swaps.append(d))
 	g.start_round()
 	check(swaps.size() == 1 and swaps[0]["president"] == o[2] and swaps[0]["scum"] == o[1], "next round the Scum pays the President")
+
+
+## The Blank Shell: the next shot fired does nothing, then the gun is live.
+func test_blank_shell() -> void:
+	var g := new_game(3, 21)
+	var me := g.turn
+	g.players[me].items = [{"id": "I-blank-1", "item": "blank"}]
+	check(g.use_item(me, "I-blank-1")["ok"] and g.blank_loaded, "a blank goes in")
+	g.phase = "shoot"
+	var them := g.next_alive(me)
+	g.gun = {"holder": me, "shells": 2, "total": 2}
+	var hp: int = g.players[them].hp
+	var res := g.shoot(me, them)
+	check(res["ok"] and res["damage"] == 0 and g.players[them].hp == hp, "the blank does no damage")
+	g.shoot(me, them)
+	check(g.players[them].hp == hp - 1 and not g.blank_loaded, "the next shell is live")
+
+
+## Trumps (and the items about them) are only in Rummy.
+func test_trumps_only_rummy() -> void:
+	for kind in Games.kinds():
+		var g = Games.make(kind)
+		g.setup(["A", "B", "C"], {}, 4)
+		g.start_round()
+		check((g.trump_rank > 0) == (kind == "rummy"), "%s: trumps only in Rummy (trump %d)" % [kind, g.trump_rank])
+		for c in g.stock + g.item_deck:
+			if c.has("item") and kind != "rummy":
+				check(c["item"] != "tarot" and c["item"] != "joker_paint", "%s: no trump items" % kind)
+		for p in g.players:
+			for c in p.items + p.hand:
+				if c.has("item") and kind != "rummy":
+					check(c["item"] != "tarot" and c["item"] != "joker_paint", "%s: no trump items dealt" % kind)

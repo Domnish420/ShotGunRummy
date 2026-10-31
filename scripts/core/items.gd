@@ -24,6 +24,7 @@ const DEFS := {
 	# health and the shotgun
 	"cigarettes": {"name": "Cigarettes", "icon": "🚬", "text": "Gain 1 health.", "copies": 2, "needs": ""},
 	"medicine": {"name": "Expired Meds", "icon": "💊", "text": "50% chance: gain 2 health. Otherwise lose 1.", "copies": 1, "needs": ""},
+	"blank": {"name": "Blank Shell", "icon": "🎯", "text": "Very rare. Slip a blank into the shotgun: the next shot fired does no damage, whoever pulls the trigger.", "copies": 1, "needs": ""},
 	"saw": {"name": "Hand Saw", "icon": "🪚", "text": "Your next shotgun shell deals double damage.", "copies": 2, "needs": ""},
 	# information and the stock
 	"beer": {"name": "Beer", "icon": "🍺", "text": "Burn the top card of the stock. Everyone sees it.", "copies": 2, "needs": ""},
@@ -147,7 +148,15 @@ const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "h
 static var mode := "rummy"
 
 
+## Items about the trump rank, which only Rummy has.
+const RUMMY_ONLY := ["tarot", "joker_paint"]
+
+
 static func def(item_id: String) -> Dictionary:
+	if mode != "rummy" and RUMMY_ONLY.has(item_id):
+		var only: Dictionary = DEFS[item_id].duplicate()
+		only["copies"] = 0
+		return only
 	var changes: Dictionary = OVERRIDES.get(mode, {})
 	if changes.has(item_id):
 		var d: Dictionary = DEFS[item_id].duplicate()

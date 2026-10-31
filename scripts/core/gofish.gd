@@ -22,6 +22,7 @@ var _asked_this_turn := false # Revolver: has this player got a card off someone
 
 func _init() -> void:
 	kind = "gofish"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 ## Under the player's name at the table.

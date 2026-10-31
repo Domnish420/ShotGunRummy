@@ -1402,8 +1402,11 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			else:
 				_log("%s goes out%s: %d points, %d shell%s." % [_name(d["winner"]), " with RUMMY" if d["rummy"] else "", d["points"], d["shells"], "" if d["shells"] == 1 else "s"])
 		"shot":
-			_log("%s shoots %s." % [_name(d["shooter"]), _name(d["target"])])
-			if _online():
+			_log("%s shoots %s.%s" % [_name(d["shooter"]), _name(d["target"]), " CLICK: a blank." if d.get("blank", false) else ""])
+			if _online() and d.get("blank", false):
+				world.fire(d["shooter"], d["target"], true)
+				_last_shot_text = "CLICK. A BLANK. %s lives." % _name(d["target"])
+			elif _online():
 				# every phone feels it; the target's phone most of all
 				world.fire(d["shooter"], d["target"])
 				if d["target"] == _me():
@@ -1544,7 +1547,6 @@ const BLACKJACK_RULES := [
 	"THE DEAL. Everyone gets 2 cards, one face down and one face up, and 2 item cards. The other items are shuffled into the stock. The deck is shuffled fresh every round.",
 	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
-	"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, up to kings in round 13. A trump (gold star) counts as whatever you need, from 1 to 11.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
 	"BLACKJACK SHOOTS. The moment you have a Blackjack, you shoot the dealer, free.",
 	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (max 3) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
@@ -2657,11 +2659,15 @@ func _fire(shooter: int, target: int) -> void:
 func _after_fire(res: Dictionary, shooter: int, target: int) -> void:
 	if not res["ok"]:
 		return
+	var blank: bool = int(res["damage"]) == 0
 	if not _online():
-		world.fire(shooter, target)
-		_flash(Color.WHITE)
-		_shake()
+		world.fire(shooter, target, blank)
+		if not blank:
+			_flash(Color.WHITE)
+			_shake()
 	var text := "BANG. %s takes %d." % [_name(target), res["damage"]]
+	if blank:
+		text = "CLICK. A BLANK. %s lives." % _name(target)
 	if not game.players[target].alive:
 		text = "BANG. %s is out." % _name(target)
 	_last_shot_text = text

@@ -16,6 +16,7 @@ var bidding := false
 
 func _init() -> void:
 	kind = "spades"
+	options["trump_cards"] = false # trumps are Rummy's
 
 
 func _before_play() -> void:
