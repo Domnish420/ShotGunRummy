@@ -39,8 +39,10 @@ static func has(kind: String) -> bool:
 	return LIST.has(kind)
 
 
+## A game's name, as it's shown everywhere ("Shotgun Cards" already says
+## the rest).
 static func title(kind: String) -> String:
-	return "SHOTGUN " + str(LIST.get(kind, {"name": "?"})["name"])
+	return label(kind)
 
 
 static func label(kind: String) -> String:

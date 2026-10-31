@@ -9,18 +9,18 @@ table: the winner is handed it at the end of the round, and it's taken away
 once they've fired. Rummy also has its rotating wild **trump** rank (the
 other games don't).
 
-- **Shotgun Rummy**: classic Rummy. Go out first.
-- **Shotgun Blackjack**: everyone against the dealer, who's one of the players.
-- **Shotgun Go Fish**: ask for cards, collect books of four.
-- **Shotgun Cheat**: play cards face down and lie about them. Get caught and
+- **Rummy**: classic Rummy. Go out first.
+- **Blackjack**: everyone against the dealer, who's one of the players.
+- **Go Fish**: ask for cards, collect books of four.
+- **Cheat**: play cards face down and lie about them. Get caught and
   pick up the pile.
-- **Shotgun Hearts**: don't take hearts, and stay away from the Queen of
+- **Hearts**: don't take hearts, and stay away from the Queen of
   Spades.
-- **Shotgun Spades**: everyone for themselves. Bid your tricks, then make it.
-- **Shotgun Snap**: flip, watch, and snap first. Snap wrong and it hurts.
-- **Shotgun President**: beat the pile or pass. First out is President; the
+- **Spades**: everyone for themselves. Bid your tricks, then make it.
+- **Snap**: flip, watch, and snap first. Snap wrong and it hurts.
+- **President**: beat the pile or pass. First out is President; the
   Scum pays up next round.
-- **Shotgun Poker**: Texas Hold'em, betting shells instead of chips. Fold and
+- **Poker**: Texas Hold'em, betting shells instead of chips. Fold and
   you're safe; stay in and you might get shot.
 
 ### Cartridges
@@ -139,7 +139,7 @@ only ever receive their own hand, so nobody can peek. If anyone leaves mid-game,
 the game ends for everyone. When exporting an app for Android, tick the
 **INTERNET** permission in the export settings.
 
-## How to play Shotgun Rummy
+## How to play Rummy
 
 - **The table.** One player deals each round and the player to their left goes
   first. Next round the deal moves one seat to the right, so whoever dealt last
@@ -173,7 +173,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   picks who to shoot with each one. Everyone has 4 health. Health carries over
   between rounds. 0 health and you're out. Last one standing wins.
 
-## How to play Shotgun Blackjack
+## How to play Blackjack
 
 - **The table.** One player is the dealer, and everyone else plays against
   them. The player to the dealer's left goes first, play goes round to the
@@ -209,7 +209,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   for the round. Garbage Day isn't in the Blackjack deck. The in-game RULES
   list shows each one.
 
-## How to play Shotgun Go Fish
+## How to play Go Fish
 
 - **The deal.** 7 cards each (5 with 4 or more players) and 2 items. The rest
   of the cards and the items are the **pond**.
@@ -227,7 +227,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   makes someone get a card off another player or spin. Double Down, Dumpster
   Dive and Garbage Day aren't in the Go Fish deck.
 
-## How to play Shotgun Cheat
+## How to play Cheat
 
 - **The deal.** All 52 cards are dealt out, plus 2 items each.
 - **Your turn.** Cards go down in order: aces, then twos, up to kings, then
@@ -246,7 +246,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   top card into your hand, Double Down makes someone put down 2+ cards, and the
   Revolver makes a caught liar spin as well.
 
-## How to play Shotgun Hearts and Spades
+## How to play Hearts and Spades
 
 Both are trick-taking games. The cards are dealt out evenly (any left over are
 set aside), plus 2 items each. The player left of the dealer leads; everyone
@@ -270,7 +270,7 @@ trick (the first one played, if there's more than one).
   makes someone spin if they win the next trick, and Double Down makes someone
   play their highest card next.
 
-## How to play Shotgun Snap
+## How to play Snap
 
 - **The deal.** All the cards go face down into everyone's own pile, with the
   items shuffled in, plus 2 items each. Nobody looks at their pile.
@@ -289,7 +289,7 @@ trick (the first one played, if there's more than one).
   Sticky Fingers steals 3 won cards, Double Down makes someone flip 2, and
   Joker Paint turns the top card wild: a snap for whoever's quickest.
 
-## How to play Shotgun President
+## How to play President
 
 - **The deal.** All the cards are dealt out, plus 2 items each. 3 is low, then
   up to K, A, and 2 is high.
@@ -301,7 +301,7 @@ trick (the first one played, if there's more than one).
   3). Whoever's left holding the most is the **Scum**: next round they hand the
   President their best card and get the worst one back.
 
-## How to play Shotgun Poker
+## How to play Poker
 
 - **The deal.** Texas Hold'em: 2 cards face down each, plus 2 items. Five
   cards go face up in the middle: the flop (3), the turn (1) and the river (1),
@@ -354,8 +354,8 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | --- | --- |
 | `scripts/core/cards.gd` | Cards, sets, runs, lay-offs, deadwood. |
 | `scripts/core/items.gd` | Item list (names, icons, copies). Edit this to tune items. |
-| `scripts/core/game.gd` | Shotgun Rummy's rules: dealing, turns, items, scoring, shotgun, health. No UI, so it's tested on its own. |
-| `scripts/core/blackjack.gd` | Shotgun Blackjack's rules. Builds on `game.gd` for the players, items, health and shotgun. |
+| `scripts/core/game.gd` | Rummy's rules: dealing, turns, items, scoring, shotgun, health. No UI, so it's tested on its own. |
+| `scripts/core/blackjack.gd` | Blackjack's rules. Builds on `game.gd` for the players, items, health and shotgun. |
 | `scripts/core/blackjack_bot.gd` | The Blackjack AI. |
 | `scripts/core/gofish.gd`, `gofish_bot.gd` | Go Fish's rules and AI. |
 | `scripts/core/cheat.gd`, `cheat_bot.gd` | Cheat's rules and AI. |
@@ -401,7 +401,7 @@ screens, a shotgun match and then its tutorial:
 godot --headless --path . -s tests/ui_games_check.gd
 ```
 
-`tests/ui_blackjack_check.gd` plays Shotgun Blackjack solo against two AIs
+`tests/ui_blackjack_check.gd` plays Blackjack solo against two AIs
 through the real screens:
 
 ```
@@ -433,7 +433,7 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [x] Sound effects (made in code for now; real ones before release)
 - [x] AI players (easy, normal, hard)
 - [ ] Voice chat (once there's internet play)
-- [x] Shotgun Blackjack
+- [x] Blackjack
 - [ ] More card games
 - [ ] Extra cards (jokers, special cards)
 - [x] 3D table (phone portrait; also works on a PC screen)
