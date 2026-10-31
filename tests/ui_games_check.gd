@@ -10,11 +10,15 @@ const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 const TricksBot = preload("res://scripts/core/tricks_bot.gd")
 const PresidentBot = preload("res://scripts/core/president_bot.gd")
+const PokerBot = preload("res://scripts/core/poker_bot.gd")
 
-const KINDS := ["gofish", "cheat", "hearts", "spades", "snap", "president"]
+const KINDS := ["gofish", "cheat", "hearts", "spades", "snap", "president", "poker"]
 
 var fails := 0
 var main
+var _ready_seen := 0
+var _last_ready_flip := -1
+var _ready_since := 0
 
 
 func check(cond: bool, what: String) -> void:
@@ -90,7 +94,13 @@ func _play(kind: String, what: String) -> void:
 			if pick != null and step % 5 == 0:
 				pick.pressed.emit()
 			continue
-		if kind == "snap" and g.phase == "play" and g.snap_ready() and not main.world.dealing and step % 9 == 0 and g.flips % 2 == 0:
+		if kind == "snap" and g.snap_ready() and g.flips != _last_ready_flip:
+			_last_ready_flip = g.flips
+			_ready_seen += 1
+			_ready_since = Time.get_ticks_msec()
+		# you react like a person: about 0.6 seconds after the match shows
+		var reacted: bool = (Time.get_ticks_msec() - _ready_since) * Engine.time_scale >= 600.0
+		if kind == "snap" and g.phase == "play" and g.snap_ready() and not main.world.dealing and reacted and g.flips % 2 == 0:
 			main.mode_ui._snap_pressed() # race the AIs
 			continue
 		if not g.is_turn_of(0) or main.world.dealing or main.world.fx_busy or step % 3 != 0:
@@ -125,6 +135,15 @@ func _play(kind: String, what: String) -> void:
 					main.mode_ui._first_pressed()
 			"snap":
 				main.mode_ui._flip_pressed()
+			"poker":
+				var act: Array = PokerBot.next_action(g, 0, "normal", {})
+				match act[0]:
+					"raise":
+						main.mode_ui._raise_pressed()
+					"fold":
+						main.mode_ui._fold_pressed()
+					_:
+						main.mode_ui._first_pressed()
 			"president":
 				var ids: Array = PresidentBot.choose_play(g, 0, "normal")
 				if ids.is_empty():
@@ -141,5 +160,10 @@ func _play(kind: String, what: String) -> void:
 		for line in main.log_lines:
 			if line.contains(" SNAPS ") and not line.begins_with("SAM"):
 				ai_snaps += 1
+		if ai_snaps == 0:
+			for line in main.log_lines:
+				if line.contains("snap") or line.contains("SNAP"):
+					print("   LOG: ", line)
+			print("   ready chances seen: ", _ready_seen)
 		check(ai_snaps > 0, "snap %s: the AIs snap out of turn" % what)
 	print("%s %s: %d rounds, winner %s" % [kind, what, g.round_num, g.players[g.winner].name if g.winner >= 0 else "-"])

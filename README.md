@@ -20,6 +20,8 @@ other games don't).
 - **Shotgun Snap**: flip, watch, and snap first. Snap wrong and it hurts.
 - **Shotgun President**: beat the pile or pass. First out is President; the
   Scum pays up next round.
+- **Shotgun Poker**: Texas Hold'em, betting shells instead of chips. Fold and
+  you're safe; stay in and you might get shot.
 
 ### Cartridges
 
@@ -299,6 +301,22 @@ trick (the first one played, if there's more than one).
   3). Whoever's left holding the most is the **Scum**: next round they hand the
   President their best card and get the worst one back.
 
+## How to play Shotgun Poker
+
+- **The deal.** Texas Hold'em: 2 cards face down each, plus 2 items. Five
+  cards go face up in the middle: the flop (3), the turn (1) and the river (1),
+  with a round of betting before each and after the last.
+- **Betting shells.** There are no chips. **CHECK**, or **RAISE** to load
+  another shell into the shotgun (max 3). Once someone raises, everyone else
+  still in **CALL**s it or **FOLD**s.
+- **Fold and you're safe**: you can't win, but the winner can't shoot you.
+- **Winning.** Best five-card hand from your two and the five in the middle.
+  The winner fires every shell that was loaded, only at players who stayed in.
+- **Items.** The magnifier peeks at the next card for the middle, Beer burns
+  it, Spotlight turns someone's cards up, Double Down stops someone folding,
+  the Revolver makes a folder spin, Shakedown swaps one of someone's cards
+  for a new one.
+
 ### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
@@ -344,6 +362,8 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/tricks.gd`, `hearts.gd`, `spades.gd`, `tricks_bot.gd` | Trick-taking, Hearts and Spades, and their AI. |
 | `scripts/core/snap.gd`, `snap_bot.gd` | Snap's rules and AI (main.gd times the AIs' snaps). |
 | `scripts/core/president.gd`, `president_bot.gd` | President's rules and AI. |
+| `scripts/core/poker.gd`, `poker_bot.gd` | Poker's rules (with the hand rankings) and AI. |
+| `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |
@@ -410,7 +430,7 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [x] Main menu, lobbies on the same Wi-Fi
 - [x] Character customisation
 - [ ] Online lobbies over the internet
-- [ ] Sound effects
+- [x] Sound effects (made in code for now; real ones before release)
 - [x] AI players (easy, normal, hard)
 - [ ] Voice chat (once there's internet play)
 - [x] Shotgun Blackjack

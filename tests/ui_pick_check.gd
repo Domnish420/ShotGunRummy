@@ -27,7 +27,20 @@ func _initialize() -> void:
 	var g = main.game
 	for p in g.players:
 		p.turns_taken = 2
-	g.melds.append({"id": "mx", "type": "run", "cards": Cards.parse_many("2C 3C 4C"), "owner": 1})
+	# the meld's cards come out of the deck first, so no card is in two places
+	var meld_cards := Cards.parse_many("2C 3C 4C")
+	var taken := Cards.ids_of(meld_cards)
+	for pile in [g.stock, g.discard_pile] + g.players.map(func(p): return p.hand):
+		for c in pile.duplicate():
+			if c.has("id") and taken.has(c["id"]):
+				pile.erase(c)
+	if g.discard_pile.is_empty():
+		for c in g.stock:
+			if not c.has("item"):
+				g.stock.erase(c)
+				g.discard_pile.append(c)
+				break
+	g.melds.append({"id": "mx", "type": "run", "cards": meld_cards, "owner": 1})
 	main._refresh()
 	if main.world.dealing:
 		await main.world.deal_finished

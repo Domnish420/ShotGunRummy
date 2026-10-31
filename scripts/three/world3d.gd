@@ -694,7 +694,7 @@ func sync(s: Dictionary) -> void:
 	if stock_n == 0 and game.kind == "rummy":
 		_label_at("SHUFFLE", stock_xf.origin + Vector3(0, 0.01, 0), 22, Palette.DIM)
 	if stock_n > 0 or game.kind == "rummy":
-		_label_at("%s %d" % ["POND" if game.kind == "gofish" else "STOCK", game.stock.size()], stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+		_label_at("%s %d" % [{"gofish": "POND", "poker": "DECK"}.get(game.kind, "STOCK"), game.stock.size()], stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 
 	# the discard pile: the top few, a bit messy
 	var pile: Array = game.discard_pile
@@ -735,6 +735,8 @@ func sync(s: Dictionary) -> void:
 		_trick_cards(seen, game, viewer, stock_xf)
 	if game.kind == "snap":
 		_snap_piles(seen, game, viewer, stock_xf)
+	if game.kind == "poker":
+		_poker_board(seen, game, stock_xf)
 
 	# other players' hands and items, face down in front of them
 	for p in game.players:
@@ -882,6 +884,17 @@ func _president_pile(seen: Dictionary, game, spawn: Transform3D) -> void:
 		var pos := Vector3(0.14 + i * 0.07, TABLE_TOP + 0.003 + i * 0.002, -0.02)
 		_place(seen, cards[i]["id"], cards[i], TABLE_CARD, _flat(pos, (i - cards.size() * 0.5) * 0.08, true), true, true, "", "", "", game.is_trump(cards[i]), spawn)
 	_label_at(game.players[int(top["seat"])].name, Vector3(0.22, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
+
+
+## Poker: the five cards in the middle (face up as they come) and how many
+## shells are loaded.
+func _poker_board(seen: Dictionary, game, spawn: Transform3D) -> void:
+	for i in range(game.board.size()):
+		var c: Dictionary = game.board[i]
+		var pos := Vector3(-0.34 + i * 0.17, TABLE_TOP + 0.003, 0.24)
+		_place(seen, c["id"], c, TABLE_CARD, _flat(pos, 0.0, true), true, true, "", "", "", false, spawn)
+	if game.phase == "play":
+		_label_at("%d SHELL%s LOADED" % [game.shells, "" if game.shells == 1 else "S"], Vector3(0.22, TABLE_TOP + 0.01, 0.06), 28, Palette.RED.lightened(0.2))
 
 
 ## Cheat: the pile, face down and messy, with what's due next.

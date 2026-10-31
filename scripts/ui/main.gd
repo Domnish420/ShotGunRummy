@@ -28,6 +28,7 @@ const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
 const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
 const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
 const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
+const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
@@ -60,6 +61,8 @@ var coach_label: Label
 var _sfx: Dictionary = {} # name -> AudioStream
 var _sfx_players: Array = []
 var _jingle_player: AudioStreamPlayer
+var _hum_player: AudioStreamPlayer
+var sound_on := true
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -114,19 +117,15 @@ var hint_btn: Button
 ## Plays a little sound: "tick", "swish", "clunk", "select" or
 ## "jingle:<cartridge>".
 func _sound(name_: String) -> void:
+	if not sound_on:
+		return
 	if not _sfx.has(name_):
-		match name_:
-			"tick":
-				_sfx[name_] = Chiptune.tick()
-			"swish":
-				_sfx[name_] = Chiptune.swish()
-			"clunk":
-				_sfx[name_] = Chiptune.clunk()
-			"select":
-				_sfx[name_] = Chiptune.select()
-			_:
-				if name_.begins_with("jingle:"):
-					_sfx[name_] = Chiptune.jingle(name_.trim_prefix("jingle:"))
+		if name_.begins_with("jingle:"):
+			_sfx[name_] = Chiptune.jingle(name_.trim_prefix("jingle:"))
+		else:
+			var made := _make_sound(name_)
+			if made != null:
+				_sfx[name_] = made
 	var stream: AudioStream = _sfx.get(name_, null)
 	if stream == null:
 		return
@@ -143,7 +142,7 @@ func _sound(name_: String) -> void:
 			pl.stream = stream
 			pl.play()
 			return
-	if _sfx_players.size() < 4:
+	if _sfx_players.size() < 6:
 		var pl := AudioStreamPlayer.new()
 		pl.volume_db = -4.0
 		add_child(pl)
@@ -203,7 +202,46 @@ func _ready() -> void:
 
 	get_tree().root.size_changed.connect(_fit_window)
 	_fit_window()
+	_hum_player = AudioStreamPlayer.new()
+	_hum_player.stream = Chiptune.hum()
+	_hum_player.volume_db = -20.0
+	add_child(_hum_player)
+	if sound_on:
+		_hum_player.play()
 	show_menu()
+
+
+func _make_sound(name_: String) -> AudioStream:
+	match name_:
+		"tick": return Chiptune.tick()
+		"swish": return Chiptune.swish()
+		"clunk": return Chiptune.clunk()
+		"select": return Chiptune.select()
+		"flick": return Chiptune.flick()
+		"shuffle": return Chiptune.shuffle()
+		"slap": return Chiptune.slap()
+		"item": return Chiptune.item()
+		"heal": return Chiptune.heal()
+		"hurt": return Chiptune.hurt()
+		"rack": return Chiptune.rack()
+		"blast": return Chiptune.blast()
+		"click": return Chiptune.click()
+		"spin": return Chiptune.spin()
+		"win": return Chiptune.win()
+		"fanfare": return Chiptune.fanfare()
+	return null
+
+
+func _toggle_sound() -> void:
+	sound_on = not sound_on
+	_save_settings()
+	if sound_on:
+		_hum_player.play()
+		_sound("select")
+	else:
+		_hum_player.stop()
+		if _jingle_player != null:
+			_jingle_player.stop()
 
 
 ## How sharp the 3D is: a share of the screen's resolution.
@@ -274,6 +312,12 @@ func _tag(text: String, font_size: int = 30, color: Color = Palette.INK) -> Labe
 
 
 func _button(text: String, on_press: Callable, font_size: int = 30) -> Button:
+	var b := _plain_button(text, on_press, font_size)
+	b.pressed.connect(_sound.bind("tick"))
+	return b
+
+
+func _plain_button(text: String, on_press: Callable, font_size: int = 30) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.add_theme_font_size_override("font_size", font_size)
@@ -349,6 +393,7 @@ func _load_settings() -> void:
 	if not Games.has(game_kind):
 		game_kind = "rummy"
 	played = cfg.get_value("progress", "played", {})
+	sound_on = cfg.get_value("audio", "on", true)
 	tutorial_offered = cfg.get_value("progress", "tutorial_offered", false)
 	normal_mode = cfg.get_value("setup", "normal", false) and _normal_unlocked(game_kind)
 	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
@@ -369,6 +414,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "game", game_kind)
 	cfg.set_value("setup", "normal", normal_mode)
 	cfg.set_value("progress", "played", played)
+	cfg.set_value("audio", "on", sound_on)
 	cfg.set_value("progress", "tutorial_offered", tutorial_offered)
 	cfg.set_value("solo", "opponents", solo_opponents)
 	cfg.set_value("solo", "level", solo_level)
@@ -432,7 +478,12 @@ func show_menu() -> void:
 	box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
 	box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
 	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
-	box.add_child(_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24))
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	for b in [_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24), _paper_button("SOUND: %s" % ("ON" if sound_on else "OFF"), _menu_sound, 24)]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row2.add_child(b)
+	box.add_child(row2)
 	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
 	if not tutorial_offered:
 		tutorial_offered = true
@@ -641,6 +692,11 @@ func _start_tutorial() -> void:
 
 func _blackjack() -> bool:
 	return game != null and game.kind == "blackjack"
+
+
+func _menu_sound() -> void:
+	_toggle_sound()
+	show_menu()
 
 
 func _noop() -> void:
@@ -1479,6 +1535,7 @@ func _ignore_result(_res: Dictionary) -> void:
 func _on_game_event(kind: String, d: Dictionary) -> void:
 	if mode_ui != null:
 		mode_ui.on_event(kind, d)
+	_event_sound(kind, d)
 	match kind:
 		"roulette":
 			world.roulette(d["seat"], d["hit"])
@@ -1583,6 +1640,40 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 					_log("NORMAL MODE UNLOCKED for %s." % Games.label(game.kind))
 			if d["winner"] >= 0:
 				_log("%s WALKS OUT." % _name(d["winner"]))
+
+
+## Every game event's sound.
+func _event_sound(kind: String, d: Dictionary) -> void:
+	match kind:
+		"round_start":
+			_sound("shuffle")
+		"draw", "hit", "flip", "discard", "trick_card", "play", "president_play", "ask":
+			_sound("flick")
+		"meld", "layoff", "swap", "book", "trick_won", "snap":
+			_sound("slap")
+		"item_used":
+			_sound("item")
+		"heal":
+			_sound("heal")
+		"damage":
+			_sound("hurt")
+		"round_end":
+			_sound("win")
+			if d.get("shells", 0) > 0 and game != null and game.options["shotgun"]:
+				get_tree().create_timer(0.6).timeout.connect(_sound.bind("rack"))
+		"gun_passed":
+			_sound("rack")
+		"shot":
+			_sound("click" if d.get("blank", false) else "blast")
+		"roulette":
+			_sound("spin")
+			get_tree().create_timer(0.55).timeout.connect(_sound.bind("blast" if d.get("hit", false) else "click"))
+		"blackjack_shot":
+			get_tree().create_timer(0.2).timeout.connect(_sound.bind("blast"))
+		"match_end":
+			_sound("fanfare")
+		"called", "bust":
+			_sound("hurt")
 
 
 func _log(text: String) -> void:
@@ -2154,6 +2245,8 @@ func _make_mode_ui():
 			return SnapUI.new(self)
 		"president":
 			return PresidentUI.new(self)
+		"poker":
+			return PokerUI.new(self)
 	return null
 
 
@@ -2780,7 +2873,7 @@ func _show_gun(last_text: String = "") -> void:
 		box.add_child(_label(note, 26, Palette.INK, true))
 		var allowed: Array = game.gun.get("targets", []) if game.gun != null else []
 		if not allowed.is_empty():
-			box.add_child(_label("You can only shoot players who lost to you.", 22, Palette.DIM, true))
+			box.add_child(_label("You can only shoot players who stayed in." if game.kind == "poker" else "You can only shoot players who lost to you.", 22, Palette.DIM, true))
 		for p in game.others(holder):
 			if not allowed.is_empty() and not allowed.has(p.seat):
 				continue
@@ -2897,6 +2990,12 @@ func _show_rules() -> void:
 	box.add_child(_button("BACK", _closing(_after_action)))
 
 
+func _pause_sound() -> void:
+	_toggle_sound()
+	_close_overlay()
+	_show_menu()
+
+
 func _show_log() -> void:
 	var box := _open_overlay(0.96, true, "log")
 	box.add_child(_title("LOG"))
@@ -2910,6 +3009,7 @@ func _show_menu() -> void:
 	box.add_child(_title("PAUSED"))
 	box.add_child(_button("RESUME", _closing(_after_action)))
 	box.add_child(_button("GRAPHICS: %s" % graphics, _cycle_graphics))
+	box.add_child(_button("SOUND: %s" % ("ON" if sound_on else "OFF"), _pause_sound))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
 		box.add_child(_button("LEAVE THE GAME", show_menu))

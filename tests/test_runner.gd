@@ -15,6 +15,7 @@ const Hearts = preload("res://scripts/core/hearts.gd")
 const Spades = preload("res://scripts/core/spades.gd")
 const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
+const Poker = preload("res://scripts/core/poker.gd")
 const Games = preload("res://scripts/core/games.gd")
 
 var _failures := 0
@@ -36,7 +37,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_blank_shell", "test_trumps_only_rummy", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1163,7 +1164,7 @@ func test_ch_call() -> void:
 ## Every game's AI, all three levels, finishes whole matches with legal moves
 ## (the newer cartridges; Rummy and Blackjack have their own tests).
 func test_ai_all_games() -> void:
-	for kind in ["cheat", "hearts", "spades", "snap", "president"]:
+	for kind in ["cheat", "hearts", "spades", "snap", "president", "poker"]:
 		var wins := {"easy": 0, "normal": 0, "hard": 0}
 		for s in range(1, 9):
 			var n := 2 + s % 5
@@ -1209,6 +1210,8 @@ func test_ai_all_games() -> void:
 					if kind == "snap":
 						for k in g.won:
 							count += g.won[k].size()
+					if kind == "poker":
+						count += g.board.size()
 					for m in g.melds:
 						count += m["cards"].size()
 					for c in g.stock + g.burned + g.discard_pile:
@@ -1429,3 +1432,60 @@ func test_trumps_only_rummy() -> void:
 			for c in p.items + p.hand:
 				if c.has("item") and kind != "rummy":
 					check(c["item"] != "tarot" and c["item"] != "joker_paint", "%s: no trump items dealt" % kind)
+
+
+# ================================================================ poker
+
+func test_poker_hands() -> void:
+	var r := func(ids: String) -> Array: return Poker.best_hand(cards(ids))
+	check(r.call("AH KH QH JH 10H 2C 3D")[0] == 8, "royal flush is a straight flush")
+	check(r.call("9S 9H 9D 9C 2H 3C 4D")[0] == 7, "four of a kind")
+	check(r.call("9S 9H 9D 4C 4H 3C 2D")[0] == 6, "full house")
+	check(r.call("2H 7H 9H JH KH 3C 4D")[0] == 5, "flush")
+	check(r.call("AS 2H 3D 4C 5H 9C KD") == [4, 5], "A-2-3-4-5 is a 5-high straight")
+	check(r.call("6S 7H 8D 9C 10H 2C 2D")[0] == 4, "straight")
+	check(r.call("QS QH QD 4C 9H 2C 7D")[0] == 3, "three of a kind")
+	check(r.call("QS QH 4D 4C 9H 2C 7D")[0] == 2, "two pair")
+	check(r.call("QS QH 3D 4C 9H 2C 7D")[0] == 1, "a pair")
+	check(r.call("QS 8H 3D 4C 9H 2C 7D")[0] == 0, "high card")
+	check(Poker.better(r.call("AS AH 3D 4C 9H 2C 7D"), r.call("KS KH 3D 4C 9H 2C 7D")), "aces beat kings")
+	check(Poker.better(r.call("AS AH KD 4C 9H 2C 7D"), r.call("AS AH QD 4C 9H 2C 7D")), "the kicker counts")
+
+
+func test_poker_betting() -> void:
+	var g := Poker.new()
+	g.setup(["A", "B", "C"], {}, 5)
+	g.start_round()
+	for p in g.players:
+		check(p.hand.size() == 2, "two cards each")
+	check(g.snapshot(0)["players"][1]["hand"][0].get("hidden", false), "you can't see their cards")
+	var a := g.turn
+	g.check_call(a)
+	var b := g.turn
+	check(g.raise(b)["ok"] and g.shells == 2, "a raise loads a shell")
+	var c := g.turn
+	check(g.to_call(c), "the next player has to answer it")
+	g.fold(c)
+	check(g.turn == a and g.to_call(a), "back round to the first player")
+	g.check_call(a)
+	check(g.board.size() == 3, "everyone's answered: the flop")
+	# play it out: check down to the showdown
+	g.players[a].hand = cards("AS AH")
+	g.players[b].hand = cards("2C 7D")
+	g.board = cards("AD KC 9S")
+	for i in range(20):
+		if g.phase != "play":
+			break
+		g.check_call(g.turn)
+	check(g.board.size() == 5 and (g.phase == "shoot" or g.phase == "round_over"), "turn, river, showdown")
+	check(g.last_result["winner"] == a, "three aces win")
+	check(g.gun != null and g.gun["shells"] == 2 and g.gun["targets"] == [b], "two shells, and only at the player who stayed in")
+	check(not g.shoot(a, c)["ok"], "the folder is safe")
+	# everyone else folds: they're all safe
+	g = Poker.new()
+	g.setup(["A", "B", "C"], {}, 6)
+	g.start_round()
+	g.raise(g.turn)
+	g.fold(g.turn)
+	g.fold(g.turn)
+	check(g.phase == "round_over" and g.gun == null, "everyone folded: the raiser wins, nobody gets shot")

@@ -34,10 +34,10 @@ static func next_action(game, seat: int, level: String, memory: Dictionary) -> A
 static func reaction(game, level: String) -> float:
 	match level:
 		"easy":
-			return game.rng.randf_range(1.1, 2.0)
+			return game.rng.randf_range(0.7, 1.4)
 		"hard":
-			return game.rng.randf_range(0.45, 0.8)
-	return game.rng.randf_range(0.75, 1.3)
+			return game.rng.randf_range(0.3, 0.6) # about as quick as a person
+	return game.rng.randf_range(0.5, 1.0)
 
 
 ## The chance this AI snaps at a flip that doesn't match.

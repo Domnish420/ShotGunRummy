@@ -140,8 +140,26 @@ const PRESIDENT := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it fills in any set.", "copies": 1},
 }
 
+const POKER := {
+	"beer": {"text": "Burn the next card for the middle. Everyone sees it."},
+	"magnifier": {"text": "Secretly look at the next card for the middle."},
+	"phone": {"text": "See one of another player's cards."},
+	"handcuffs": {"text": "A player of your choice skips their next go (they stay in the hand)."},
+	"shakedown": {"text": "A player of your choice throws away a random card and gets a new one."},
+	"switcheroo": {"text": "Swap your two cards with another player's."},
+	"bad_trade": {"text": "Swap 1 random card with another player."},
+	"chaos": {"text": "Everyone passes a random card to the player on their left."},
+	"spotlight": {"text": "A player's cards are turned face up for everyone."},
+	"flashbang": {"text": "Every other player still in shows 1 card."},
+	"revolver": {"text": "If a player of your choice folds this hand, they play Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"text": "A player of your choice can't fold this hand."},
+	"sticky_fingers": {"copies": 0},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"copies": 0},
+}
+
 ## Each game's changes to the items, by game.
-const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT}
+const OVERRIDES := {"poker": POKER, "blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT}
 
 ## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.

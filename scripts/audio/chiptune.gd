@@ -116,3 +116,128 @@ static func jingle(kind: String) -> AudioStreamWAV:
 	for i in range(out.size()):
 		out[i] = (lead[i] if i < lead.size() else 0.0) + (bass[i] if i < bass.size() else 0.0)
 	return _stream(out)
+
+
+# ================================================================ the table
+
+## A card flicked onto the felt.
+static func flick() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, 5000.0, 0.04, "noise", 0.22, -0.6)
+	return _stream(out)
+
+
+## A riffle shuffle and a quick deal.
+static func shuffle() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	for i in range(14):
+		_note(out, 4000.0 + randf() * 2000.0, 0.025, "noise", 0.16, -0.3)
+	_rest(out, 0.08)
+	for i in range(3):
+		_note(out, 2500.0, 0.05, "noise", 0.2, -0.7)
+	return _stream(out)
+
+
+## Cards slapped down: a meld, a book, a won trick.
+static func slap() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, 1800.0, 0.06, "noise", 0.35, -0.85)
+	_note(out, 140.0, 0.06, "square", 0.15, -0.4)
+	return _stream(out)
+
+
+## Using an item: a bright little zap.
+static func item() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, _hz(12), 0.05, "pulse", 0.2, 0.5)
+	_note(out, _hz(19), 0.08, "pulse", 0.2, 0.3)
+	return _stream(out)
+
+
+static func heal() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	for st in [0, 4, 7, 12, 16]:
+		_note(out, _hz(st + 3), 0.05, "tri", 0.3)
+	return _stream(out)
+
+
+static func hurt() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, 220.0, 0.18, "square", 0.3, -0.7)
+	return _stream(out)
+
+
+# ================================================================ guns
+
+## The shotgun's pump: shk-shk.
+static func rack() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, 1400.0, 0.06, "noise", 0.4, -0.5)
+	_rest(out, 0.07)
+	_note(out, 900.0, 0.08, "noise", 0.45, -0.6)
+	_note(out, 90.0, 0.04, "square", 0.2)
+	return _stream(out)
+
+
+## BANG: a crunchy burst over a deep thump.
+static func blast() -> AudioStreamWAV:
+	var noise := PackedFloat32Array()
+	_note(noise, 6000.0, 0.45, "noise", 0.9, -0.95)
+	var thump := PackedFloat32Array()
+	_note(thump, 70.0, 0.35, "square", 0.6, -0.6)
+	var out := PackedFloat32Array()
+	out.resize(noise.size())
+	for i in range(out.size()):
+		out[i] = noise[i] + (thump[i] if i < thump.size() else 0.0)
+	return _stream(out)
+
+
+## A dry click: an empty chamber, or a blank.
+static func click() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	_note(out, 3000.0, 0.02, "noise", 0.5)
+	_note(out, 600.0, 0.03, "square", 0.15)
+	return _stream(out)
+
+
+## The revolver's cylinder spinning.
+static func spin() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	for i in range(10):
+		_note(out, 2500.0, 0.015, "noise", 0.3)
+		_rest(out, 0.02 + i * 0.006)
+	return _stream(out)
+
+
+# ================================================================ moments
+
+## Someone won the round.
+static func win() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	for st in [0, 4, 7]:
+		_note(out, _hz(st), 0.09, "square", 0.25)
+	_note(out, _hz(12), 0.3, "pulse", 0.25)
+	return _stream(out)
+
+
+## Somebody walks out: the match is over.
+static func fanfare() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	for st in [0, 0, 0, 4, 7, 4, 7]:
+		_note(out, _hz(st - 5), 0.1, "square", 0.25)
+	_note(out, _hz(7), 0.5, "square", 0.25)
+	return _stream(out)
+
+
+## The lamp's hum, looping quietly under everything.
+static func hum() -> AudioStreamWAV:
+	var out := PackedFloat32Array()
+	var n := RATE * 2
+	for i in range(n):
+		var t := float(i) / RATE
+		out.append(sin(TAU * 60.0 * t) * 0.05 + sin(TAU * 120.0 * t) * 0.03 + (randf() - 0.5) * 0.01)
+	var s := _stream(out)
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_begin = 0
+	s.loop_end = n
+	return s
