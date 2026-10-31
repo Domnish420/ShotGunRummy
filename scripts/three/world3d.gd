@@ -17,6 +17,7 @@ const CardTextures = preload("res://scripts/three/card_textures.gd")
 const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
 const Looks = preload("res://scripts/core/looks.gd")
+const Games = preload("res://scripts/core/games.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -63,6 +64,9 @@ var _cone: ShaderMaterial
 var _preview := {} # the customiser's character, while it's showing
 var _preview_light: SpotLight3D
 var _dealer_chip: Node3D
+var _console: Node3D # the cartridge slot in the middle of the table
+var _cartridge: Node3D
+var _cartridge_kind := ""
 var _chip_seat := -99 # where the dealer chip sits (relative to the viewer)
 const PREVIEW_SPOT := Vector3(-2.15, -0.78, -1.0) # by the bottle shelf
 const PREVIEW_CAM := Vector3(0.0, 1.15, 3.1) # from the spot: the gap beside the table
@@ -207,6 +211,78 @@ func _build_room() -> void:
 		_outline_mats[k] = _glow(outline_colors[k], 1.6)
 	_back_mat = textures.material("__back")
 	_build_dealer_chip()
+	_build_console()
+
+
+## The cartridge console: a squat black box in the middle of the table with a
+## slot on top. The game being played sits in it, label facing you.
+const CONSOLE_POS := Vector3(0.0, 0.0, -0.03)
+
+
+func _build_console() -> void:
+	_console = Node3D.new()
+	_console.position = CONSOLE_POS + Vector3(0, TABLE_TOP, 0)
+	add_child(_console)
+	var body := BoxMesh.new()
+	body.size = Vector3(0.2, 0.035, 0.11)
+	_console.add_child(_mesh(body, _mat(Color(0.06, 0.06, 0.065), 0.5, 0.3), Vector3(0, 0.0175, 0)))
+	var slot := BoxMesh.new()
+	slot.size = Vector3(0.16, 0.004, 0.025)
+	_console.add_child(_mesh(slot, _mat(Color(0.0, 0.0, 0.0)), Vector3(0, 0.036, -0.01)))
+	var led := SphereMesh.new()
+	led.radius = 0.006
+	led.height = 0.012
+	_console.add_child(_mesh(led, _glow(Color(1.0, 0.15, 0.1), 3.0), Vector3(0.082, 0.025, 0.056)))
+
+
+## A cartridge: a chunky plastic block with a label, in the game's colour.
+func _build_cartridge(kind: String) -> Node3D:
+	var c := Node3D.new()
+	var col: Color = Games.color(kind)
+	var shell := BoxMesh.new()
+	shell.size = Vector3(0.15, 0.1, 0.022)
+	c.add_child(_mesh(shell, _mat(col, 0.45, 0.05), Vector3(0, 0.05, 0)))
+	# grip ridges along the top
+	for i in range(5):
+		var ridge := BoxMesh.new()
+		ridge.size = Vector3(0.13, 0.004, 0.026)
+		c.add_child(_mesh(ridge, _mat(col.darkened(0.3), 0.6), Vector3(0, 0.082 + i * 0.006, 0)))
+	var sticker := BoxMesh.new()
+	sticker.size = Vector3(0.12, 0.05, 0.002)
+	c.add_child(_mesh(sticker, _mat(Color(0.92, 0.88, 0.78), 0.8), Vector3(0, 0.045, 0.012)))
+	var title := Label3D.new()
+	title.font = _font
+	title.text = "SHOTGUN\n" + Games.label(kind)
+	title.font_size = 34
+	title.pixel_size = 0.0011
+	title.modulate = col.darkened(0.4)
+	title.outline_size = 0
+	title.position = Vector3(0, 0.045, 0.0135)
+	c.add_child(title)
+	return c
+
+
+## Slots `kind`'s cartridge into the console: the old one pops out and flies
+## off, the new one drops in.
+func set_cartridge(kind: String) -> void:
+	if kind == _cartridge_kind and _cartridge != null:
+		return
+	_cartridge_kind = kind
+	if _cartridge != null:
+		var old := _cartridge
+		var t := old.create_tween()
+		t.tween_property(old, "position", old.position + Vector3(0, 0.25, 0), 0.2).set_ease(Tween.EASE_OUT)
+		t.tween_property(old, "position", old.position + Vector3(1.6, 0.6, -0.4), 0.35).set_ease(Tween.EASE_IN)
+		t.tween_callback(old.queue_free)
+	_cartridge = _build_cartridge(kind)
+	_console.add_child(_cartridge)
+	var home := Vector3(0, 0.02, -0.01)
+	_cartridge.rotation.x = -0.35 # leaning back so it doesn't block the far side
+	_cartridge.position = home + Vector3(0, 0.6, 0)
+	var t2 := _cartridge.create_tween()
+	t2.tween_interval(0.15)
+	t2.tween_property(_cartridge, "position", home + Vector3(0, 0.03, 0), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	t2.tween_property(_cartridge, "position", home, 0.12) # clunk
 
 
 ## The dealer chip: a fat white button with DEALER on it, slid in front of
@@ -459,7 +535,10 @@ func _sync_figures(game, viewer: int) -> void:
 			e.visible = p.alive
 		var lines := [p.name + (" (D)" if p.seat == game.dealer else "")]
 		if p.alive:
-			lines.append("HP %d/%d  %d CARDS" % [p.hp, p.max_hp, p.hand.size()])
+			var life := "HP %d/%d" % [p.hp, p.max_hp] if game.options.get("shotgun", true) else "WINS %d" % p.rounds_won
+			lines.append("%s  %d CARDS" % [life, p.hand.size()])
+			if game.kind == "gofish":
+				lines.append("%d BOOKS" % game.books_of(p.seat).size())
 			var flags := []
 			if p.cuffed:
 				flags.append("CUFFED")
@@ -571,7 +650,7 @@ func sync(s: Dictionary) -> void:
 		_place(seen, "stock-%d" % i, {}, TABLE_CARD, xf, false, true, "stock" if top_one else "", "", "amber" if top_one and s["can_draw"] else "", false, xf)
 	if stock_n == 0:
 		_label_at("SHUFFLE", stock_xf.origin + Vector3(0, 0.01, 0), 22, Palette.DIM)
-	_label_at("STOCK %d" % game.stock.size(), stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+	_label_at("%s %d" % ["POND" if game.kind == "gofish" else "STOCK", game.stock.size()], stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 
 	# the discard pile: the top few, a bit messy
 	var pile: Array = game.discard_pile
@@ -582,7 +661,8 @@ func sync(s: Dictionary) -> void:
 		var xf := _flat(discard_base + Vector3(0, 0.003 * (i - from), 0), yaw, true)
 		var top_one := i == pile.size() - 1
 		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] else "", game.is_trump(c), stock_xf)
-	_label_at("DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+	if game.kind == "rummy" or not pile.is_empty():
+		_label_at("DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 	if trump_rank > 0:
 		_label_at("TRUMP: %s" % TRUMP_NAMES[trump_rank], Vector3(0, TABLE_TOP + 0.01, 0.23), 34, Palette.GOLD)
 

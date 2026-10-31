@@ -54,6 +54,7 @@ func _run() -> void:
 	await _frames(4)
 	var host = phones[0]
 	host.game_kind = "rummy" # settings may remember another game
+	host.normal_mode = false
 	host._name_edit.text = "sam"
 	host._on_host_pressed()
 	check(host.session.is_host(), "host is hosting")

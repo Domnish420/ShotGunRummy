@@ -33,6 +33,8 @@ func _initialize() -> void:
 	await process_frame
 	main.profile_name = "SAM"
 	main.game_kind = "blackjack"
+	main.normal_mode = false
+	main.tutorial_offered = true
 	main.show_menu()
 	main.show_this_phone()
 	main.solo_opponents = 2

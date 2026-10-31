@@ -67,15 +67,31 @@ const BLACKJACK := {
 	"joker_paint": {"text": "A card in your hand is a trump (worth whatever you need) for the rest of the round.", "copies": 1},
 }
 
-## Which game's rules the items follow: "rummy" or "blackjack". Set when a
+const GOFISH := {
+	"shakedown": {"text": "A player of your choice throws a random card back into the pond."},
+	"revolver": {"text": "A player must get a card off someone on their next turn, or play Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"copies": 0},
+	"sticky_fingers": {"text": "Steal a card from someone's book. The rest of the book goes back into their hand.", "copies": 1},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"copies": 0},
+	"beer": {"text": "Burn the top card of the pond. Everyone sees it."},
+	"magnifier": {"text": "Secretly look at the top card of the pond."},
+	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round.", "copies": 1},
+}
+
+## Each game's changes to the items, by game.
+const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH}
+
+## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.
 static var mode := "rummy"
 
 
 static func def(item_id: String) -> Dictionary:
-	if mode == "blackjack" and BLACKJACK.has(item_id):
+	var changes: Dictionary = OVERRIDES.get(mode, {})
+	if changes.has(item_id):
 		var d: Dictionary = DEFS[item_id].duplicate()
-		d.merge(BLACKJACK[item_id], true)
+		d.merge(changes[item_id], true)
 		return d
 	return DEFS[item_id]
 

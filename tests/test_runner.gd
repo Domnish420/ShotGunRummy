@@ -9,6 +9,8 @@ const Items = preload("res://scripts/core/items.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Session = preload("res://scripts/net/session.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
+const GoFish = preload("res://scripts/core/gofish.gd")
+const Games = preload("res://scripts/core/games.gd")
 
 var _failures := 0
 var _checks := 0
@@ -28,6 +30,7 @@ func _init() -> void:
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
+		"test_gf_ask", "test_gf_books", "test_gf_ai_matches", "test_normal_mode",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -929,3 +932,152 @@ func test_bj_ai_matches() -> void:
 		if g.winner >= 0:
 			wins[g.players[g.winner].bot] += 1
 	print("  blackjack AI wins by level: %s" % [wins])
+
+
+# ================================================================ go fish
+
+func new_gf(n: int = 3, rng_seed: int = 1) -> GoFish:
+	var names := []
+	for i in range(n):
+		names.append("P%d" % (i + 1))
+	var g := GoFish.new()
+	g.setup(names, {}, rng_seed)
+	g.start_round()
+	return g
+
+
+func test_gf_ask() -> void:
+	var g := new_gf(3, 2)
+	check(g.kind == "gofish" and g.phase == "play", "go fish starts on someone's turn")
+	for p in g.players:
+		check(p.hand.size() + 4 * g.books_of(p.seat).size() == 7, "7 cards each with 3 players")
+	var me := g.turn
+	var them := g.next_alive(me)
+	g.trump_rank = 13
+	g.players[me].hand = cards("5H 5C 9D")
+	g.players[them].hand = cards("5D 2C")
+	var res := g.ask(me, them, 5)
+	check(res["ok"] and res["count"] == 1 and g.turn == me, "they hand over their 5 and you go again")
+	check(g.known[me].has(5), "everyone knows you have 5s")
+	check(not g.ask(me, them, 7)["ok"], "you can't ask for a rank you don't hold")
+	# go fish: no luck ends the turn
+	g.stock.append(cards("JS")[0])
+	res = g.ask(me, them, 9)
+	check(res["ok"] and g.turn != me, "go fish without luck ends your turn")
+	# lucky fish
+	var next := g.turn
+	var other := g.next_alive(next)
+	g.players[next].hand = cards("8H")
+	g.players[other].hand = cards("3D 4D")
+	g.stock.append(cards("8C")[0])
+	res = g.ask(next, other, 8)
+	check(res.get("lucky", false) and g.turn == next, "fish the rank you asked for and you go again")
+	# trumps can't be asked for
+	g.trump_rank = 8
+	check(not g.askable_ranks(next).has(8), "nobody can ask for the trump rank")
+
+
+func test_gf_books() -> void:
+	var g := new_gf(2, 4)
+	var me := g.turn
+	var them := g.next_alive(me)
+	g.trump_rank = 13
+	g.melds = []
+	g.players[me].hand = cards("7H 7C 7D 2S")
+	g.players[them].hand = cards("7S 3C")
+	g.ask(me, them, 7)
+	check(g.books_of(me).size() == 1 and g.players[me].hand.size() == 1, "four 7s make a book")
+	# a trump fills in
+	g.players[me].hand = cards("9H 9C 9D KS")
+	g._make_books(g.players[me])
+	check(g.books_of(me).size() == 2, "three 9s and a trump king make a book")
+	# the round: most books wins and takes the shotgun
+	g = new_gf(2, 6)
+	me = g.turn
+	them = g.next_alive(me)
+	g.melds = []
+	for r in ["2", "3", "4"]:
+		g._lay_book(g.players[me], cards("%sH %sC %sD %sS" % [r, r, r, r]), int(r))
+	g.stock = []
+	g.players[me].hand = cards("10H")
+	g.players[them].hand = cards("JC")
+	g.ask(me, them, 10)
+	check(g.phase == "shoot" and g.gun["holder"] == me and g.gun["shells"] == 3, "3 books ahead: 3 shells (%s)" % [g.phase])
+
+
+## Every level of Go Fish AI finishes whole matches, cards all accounted for.
+func test_gf_ai_matches() -> void:
+	var wins := {"easy": 0, "normal": 0, "hard": 0}
+	for s in range(1, 11):
+		var n := 2 + s % 5
+		var g := new_gf(n, s * 29)
+		for i in range(n):
+			g.players[i].bot = Bot.LEVELS[(i + s) % 3]
+		var memories := {}
+		var steps := 0
+		var refused := 0
+		while g.phase != "match_over" and steps < 30000:
+			steps += 1
+			if g.phase == "round_over":
+				g.start_round()
+				continue
+			var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+			var mem: Dictionary = memories.get_or_add(seat, {})
+			var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
+			if act.is_empty():
+				check(false, "seed %d: no go fish move in phase %s" % [s, g.phase])
+				return
+			var res := Session.perform(g, seat, act[0], act[1], true)
+			if not res["ok"]:
+				refused += 1
+				Bot.note_failure(mem, act)
+			if g.phase == "play":
+				var count := 0
+				for p in g.players:
+					for c in p.hand:
+						count += 1
+				for m in g.melds:
+					count += m["cards"].size()
+				for c in g.stock + g.burned:
+					if not c.has("item"):
+						count += 1
+				if count != 52:
+					check(false, "seed %d: %d cards in play" % [s, count])
+					return
+		check(g.phase == "match_over", "seed %d: go fish match finishes (round %d)" % [s, g.round_num])
+		check(refused < 20, "seed %d: go fish AI moves are legal (%d refused)" % [s, refused])
+		if g.winner >= 0:
+			wins[g.players[g.winner].bot] += 1
+	print("  go fish AI wins by level: %s" % [wins])
+
+
+## Normal mode: no items, no shotgun, first to 3 round wins.
+func test_normal_mode() -> void:
+	for kind in Games.kinds():
+		var g = Games.make(kind, true)
+		g.setup(["A", "B", "C"], {}, 77)
+		for p in g.players:
+			p.bot = "normal"
+		g.start_round()
+		for p in g.players:
+			check(p.items.is_empty(), "%s normal mode: no items dealt" % kind)
+		for c in g.stock:
+			check(not c.has("item"), "%s normal mode: no items in the stock" % kind)
+		var memories := {}
+		var steps := 0
+		while g.phase != "match_over" and steps < 40000:
+			steps += 1
+			check(g.phase != "shoot", "%s normal mode: nobody gets the shotgun" % kind)
+			if g.phase == "shoot":
+				return
+			if g.phase == "round_over":
+				g.start_round()
+				continue
+			var mem: Dictionary = memories.get_or_add(g.turn, {})
+			var act := Bot.next_action(g, g.turn, "normal", mem)
+			if act.is_empty() or not Session.perform(g, g.turn, act[0], act[1], true)["ok"]:
+				if not act.is_empty():
+					Bot.note_failure(mem, act)
+		check(g.phase == "match_over" and g.players[g.winner].rounds_won == 3, "%s normal mode: first to 3 rounds wins" % kind)
+		for p in g.players:
+			check(p.hp == p.max_hp, "%s normal mode: nobody loses health" % kind)

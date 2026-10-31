@@ -196,6 +196,8 @@ func _next_turn() -> void:
 ## A Blackjack shoots the dealer straight away, free: no shells used.
 ## Checked after the deal and whenever an item reshuffles hands.
 func _blackjack_shots() -> void:
+	if not options["shotgun"]:
+		return
 	for s in _order:
 		var p: Player = players[s]
 		var d: Player = players[dealer]
@@ -271,7 +273,11 @@ func _finish_round() -> void:
 	phase = "round_over"
 	gun = null
 	_emit("round_end", result)
-	_pass_gun()
+	if options["shotgun"]:
+		_pass_gun()
+	else:
+		_shooters = []
+		_check_normal_match()
 
 
 ## Hands the shotgun to the next player waiting to shoot this round.

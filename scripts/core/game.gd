@@ -81,7 +81,13 @@ class Player:
 		name = p_name
 
 
+## Normal mode: the plain card game. No items, no health, no shotgun: win
+## rounds instead, and the first to `rounds_to_win` takes the match.
+const NORMAL_MODE := {"shotgun": false, "items_dealt": 0, "items_in_stock": false}
+
 var options := {
+	"shotgun": true,
+	"rounds_to_win": 3, # normal mode
 	"hand_size": 7,
 	"items_dealt": 2,
 	"items_in_stock": true,
@@ -695,12 +701,26 @@ func _end_round(winner_seat: int, reason: String = "") -> void:
 		result["points"] = pts
 		result["shells"] = mini(int(options["max_shells"]), 1 + int(pts / float(options["points_per_shell"])))
 	last_result = result
-	if winner_seat >= 0 and int(result["shells"]) > 0:
+	if options["shotgun"] and winner_seat >= 0 and int(result["shells"]) > 0:
 		phase = "shoot"
 		gun = {"holder": winner_seat, "shells": result["shells"], "total": result["shells"]}
 	else:
 		phase = "round_over"
 	_emit("round_end", result)
+	_check_normal_match()
+
+
+## Normal mode: has someone won enough rounds to take the match?
+func _check_normal_match() -> void:
+	if options["shotgun"] or phase == "match_over":
+		return
+	for p in players:
+		if p.rounds_won >= int(options["rounds_to_win"]):
+			phase = "match_over"
+			gun = null
+			winner = p.seat
+			_emit("match_end", {"winner": winner})
+			return
 
 
 # ---------------------------------------------------------------- items

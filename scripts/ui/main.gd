@@ -21,8 +21,8 @@ const Bot = preload("res://scripts/core/bot.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
 const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
 
-## The card games, in menu order.
-const GAMES := {"rummy": "SHOTGUN RUMMY", "blackjack": "SHOTGUN BLACKJACK"}
+const Games = preload("res://scripts/core/games.gd")
+const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -44,7 +44,13 @@ var _picked: Dictionary = {} # highlighted on the character select screen
 var custom_looks: Array = [] # characters you've made
 var player_names: Array = ["PLAYER 1", "PLAYER 2"]
 var hide_hands := true
-var game_kind := "rummy" # which card game: see GAMES
+var game_kind := "rummy" # which cartridge: see games.gd
+var normal_mode := false # the plain game: no items, no shotgun
+var tutorial := false # this game is the tutorial: normal mode with tips
+var played := {} # kind -> shotgun matches finished (normal mode unlocks)
+var tutorial_offered := false
+var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
+var coach_label: Label
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -235,6 +241,10 @@ func _clear(node: Node) -> void:
 func _hp_bar(p, seg: Vector2 = Vector2(26, 14)) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
+	if game != null and not game.options.get("shotgun", true):
+		# normal mode: round wins instead of health
+		row.add_child(_tag("WINS %d/%d" % [p.rounds_won, game.options["rounds_to_win"]], int(seg.y * 1.6), Palette.GOLD))
+		return row
 	for i in range(p.max_hp):
 		var s := ColorRect.new()
 		s.custom_minimum_size = seg
@@ -286,8 +296,11 @@ func _load_settings() -> void:
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
 	setup_bots = cfg.get_value("setup", "bots", [])
 	game_kind = str(cfg.get_value("setup", "game", "rummy"))
-	if not GAMES.has(game_kind):
+	if not Games.has(game_kind):
 		game_kind = "rummy"
+	played = cfg.get_value("progress", "played", {})
+	tutorial_offered = cfg.get_value("progress", "tutorial_offered", false)
+	normal_mode = cfg.get_value("setup", "normal", false) and _normal_unlocked(game_kind)
 	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
 	solo_level = str(cfg.get_value("solo", "level", "normal"))
 	profile_name = cfg.get_value("profile", "name", "")
@@ -304,6 +317,9 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("setup", "bots", setup_bots)
 	cfg.set_value("setup", "game", game_kind)
+	cfg.set_value("setup", "normal", normal_mode)
+	cfg.set_value("progress", "played", played)
+	cfg.set_value("progress", "tutorial_offered", tutorial_offered)
 	cfg.set_value("solo", "opponents", solo_opponents)
 	cfg.set_value("solo", "level", solo_level)
 	cfg.set_value("profile", "name", profile_name)
@@ -342,10 +358,13 @@ func show_menu() -> void:
 	session.stop_scan()
 	game = null
 	round_label = null
+	mode_ui = null
+	tutorial = false
 	world.set_menu_mode(true)
 	var box := _paper()
 	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_paper_button("GAME: %s  ▸" % GAMES[game_kind], _cycle_game, 26))
+	box.add_child(_paper_button("CARTRIDGE: %s  ▸" % _game_title(game_kind, normal_mode), show_cartridges, 26))
+	world.set_cartridge(game_kind)
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
 		menu_message = ""
@@ -364,21 +383,98 @@ func show_menu() -> void:
 	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
 	box.add_child(_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24))
 	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
+	if not tutorial_offered:
+		tutorial_offered = true
+		_save_settings()
+		_offer_tutorial()
 
 
-## Rummy -> Blackjack -> ...
-func _cycle_game() -> void:
-	if _name_edit != null and is_instance_valid(_name_edit):
-		profile_name = _name_edit.text.strip_edges().to_upper().left(10)
-	var kinds := GAMES.keys()
-	game_kind = kinds[(kinds.find(game_kind) + 1) % kinds.size()]
-	_save_settings()
-	show_menu()
+## "SHOTGUN GO FISH", or just "GO FISH" in normal mode.
+static func _game_title(kind: String, normal: bool) -> String:
+	return Games.label(kind) if normal else Games.title(kind)
 
 
 ## A new, empty game of `kind`.
-static func new_game(kind: String) -> Game:
-	return Blackjack.new() if kind == "blackjack" else Game.new()
+static func new_game(kind: String, normal: bool = false) -> Game:
+	return Games.make(kind, normal)
+
+
+func _normal_unlocked(kind: String) -> bool:
+	return int(played.get(kind, 0)) >= Games.UNLOCK_NORMAL_AFTER
+
+
+# ================================================================ cartridges
+
+## The cartridge shelf: pick a game, how to play it, or its tutorial.
+func show_cartridges() -> void:
+	if _name_edit != null and is_instance_valid(_name_edit):
+		var typed := _name_edit.text.strip_edges().to_upper().left(10)
+		if typed != "":
+			profile_name = typed
+	var box := _paper(660)
+	box.add_child(_label("CARTRIDGES", 52, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("Pick a game to slot into the table.", 22, Palette.CARD_INK, true))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	for kind in Games.kinds():
+		var b := _button(Games.label(kind), _pick_cartridge.bind(kind), 22)
+		b.custom_minimum_size = Vector2(196, 92)
+		var col := Games.color(kind)
+		var edge := Palette.GOLD if kind == game_kind else col.darkened(0.5)
+		b.add_theme_stylebox_override("normal", Palette.box(col, edge, 4 if kind == game_kind else 2, 2, 8))
+		b.add_theme_stylebox_override("hover", Palette.box(col.lightened(0.1), edge, 4 if kind == game_kind else 2, 2, 8))
+		grid.add_child(b)
+	box.add_child(grid)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var shotgun := _paper_button("SHOTGUN", _set_normal.bind(false), 24)
+	var plain_text := "NORMAL" if _normal_unlocked(game_kind) else "NORMAL 🔒 %d/%d" % [int(played.get(game_kind, 0)), Games.UNLOCK_NORMAL_AFTER]
+	var plain := _paper_button(plain_text, _set_normal.bind(true), 24)
+	plain.disabled = not _normal_unlocked(game_kind)
+	for b in [shotgun, plain]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(b)
+	Palette.accent(plain if normal_mode else shotgun, Palette.RED)
+	box.add_child(row)
+	box.add_child(_label("NORMAL is the plain game: no items, no shotgun, first to 3 rounds. It unlocks after %d shotgun games of that cartridge." % Games.UNLOCK_NORMAL_AFTER, 20, Palette.CARD_INK, true))
+	box.add_child(_paper_button("TUTORIAL: LEARN %s" % Games.label(game_kind), _start_tutorial, 24))
+	box.add_child(_paper_button("DONE", show_menu, 28))
+
+
+func _pick_cartridge(kind: String) -> void:
+	game_kind = kind
+	if not _normal_unlocked(kind):
+		normal_mode = false
+	_save_settings()
+	world.set_cartridge(kind)
+	show_cartridges()
+
+
+func _set_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked(game_kind)
+	_save_settings()
+	show_cartridges()
+
+
+## First time in: point people at the tutorials.
+func _offer_tutorial() -> void:
+	var box := _open_overlay(0.94, false, "menu")
+	box.add_child(_title("FIRST TIME HERE?"))
+	box.add_child(_label("Every cartridge has a tutorial: a quick normal game against easy AIs, with tips as you go.", 26, Palette.INK, true))
+	box.add_child(_button("PICK A TUTORIAL", _closing(show_cartridges)))
+	box.add_child(_button("NO THANKS", _closing(_noop)))
+
+
+## The tutorial: normal mode against two easy AIs, with tips on screen.
+func _start_tutorial() -> void:
+	var me := profile_name if profile_name != "" else "YOU"
+	var names := [me, "DOC", "PEARL"]
+	var looks := [my_look.duplicate(), Looks.preset(4), Looks.preset(9)]
+	local_mode = "solo"
+	_table = {"names": names, "looks": looks, "bots": ["", "easy", "easy"], "kind": game_kind, "normal": true, "tutorial": true}
+	start_match()
 
 
 func _blackjack() -> bool:
@@ -426,7 +522,7 @@ func _on_pass_and_play_pressed() -> void:
 func show_this_phone() -> void:
 	var box := _paper()
 	box.add_child(_label("ON THIS PHONE", 52, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_label(GAMES[game_kind], 26, Palette.CARD_INK, true))
+	box.add_child(_label(_game_title(game_kind, normal_mode), 26, Palette.CARD_INK, true))
 	box.add_child(_paper_button("VS AI (SOLO)", show_solo))
 	box.add_child(_label("Just you against AI players.", 22, Palette.CARD_INK, true))
 	box.add_child(_paper_button("PASS THE PHONE", _on_pass_and_play_pressed))
@@ -442,7 +538,7 @@ const SOLO_LEVELS := ["easy", "normal", "hard", "mixed"]
 func show_solo() -> void:
 	var box := _paper()
 	box.add_child(_label("VS AI", 60, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_label(GAMES[game_kind], 26, Palette.CARD_INK, true))
+	box.add_child(_label(_game_title(game_kind, normal_mode), 26, Palette.CARD_INK, true))
 	box.add_child(_label("%s, PLAYING AS %s" % [profile_name if profile_name != "" else "YOU", _short_name(my_look)], 24, Palette.CARD_INK, true))
 	var count_row := HBoxContainer.new()
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -511,7 +607,7 @@ func _start_solo() -> void:
 		bots.append(Bot.LEVELS[i % Bot.LEVELS.size()] if solo_level == "mixed" else solo_level)
 	_save_settings()
 	local_mode = "solo"
-	_table = {"names": names, "looks": looks, "bots": bots, "kind": game_kind}
+	_table = {"names": names, "looks": looks, "bots": bots, "kind": game_kind, "normal": normal_mode}
 	start_match()
 
 
@@ -529,6 +625,7 @@ func _on_host_pressed() -> void:
 		return
 	var err := session.host(n, my_look)
 	session.game_kind = game_kind
+	session.normal = normal_mode
 	if err != "":
 		menu_message = err
 		show_menu()
@@ -551,7 +648,7 @@ func show_join() -> void:
 		box.add_child(_label("Looking... (the host needs to be on the HOST A LOBBY screen)", 22, Palette.CARD_INK, true))
 	for ip in session.lobbies:
 		var l: Dictionary = session.lobbies[ip]
-		var kind_name: String = str(GAMES.get(l.get("kind", "rummy"), "")).trim_prefix("SHOTGUN ")
+		var kind_name: String = Games.label(str(l.get("kind", "rummy")))
 		box.add_child(_paper_button("%s · %s (%d/%d)" % [l["name"], kind_name, l["players"], l["max"]], _join_ip.bind(ip), 26))
 	box.add_child(_label("OR JOIN BY IP (shown on the host's screen)", 22, Palette.CARD_INK, true))
 	var row := HBoxContainer.new()
@@ -602,9 +699,11 @@ func show_lobby() -> void:
 	else:
 		box.add_child(_label("IN THE LOBBY", 48, Color(0.36, 0.06, 0.05), true))
 	if session.is_host():
-		box.add_child(_paper_button("GAME: %s  ▸" % GAMES.get(session.game_kind, "?"), _cycle_lobby_game, 24))
+		box.add_child(_paper_button("CARTRIDGE: %s  ▸" % _game_title(session.game_kind, session.normal), _cycle_lobby_game, 24))
+		if _normal_unlocked(session.game_kind):
+			box.add_child(_paper_button("MODE: %s" % ("NORMAL" if session.normal else "SHOTGUN"), _toggle_lobby_normal, 22))
 	else:
-		box.add_child(_label("GAME: %s" % GAMES.get(session.game_kind, "?"), 26, Palette.CARD_INK, true))
+		box.add_child(_label("CARTRIDGE: %s" % _game_title(session.game_kind, session.normal), 26, Palette.CARD_INK, true))
 	box.add_child(_label("PLAYERS (%d/%d)" % [session.names.size(), Session.MAX_PLAYERS], 26, Palette.CARD_INK))
 	for i in range(session.names.size()):
 		var who: String = session.names[i]
@@ -644,10 +743,14 @@ func show_lobby() -> void:
 
 
 func _cycle_lobby_game() -> void:
-	var kinds := GAMES.keys()
+	var kinds := Games.kinds()
 	game_kind = kinds[(kinds.find(session.game_kind) + 1) % kinds.size()]
 	_save_settings()
-	session.set_game(game_kind)
+	session.set_game(game_kind, session.normal and _normal_unlocked(game_kind))
+
+
+func _toggle_lobby_normal() -> void:
+	session.set_game(session.game_kind, not session.normal)
 
 
 func _on_roster_changed() -> void:
@@ -1091,7 +1194,7 @@ func _start_from_setup() -> void:
 	_save_settings()
 	_fit_setup_looks()
 	local_mode = "pass"
-	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate(), "kind": game_kind}
+	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate(), "kind": game_kind, "normal": normal_mode}
 	start_match()
 
 
@@ -1100,7 +1203,8 @@ func _start_from_setup() -> void:
 ## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
 	session.leave()
-	game = new_game(str(_table.get("kind", "rummy")))
+	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
+	tutorial = bool(_table.get("tutorial", false))
 	game.setup(_table["names"])
 	for i in range(game.players.size()):
 		game.players[i].look = _table["looks"][i]
@@ -1206,6 +1310,8 @@ func _ignore_result(_res: Dictionary) -> void:
 
 
 func _on_game_event(kind: String, d: Dictionary) -> void:
+	if mode_ui != null:
+		mode_ui.on_event(kind, d)
 	match kind:
 		"roulette":
 			world.roulette(d["seat"], d["hit"])
@@ -1300,6 +1406,11 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 					_flash(Color.WHITE)
 				_last_shot_text = "BANG. %s shoots %s." % [_name(d["shooter"]), _name(d["target"])]
 		"match_end":
+			if game.options["shotgun"] and not tutorial:
+				played[game.kind] = int(played.get(game.kind, 0)) + 1
+				_save_settings()
+				if int(played[game.kind]) == Games.UNLOCK_NORMAL_AFTER:
+					_log("NORMAL MODE UNLOCKED for %s." % Games.label(game.kind))
 			if d["winner"] >= 0:
 				_log("%s WALKS OUT." % _name(d["winner"]))
 
@@ -1446,6 +1557,58 @@ func _blackjack_shot_fx(shooter: int, target: int) -> void:
 		_shake()
 	else:
 		_flash(Color.WHITE)
+
+
+## The tutorial's tip line.
+func _refresh_coach() -> void:
+	if coach_label == null:
+		return
+	coach_label.visible = tutorial and not _hand_hidden
+	if not coach_label.visible:
+		return
+	var tip := ""
+	if mode_ui != null:
+		tip = mode_ui.coach()
+	elif _blackjack():
+		tip = _coach_blackjack()
+	else:
+		tip = _coach_rummy()
+	coach_label.text = "TIP: " + tip if tip != "" else ""
+
+
+func _coach_rummy() -> String:
+	if game.phase != "draw" and game.phase != "play":
+		return ""
+	if not _my_turn():
+		return "Watch what the others pick up from the discard pile: it tells you what they're collecting."
+	var seat := _me()
+	if game.phase == "draw":
+		var top: Dictionary = game.top_discard()
+		if not top.is_empty() and Bot.helps(game, game.players[seat].hand, top):
+			return "The top of the discard pile helps you: tap it to take it."
+		return "Start by drawing: tap the stock (face down) or the discard pile."
+	if not game.can_place(seat):
+		return "First turn: you can't put cards down yet. Tap one card you don't need, then DISCARD."
+	if game.go_out_check(seat)["can"]:
+		return "You can go out! Meld everything, then discard your last card."
+	var best: Dictionary = Cards.best_partition(game.players[seat].hand, game.trump_rank)
+	if not best["melds"].is_empty():
+		return "Gold-outlined cards make a meld. Tap them, then MELD."
+	return "Nothing to meld. Tap your least useful card (a high one), then DISCARD."
+
+
+func _coach_blackjack() -> String:
+	if game.phase != "play" or not _my_turn():
+		return "Everyone plays against the dealer. Beat their total without going over 21."
+	var seat := _me()
+	var t: int = game.hand_total(seat)
+	if seat == game.dealer:
+		return "You're the dealer: you play last and can see everyone's face-up cards. Try to beat them."
+	if t <= 11:
+		return "%d can't go bust with one more card. HIT." % t
+	if t >= 17:
+		return "%d is strong. STAND and let the dealer try to beat it." % t
+	return "%d is in the middle. If the dealer shows 7 or more, HIT; if 2 to 6, STAND and hope they bust." % t
 
 
 func _refresh_blackjack() -> void:
@@ -1697,6 +1860,13 @@ func _build_table() -> void:
 	go_out_label.visible = false
 	col.add_child(go_out_label)
 
+	# tutorial tips
+	coach_label = _label("", 24, Palette.INK, true)
+	coach_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	coach_label.add_theme_constant_override("outline_size", 8)
+	coach_label.visible = false
+	col.add_child(coach_label)
+
 	# the 3D table, your items and your hand show through here
 	var gap := Control.new()
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1745,6 +1915,32 @@ func _build_table() -> void:
 		meld_btn.text = "HIT"
 		discard_btn.text = "STAND"
 		minor.visible = false
+	mode_ui = _make_mode_ui()
+	if not game.options["shotgun"]:
+		use_btn.visible = false # normal mode has no items
+	if mode_ui != null:
+		minor.visible = false
+		var specs: Array = mode_ui.buttons()
+		var btns := [meld_btn, use_btn, discard_btn]
+		for i in range(btns.size()):
+			var b: Button = btns[i]
+			var spec: Array = specs[i] if i < specs.size() else ["", Callable(), null]
+			for c in b.pressed.get_connections():
+				b.pressed.disconnect(c["callable"])
+			b.text = spec[0]
+			b.visible = spec[0] != "" and (b != use_btn or game.options["shotgun"])
+			if spec[1].is_valid():
+				b.pressed.connect(spec[1])
+			if spec[2] != null:
+				Palette.accent(b, spec[2])
+
+
+## The table screen for games that bring their own (scripts/ui/modes).
+func _make_mode_ui():
+	match game.kind:
+		"gofish":
+			return GoFishUI.new(self)
+	return null
 
 
 ## A tap on the table: find the card under it in 3D.
@@ -1754,6 +1950,9 @@ func _on_table_input(event: InputEvent) -> void:
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
+	if mode_ui != null:
+		mode_ui.on_pick(hit)
+		return
 	if _blackjack():
 		match hit.get("kind", ""):
 			"item":
@@ -1780,6 +1979,10 @@ func _on_table_input(event: InputEvent) -> void:
 
 func _refresh() -> void:
 	if game == null or round_label == null:
+		return
+	_refresh_coach()
+	if mode_ui != null:
+		mode_ui.refresh()
 		return
 	if _blackjack():
 		_refresh_blackjack()
@@ -1859,6 +2062,8 @@ static func trump_name(rank: int) -> String:
 func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 	if message != "":
 		return message.to_upper()
+	if mode_ui != null:
+		return mode_ui.status()
 	if _blackjack():
 		return _status_blackjack()
 	if game.phase != "draw" and game.phase != "play":
@@ -2256,6 +2461,11 @@ func _show_round_result() -> void:
 	if _blackjack():
 		_show_blackjack_result()
 		return
+	if mode_ui != null:
+		var mbox := _open_overlay(0.94, true, "result")
+		mode_ui.show_result(mbox)
+		_add_result_buttons(mbox, int(game.gun["holder"]) if game.gun != null else int(game.last_result.get("winner", -1)))
+		return
 	var r := game.last_result
 	var box := _open_overlay(0.94, true, "result")
 	var w: int = r["winner"]
@@ -2437,7 +2647,7 @@ func _play_again_online() -> void:
 func _show_rules() -> void:
 	var box := _open_overlay(0.96, true, "rules")
 	box.add_child(_title("RULES"))
-	var lines: Array = BLACKJACK_RULES if _blackjack() else [
+	var lines: Array = mode_ui.rules() if mode_ui != null else (BLACKJACK_RULES if _blackjack() else [
 		"THE TABLE. 2 to 6 players, either passing one phone around (PASS & PLAY) or each on their own phone in a lobby on the same Wi-Fi. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
 		"THE DEAL. Everyone gets 7 playing cards and 2 item cards. The other item cards are shuffled into the stock, so a draw from it can give you an item instead of a playing card.",
 		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
@@ -2450,11 +2660,16 @@ func _show_rules() -> void:
 		"FIRST TURN. Nobody can put cards down on their first turn of a round: just draw and discard.",
 		"NO DISCARDING TRUMPS. You can't discard a trump card; meld it or lay it off. (If you're holding nothing but trumps, you may.)",
 		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
-	]
-	if _blackjack():
-		box.add_child(_title("BLACKJACK"))
+	])
+	box.add_child(_title(_game_title(game.kind, not game.options["shotgun"])))
+	if not game.options["shotgun"]:
+		lines = lines.duplicate()
+		lines.append("NORMAL MODE. No items and no shotgun: win the round to score, and the first to %d rounds wins the match." % game.options["rounds_to_win"])
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))
+	if not game.options["shotgun"]:
+		box.add_child(_button("BACK", _closing(_after_action)))
+		return
 	box.add_child(_label("ITEMS (use as many as you like, any time in your turn)", 28, Palette.PURPLE.lightened(0.3)))
 	for id in Items.DEFS:
 		var d: Dictionary = Items.def(id)

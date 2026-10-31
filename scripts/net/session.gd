@@ -19,11 +19,11 @@ signal ended(reason: String)
 const Game = preload("res://scripts/core/game.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const Bot = preload("res://scripts/core/bot.gd")
-const Blackjack = preload("res://scripts/core/blackjack.gd")
+const Games = preload("res://scripts/core/games.gd")
 
 const PORT := 47601
 const DISCOVERY_PORT := 47600
-const PROTOCOL := 6
+const PROTOCOL := 7
 const MAX_PLAYERS := 6
 const LOBBY_TIMEOUT_MS := 4000
 
@@ -35,6 +35,7 @@ var looks: Array = [] # their characters, same order
 var bots: Array = [] # "" for a person, or an AI's level, same order (the host runs the AIs)
 var my_look: Dictionary = {}
 var game_kind := "rummy" # which card game the lobby will play
+var normal := false # normal mode: no items, no shotgun
 var lobbies := {} # ip -> { "name", "players", "max", "seen" }
 var game: Game = null
 var in_match := false
@@ -220,15 +221,16 @@ func _remove_seat(seat: int) -> void:
 
 
 ## Host: picks the card game.
-func set_game(kind: String) -> void:
+func set_game(kind: String, normal_mode: bool = false) -> void:
 	if mode != "host" or in_match:
 		return
 	game_kind = kind
+	normal = normal_mode
 	_send_roster()
 
 
-static func make_game(kind: String) -> Game:
-	return Blackjack.new() if kind == "blackjack" else Game.new()
+static func make_game(kind: String, normal: bool = false) -> Game:
+	return Games.make(kind, normal)
 
 
 ## Host: sits an AI player at the table.
@@ -313,13 +315,14 @@ func _ended(reason: String) -> void:
 
 
 func _send_roster() -> void:
-	_roster.rpc(names, looks, bots, game_kind)
+	_roster.rpc(names, looks, bots, game_kind, normal)
 	roster_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _roster(lobby_names: Array, lobby_looks: Array = [], lobby_bots: Array = [], kind: String = "rummy") -> void:
+func _roster(lobby_names: Array, lobby_looks: Array = [], lobby_bots: Array = [], kind: String = "rummy", normal_mode: bool = false) -> void:
 	game_kind = kind
+	normal = normal_mode
 	names = lobby_names
 	looks = lobby_looks
 	bots = lobby_bots
@@ -332,7 +335,7 @@ func start_match() -> void:
 	if mode != "host" or names.size() < 2:
 		return
 	in_match = true
-	game = make_game(game_kind)
+	game = make_game(game_kind, normal)
 	game.setup(names)
 	for i in range(game.players.size()):
 		game.players[i].look = looks[i] if i < looks.size() else Looks.for_seat(i)
@@ -341,17 +344,18 @@ func start_match() -> void:
 	match_started.emit()
 	for seat in range(1, _peers.size()):
 		if _peers[seat] > 0:
-			_match_start.rpc_id(_peers[seat], seat, game_kind)
+			_match_start.rpc_id(_peers[seat], seat, game_kind, normal)
 	game.start_round()
 	_flush(1, {})
 
 
 @rpc("authority", "call_remote", "reliable")
-func _match_start(seat: int, kind: String = "rummy") -> void:
+func _match_start(seat: int, kind: String = "rummy", normal_mode: bool = false) -> void:
 	my_seat = seat
 	in_match = true
 	game_kind = kind
-	game = make_game(kind)
+	normal = normal_mode
+	game = make_game(kind, normal_mode)
 
 
 ## Asks to do something on this player's turn. The answer arrives through
@@ -454,4 +458,6 @@ static func perform(g: Game, seat: int, action: String, args: Array, by_host: bo
 			if by_host and g.phase == "match_over":
 				g.reset_match()
 				return g.start_round()
+	if g.has_method("perform_action"):
+		return g.perform_action(seat, action, args) # the other games' own moves
 	return bad

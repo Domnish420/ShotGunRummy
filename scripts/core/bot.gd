@@ -17,6 +17,7 @@ extends RefCounted
 const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
 const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
+const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
 
 const LEVELS := ["easy", "normal", "hard"]
 const ITEMS_PER_TURN := {"easy": 1, "normal": 2, "hard": 3}
@@ -29,8 +30,11 @@ static func next_action(game, seat: int, level: String = "normal", memory: Dicti
 		return ["shoot", [choose_target(game, seat, level)]]
 	if not game.is_turn_of(seat):
 		return []
-	if game.kind == "blackjack":
-		return BlackjackBot.next_action(game, seat, level, memory)
+	match game.kind:
+		"blackjack":
+			return BlackjackBot.next_action(game, seat, level, memory)
+		"gofish":
+			return GoFishBot.next_action(game, seat, level, memory)
 	var me = game.players[seat]
 	var key := "%d-%d-%d" % [game.round_num, seat, me.turns_taken]
 	if memory.get("turn", "") != key:
@@ -86,6 +90,8 @@ static func play_turn(game, level: String = "normal") -> void:
 	# fallback so a turn can never hang
 	if game.is_turn_of(seat) and game.kind == "blackjack":
 		game.stand(seat)
+	elif game.is_turn_of(seat) and game.kind != "rummy":
+		pass # the other games always have a move
 	elif game.is_turn_of(seat):
 		if game.phase == "draw":
 			game.draw_stock(seat)
@@ -110,6 +116,8 @@ static func _apply(game, seat: int, act: Array) -> Dictionary:
 			return game.discard(seat, args[0])
 		"shoot":
 			return game.shoot(seat, args[0])
+		"ask":
+			return game.ask(seat, args[0], args[1])
 		"hit":
 			return game.hit(seat)
 		"stand":

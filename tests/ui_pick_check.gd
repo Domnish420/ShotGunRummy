@@ -21,6 +21,7 @@ func _initialize() -> void:
 	main.player_names = ["SAM", "ALEX"]
 	main.setup_bots = [] # everyone a person (settings may remember AIs)
 	main.game_kind = "rummy" # settings may remember another game
+	main.normal_mode = false
 	main.hide_hands = false
 	main._start_from_setup()
 	var g = main.game

@@ -8,10 +8,25 @@ for whoever wins the hand.
 
 - **Shotgun Rummy**: classic Rummy. Go out first.
 - **Shotgun Blackjack**: everyone against the dealer, who's one of the players.
+- **Shotgun Go Fish**: ask for cards, collect books of four.
 
-Pick the game at the top of the main menu (**GAME: …**), or in a lobby (the
-host taps it to change it). A white **DEALER** chip on the table shows who
-deals; it slides to the next dealer each round.
+Coming next: Cheat, Hearts, Spades, Snap and President.
+
+### Cartridges
+
+Each game is a cartridge. **CARTRIDGE: …** on the main menu opens the shelf:
+tap one and it slots into the console in the middle of the table. In a lobby
+the host taps the cartridge to change it. A white **DEALER** chip on the table
+shows who deals; it slides to the next dealer each round.
+
+### Normal mode and tutorials
+
+- **Normal mode** is the plain card game: no items, no health, no shotgun. Win
+  rounds instead; the first to 3 takes the match. It unlocks for a cartridge
+  after you've finished 3 shotgun games of it (the shelf shows how many).
+- **Tutorials** teach each game in normal mode, against two easy AIs, with tips
+  on screen about what to do right now. The game offers one the first time you
+  open it; after that it's **TUTORIAL** on the cartridge shelf.
 
 You sit at the near side of the table with your hand in front of you. Tap
 cards to select them, tap the stock or discard pile to draw, and tap a meld on
@@ -184,6 +199,24 @@ the game ends for everyone. When exporting an app for Android, tick the
   for the round. Garbage Day isn't in the Blackjack deck. The in-game RULES
   list shows each one.
 
+## How to play Shotgun Go Fish
+
+- **The deal.** 7 cards each (5 with 4 or more players) and 2 items. The rest
+  of the cards and the items are the **pond**.
+- **Your turn.** Tap a card to pick its rank, then **ASK** a player for it. If
+  they have any, they hand them all over and you go again. If not, **go fish**:
+  draw from the pond. Draw the rank you asked for and you go again. Draw an
+  item and you keep it and draw again.
+- **Books.** Four of a kind goes down in front of you by itself. Trumps are
+  wild for books (three of a rank and a trump, or two and two trumps). Nobody
+  can ask for the trump rank, and trumps are never handed over.
+- **The end.** The round ends when someone has to fish and the pond is empty.
+  Most books wins and gets 1 shell for every book they're ahead (1 to 3).
+- **Items.** Shakedown throws a card back in the pond, Sticky Fingers steals a
+  card from someone's book (the rest goes back in their hand), the Revolver
+  makes someone get a card off another player or spin. Double Down, Dumpster
+  Dive and Garbage Day aren't in the Go Fish deck.
+
 ### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
@@ -223,6 +256,9 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/game.gd` | Shotgun Rummy's rules: dealing, turns, items, scoring, shotgun, health. No UI, so it's tested on its own. |
 | `scripts/core/blackjack.gd` | Shotgun Blackjack's rules. Builds on `game.gd` for the players, items, health and shotgun. |
 | `scripts/core/blackjack_bot.gd` | The Blackjack AI. |
+| `scripts/core/gofish.gd`, `gofish_bot.gd` | Go Fish's rules and AI. |
+| `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
+| `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |
 | `scripts/net/session.gd` | Lobbies, Wi-Fi discovery and online play (the host checks every move). |
 | `scripts/three/world3d.gd` | The 3D room: table, lamp, players, shotgun, card placement and tap picking. |
@@ -249,6 +285,13 @@ can see anyone else's cards:
 
 ```
 godot --headless --path . -s tests/net_test.gd
+```
+
+`tests/ui_games_check.gd` plays each newer cartridge solo through the real
+screens, a shotgun match and then its tutorial:
+
+```
+godot --headless --path . -s tests/ui_games_check.gd
 ```
 
 `tests/ui_blackjack_check.gd` plays Shotgun Blackjack solo against two AIs
