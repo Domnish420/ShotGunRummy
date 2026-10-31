@@ -430,7 +430,9 @@ godot --path . -s tests/ui_smoke.gd -- --shots=/tmp/shots
 - [x] Main menu, lobbies on the same Wi-Fi
 - [x] Character customisation
 - [ ] Online lobbies over the internet
-- [x] Sound effects (made in code for now; real ones before release)
+- [x] Sound effects for everything: every item, every game's big moments,
+  turns, taps and menus (made in code in `scripts/audio/chiptune.gd` for
+  now; swap in real recordings before release)
 - [x] AI players (easy, normal, hard)
 - [ ] Voice chat (once there's internet play)
 - [x] Blackjack

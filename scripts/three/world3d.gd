@@ -10,6 +10,8 @@ extends Node3D
 
 ## Shuffling and dealing at the start of a round has finished.
 signal deal_finished
+## A sound the table wants played (main.gd plays it): "deal", "chip"...
+signal sfx(name: String)
 
 const Cards = preload("res://scripts/core/cards.gd")
 const Palette = preload("res://scripts/ui/palette.gd")
@@ -386,6 +388,7 @@ func _sync_dealer_chip(game, viewer: int) -> void:
 		t.tween_property(_dealer_chip, "position", mid, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		t.tween_property(_dealer_chip, "position", pos, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		t.parallel().tween_property(_dealer_chip, "rotation:y", _dealer_chip.rotation.y + TAU, 0.5)
+		sfx.emit("chip")
 	else:
 		_dealer_chip.position = pos
 	_chip_seat = rel
@@ -1211,6 +1214,12 @@ func _begin_deal(game, viewer: int, my_hand: Array) -> void:
 	_shuffle_show(deck, shuffle_start)
 	if game.trump_rank > 0:
 		_banner("ROUND %d\nTRUMP: %s" % [game.round_num, TRUMP_NAMES[game.trump_rank]], Vector3(0, 0.55, -0.15), deal_start + count * DEAL_STEP)
+	# a flick for every couple of cards as they fly out
+	var ticks := create_tween()
+	ticks.tween_interval(deal_start)
+	for i in range(0, mini(count, 60), 2):
+		ticks.tween_callback(sfx.emit.bind("deal"))
+		ticks.tween_interval(DEAL_STEP * 2.0)
 	var done := get_tree().create_timer(deal_start + count * DEAL_STEP + 0.4)
 	done.timeout.connect(_end_deal)
 

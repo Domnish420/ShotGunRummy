@@ -177,6 +177,7 @@ func _ready() -> void:
 	world = World3DScene.new()
 	view3d.add_child(world)
 	world.deal_finished.connect(_on_deal_finished)
+	world.sfx.connect(_sound)
 
 	screen = _full(Control.new())
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -212,24 +213,7 @@ func _ready() -> void:
 
 
 func _make_sound(name_: String) -> AudioStream:
-	match name_:
-		"tick": return Chiptune.tick()
-		"swish": return Chiptune.swish()
-		"clunk": return Chiptune.clunk()
-		"select": return Chiptune.select()
-		"flick": return Chiptune.flick()
-		"shuffle": return Chiptune.shuffle()
-		"slap": return Chiptune.slap()
-		"item": return Chiptune.item()
-		"heal": return Chiptune.heal()
-		"hurt": return Chiptune.hurt()
-		"rack": return Chiptune.rack()
-		"blast": return Chiptune.blast()
-		"click": return Chiptune.click()
-		"spin": return Chiptune.spin()
-		"win": return Chiptune.win()
-		"fanfare": return Chiptune.fanfare()
-	return null
+	return Chiptune.make(name_)
 
 
 func _toggle_sound() -> void:
@@ -973,7 +957,13 @@ func _toggle_lobby_normal() -> void:
 	session.set_game(session.game_kind, not session.normal)
 
 
+var _roster_size := 0
+
+
 func _on_roster_changed() -> void:
+	if session.names.size() != _roster_size:
+		_sound("join" if session.names.size() > _roster_size else "leave")
+		_roster_size = session.names.size()
 	if not session.in_match:
 		show_lobby()
 
@@ -1220,6 +1210,7 @@ func _choice_row(label: String, value: String, on_prev: Callable, on_next: Calla
 
 
 func _step_part(delta: int, part: String, options: Array) -> void:
+	_sound("part")
 	var at := options.find(_editing[part])
 	_set_part(part, options[posmod(at + delta, options.size())])
 
@@ -1230,6 +1221,7 @@ func _set_part(part: String, value) -> void:
 
 
 func _save_creation() -> void:
+	_sound("save")
 	var char_name := str(_editing.get("name", "")).strip_edges().to_upper().left(20)
 	if char_name == "":
 		char_name = _fresh_custom_name()
@@ -1647,33 +1639,97 @@ func _event_sound(kind: String, d: Dictionary) -> void:
 	match kind:
 		"round_start":
 			_sound("shuffle")
-		"draw", "hit", "flip", "discard", "trick_card", "play", "president_play", "ask":
+		"turn_start":
+			if game != null and int(d.get("seat", -1)) == _me() and not _is_bot(int(d.get("seat", -1))):
+				get_tree().create_timer(0.25).timeout.connect(_sound.bind("your_turn"))
+		"turn_skipped":
+			_sound("item_handcuffs")
+		"draw", "hit", "flip", "trick_card", "board":
 			_sound("flick")
-		"meld", "layoff", "swap", "book", "trick_won", "snap":
+		"discard", "play", "president_play":
+			_sound("slap" if kind == "president_play" else "flick")
+		"meld", "layoff", "book", "trick_won":
 			_sound("slap")
+		"swap":
+			_sound("item_switcheroo")
+		"stock_reshuffled":
+			_sound("shuffle")
+		"trump_changed":
+			_sound("item_tarot")
 		"item_used":
-			_sound("item")
+			_sound("item_" + str(d.get("item", "")))
 		"heal":
 			_sound("heal")
 		"damage":
 			_sound("hurt")
+		"eliminated":
+			get_tree().create_timer(0.3).timeout.connect(_sound.bind("eliminated"))
 		"round_end":
-			_sound("win")
+			_sound("cheer" if int(d.get("winner", -1)) >= 0 else "buzzer")
 			if d.get("shells", 0) > 0 and game != null and game.options["shotgun"]:
-				get_tree().create_timer(0.6).timeout.connect(_sound.bind("rack"))
+				get_tree().create_timer(0.8).timeout.connect(_sound.bind("rack"))
 		"gun_passed":
 			_sound("rack")
+		"gun_empty":
+			_sound("close")
 		"shot":
 			_sound("click" if d.get("blank", false) else "blast")
 		"roulette":
 			_sound("spin")
 			get_tree().create_timer(0.55).timeout.connect(_sound.bind("blast" if d.get("hit", false) else "click"))
+			if not d.get("hit", false):
+				get_tree().create_timer(0.9).timeout.connect(_sound.bind("survive"))
 		"blackjack_shot":
-			get_tree().create_timer(0.2).timeout.connect(_sound.bind("blast"))
+			_sound("sparkle")
+			get_tree().create_timer(0.3).timeout.connect(_sound.bind("blast"))
 		"match_end":
 			_sound("fanfare")
-		"called", "bust":
-			_sound("hurt")
+		# Blackjack
+		"stand":
+			_sound("knock")
+		"bust":
+			_sound("buzzer")
+		# Go Fish
+		"ask":
+			_sound("slap" if int(d.get("count", 0)) > 0 else "tap")
+		"go_fish":
+			_sound("sparkle" if d.get("lucky", false) else "splash")
+		# Cheat
+		"called":
+			_sound("sting")
+			get_tree().create_timer(0.5).timeout.connect(_sound.bind("buzzer" if d.get("lie", false) else "ding"))
+		"let_go":
+			_sound("tap")
+		# Hearts and Spades
+		"hearts_broken", "spades_broken":
+			_sound("crack")
+		"queen_taken":
+			_sound("doom")
+		"bid":
+			_sound("chips")
+		# Snap
+		"snap":
+			_sound("pop" if d.get("good", false) else "buzzer")
+			if d.get("good", false):
+				_sound("slap")
+		# President
+		"pass":
+			_sound("knock")
+		"pile_cleared":
+			_sound("sweep")
+		"exchange":
+			_sound("coin")
+		# Poker
+		"bet":
+			match str(d.get("action", "")):
+				"check":
+					_sound("knock")
+				"call":
+					_sound("chips")
+				"raise":
+					_sound("rack")
+				"fold":
+					_sound("close")
 
 
 func _log(text: String) -> void:
@@ -1783,6 +1839,7 @@ func _mark_turn_seen() -> void:
 
 func _handle(res: Dictionary) -> bool:
 	if not res["ok"]:
+		_sound("error")
 		message = res["error"]
 		_refresh()
 		return false
@@ -2472,6 +2529,7 @@ func _after_simple(res: Dictionary) -> void:
 
 
 func _toggle_card(id: String) -> void:
+	_sound("tap")
 	if not _my_turn():
 		message = "It's %s's turn." % _name(game.turn)
 	elif game.phase == "draw":
@@ -2486,6 +2544,7 @@ func _toggle_card(id: String) -> void:
 
 
 func _toggle_item(id: String) -> void:
+	_sound("pick_item")
 	if not _my_turn():
 		message = "It's %s's turn." % _name(game.turn)
 		_refresh()
@@ -2591,6 +2650,8 @@ func _toggle_hints() -> void:
 ## Opens a full-screen overlay. Returns the content box; add buttons with
 ## _overlay_buttons. Scrolls when the content is long.
 func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "", bottom: bool = false) -> VBoxContainer:
+	if kind != "pass" and kind != "gun":
+		_sound("open")
 	_close_overlay()
 	_overlay_kind = kind
 	if hud != null and is_instance_valid(hud):
@@ -2646,6 +2707,7 @@ func _title(text: String, color: Color = Palette.INK) -> Label:
 
 
 func _show_pass_screen() -> void:
+	_sound("pass_phone")
 	var seat := game.turn
 	var box := _open_overlay(1.0, false, "pass")
 	box.add_child(_label("PASS THE PHONE TO", 28, Palette.DIM, true))

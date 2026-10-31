@@ -93,12 +93,10 @@ func on_event(kind: String, d: Dictionary) -> void:
 				"raise":
 					main._log("%s raises: %d shells loaded." % [main._name(d["seat"]), d["shells"]])
 					main.world.announce("RAISE\n%d SHELLS" % d["shells"])
-					main._sound("rack")
 				"fold":
 					main._log("%s folds." % main._name(d["seat"]))
 		"board":
 			main._log("The %s: %s." % [d["street"], Cards.cards_text(d["cards"])])
-			main._sound("flick")
 
 
 func show_result(box: VBoxContainer) -> void:
