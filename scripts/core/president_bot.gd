@@ -1,9 +1,11 @@
 extends RefCounted
 ## AI players for Shotgun President (bot.gd hands over to this one).
-##   easy:   plays the first set it finds that beats the pile, or passes.
-##   normal: leads its lowest cards (as big a set as it has) and beats the
-##           pile as cheaply as it can, keeping trumps for when it needs them.
-##   hard:   also holds back 2s and trumps until it's close to going out.
+##   easy:   leads its lowest card and plays the first set that beats the
+##           pile, or passes.
+##   normal: leads its biggest set (the most cards gone at once) and beats
+##           the pile as cheaply as it can: no trumps spent if it can help it,
+##           and without breaking up a bigger set.
+##   hard:   also plays anything that beats the pile when it's nearly out.
 
 const Cards = preload("res://scripts/core/cards.gd")
 const Items = preload("res://scripts/core/items.gd")
@@ -53,32 +55,55 @@ static func choose_play(game, seat: int, level: String) -> Array:
 	values.sort()
 	var top: Dictionary = game.pile_top
 	if top.is_empty():
-		# lead: our lowest rank, all of it
 		if values.is_empty():
 			return Cards.ids_of(wilds.slice(0, mini(4, wilds.size())))
-		var v: int = values[0]
-		return Cards.ids_of(by[v].slice(0, 4))
+		if level == "easy":
+			return Cards.ids_of(by[values[0]].slice(0, 4))
+		# two sets left and one can't be beaten (2s, or trumps)? Play that
+		# first to keep the lead, then go out with the other
+		var sets := values.size() + (1 if not wilds.is_empty() else 0)
+		if sets == 2:
+			if not wilds.is_empty():
+				return Cards.ids_of(wilds.slice(0, 4))
+			if int(values[-1]) == 15:
+				return Cards.ids_of(by[15].slice(0, 4))
+		# lead the biggest set we have (the most cards gone at once), lowest first
+		var best: int = values[0]
+		for v in values:
+			if by[v].size() > by[best].size():
+				best = v
+		return Cards.ids_of(by[best].slice(0, 4))
 	var need: int = top["count"]
 	var to_beat: int = top["value"]
-	var near_end: bool = hand.size() <= need + 2
+	var options := [] # [value, naturals used, wilds used, breaks a bigger set]
 	for v in values:
 		if v <= to_beat:
 			continue
-		if level == "hard" and v == 15 and not near_end:
-			continue # keep the 2s back
 		var naturals: Array = by[v]
 		var use_wilds := maxi(0, need - naturals.size())
 		if use_wilds > wilds.size():
 			continue
-		if use_wilds > 0 and level != "easy" and not near_end and v < 13:
-			continue # don't spend a trump on a small card
-		var pick: Array = naturals.slice(0, mini(need, naturals.size()))
-		pick.append_array(wilds.slice(0, use_wilds))
-		return Cards.ids_of(pick)
-	# only trumps can beat it
-	if to_beat < 16 and wilds.size() >= need and (level == "easy" or near_end or to_beat >= 14):
-		return Cards.ids_of(wilds.slice(0, need))
-	return []
+		options.append([v, naturals.slice(0, mini(need, naturals.size())), use_wilds, naturals.size() > need])
+	if options.is_empty():
+		# only trumps can beat it
+		if to_beat < 16 and wilds.size() >= need:
+			return Cards.ids_of(wilds.slice(0, need))
+		return []
+	if level == "easy":
+		var pick: Array = options[0]
+		return Cards.ids_of(pick[1] + wilds.slice(0, pick[2]))
+	# cheapest first: no trumps spent, an exact set, then the lowest rank
+	var best: Array = options[0]
+	for o in options:
+		var cost: int = o[2] * 100 + (10 if o[3] else 0) + int(o[0])
+		var best_cost: int = best[2] * 100 + (10 if best[3] else 0) + int(best[0])
+		if level == "hard" and hand.size() <= need * 2 + 1:
+			# nearly out: whatever beats it soonest is fine
+			cost = int(o[0])
+			best_cost = int(best[0])
+		if cost < best_cost:
+			best = o
+	return Cards.ids_of(best[1] + wilds.slice(0, best[2]))
 
 
 static func _use(game, seat: int, card: Dictionary, level: String) -> Array:
