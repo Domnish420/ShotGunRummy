@@ -13,7 +13,6 @@ func refresh() -> void:
 	var me = g.players[seat]
 	var my_turn: bool = main._my_turn()
 	main.round_label.text = "ROUND %d · %s DEALS" % [g.round_num, main._name(g.dealer)]
-	main.trump_label.text = ""
 	main.me_name.text = me.name + main._flags(me)
 	main._clear(main.me_hp)
 	main.me_hp.add_child(main._hp_bar(me))

@@ -111,7 +111,6 @@ var flash_rect: ColorRect
 # table widgets
 var hud: Control
 var round_label: Label
-var trump_label: Label
 var go_out_label: Label
 var me_name: Label
 var me_hp: HBoxContainer
@@ -2105,7 +2104,6 @@ func _refresh_blackjack() -> void:
 	var me = game.players[seat]
 	var my_turn := _my_turn()
 	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
-	trump_label.text = "TRUMP: %s  " % trump_name(game.trump_rank) if game.trump_rank > 0 else ""
 	me_name.text = me.name + _flags(me)
 	_clear(me_hp)
 	me_hp.add_child(_hp_bar(me))
@@ -2371,8 +2369,6 @@ func _build_table() -> void:
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	round_label.clip_text = true
 	top.add_child(round_label)
-	trump_label = _tag("", 24, Palette.GOLD)
-	top.add_child(trump_label)
 	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("MENU", _show_menu, 22)]:
 		b.custom_minimum_size = Vector2(0, 46)
 		top.add_child(b)
@@ -2532,7 +2528,6 @@ func _refresh() -> void:
 	var my_turn := _my_turn()
 
 	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
-	trump_label.text = "TRUMP: %s  " % trump_name(game.trump_rank) if game.trump_rank > 0 else ""
 
 	var can_draw := my_turn and game.phase == "draw"
 	var sel_cards := _selected_cards()
