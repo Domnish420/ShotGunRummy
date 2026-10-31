@@ -10,6 +10,7 @@ const Looks = preload("res://scripts/core/looks.gd")
 const Session = preload("res://scripts/net/session.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
 const GoFish = preload("res://scripts/core/gofish.gd")
+const Cheat = preload("res://scripts/core/cheat.gd")
 const Games = preload("res://scripts/core/games.gd")
 
 var _failures := 0
@@ -30,7 +31,8 @@ func _init() -> void:
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
-		"test_gf_ask", "test_gf_books", "test_gf_ai_matches", "test_normal_mode",
+		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
+		"test_ch_play", "test_ch_call", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1081,3 +1083,122 @@ func test_normal_mode() -> void:
 		check(g.phase == "match_over" and g.players[g.winner].rounds_won == 3, "%s normal mode: first to 3 rounds wins" % kind)
 		for p in g.players:
 			check(p.hp == p.max_hp, "%s normal mode: nobody loses health" % kind)
+
+
+# ================================================================ cheat
+
+func new_ch(n: int = 3, rng_seed: int = 1) -> Cheat:
+	var names := []
+	for i in range(n):
+		names.append("P%d" % (i + 1))
+	var g := Cheat.new()
+	g.setup(names, {}, rng_seed)
+	g.start_round()
+	return g
+
+
+func test_ch_play() -> void:
+	var g := new_ch(3, 3)
+	var total := 0
+	for p in g.players:
+		total += p.hand.size()
+	check(total == 52 and g.required == 1, "all 52 cards dealt; aces first")
+	var me := g.turn
+	g.players[me].hand = cards("AH AC 7D 9S")
+	check(not g.play(me, ["AH", "AC", "7D", "9S", "X"])["ok"], "need real cards")
+	check(g.play(me, ["AH", "7D"])["ok"] and g.required == 2 and g.turn != me, "play 2 as aces; twos are next")
+	check(g.snapshot(g.turn)["discard_pile"][0].get("hidden", false), "the pile is face down for everyone")
+	check(g.can_call(g.turn), "the next player can call it")
+
+
+func test_ch_call() -> void:
+	var g := new_ch(3, 5)
+	g.trump_rank = 13
+	var a := g.turn
+	g.players[a].hand = cards("AH 7D 5C")
+	g.play(a, ["AH", "7D"]) # a lie
+	var b := g.turn
+	var before: int = g.players[b].items.size()
+	var res := g.call_cheat(b)
+	check(res["ok"] and res["lie"], "caught lying")
+	check(g.players[a].hand.size() == 3 and g.discard_pile.is_empty(), "the liar picks up the pile")
+	check(g.players[b].items.size() == before + 1, "catching a cheat earns an item")
+	check(g.turn == b and not g.can_call(b), "then the caller plays")
+	# telling the truth: the caller picks up
+	g.players[b].hand = cards("2H 2C 9D")
+	g.play(b, ["2H", "2C"])
+	var c := g.turn
+	var had: int = g.players[c].hand.size()
+	res = g.call_cheat(c)
+	check(res["ok"] and not res["lie"] and g.players[c].hand.size() == had + 2, "wrong call: the caller picks up")
+	# a trump is never a lie
+	g.players[c].hand = cards("KH 4D")
+	g.play(c, ["KH"])
+	res = g.call_cheat(g.turn)
+	check(res["ok"] and not res["lie"], "a trump counts as the rank you said")
+	# the last card: wins unless caught
+	g = new_ch(2, 7)
+	a = g.turn
+	g.players[a].hand = cards("AH")
+	g.play(a, ["AH"])
+	b = g.turn
+	check(not g.play(b, [g.players[b].hand[0]["id"]])["ok"], "after a last card you must call or let it go")
+	g.let_go(b)
+	check(g.phase == "shoot" and g.gun["holder"] == a, "let it go: they win")
+	g = new_ch(2, 8)
+	a = g.turn
+	g.players[a].hand = cards("5H")
+	g.play(a, ["5H"]) # aces were due: a lie
+	g.call_cheat(g.turn)
+	check(g.phase == "play" and g.players[a].hand.size() == 1, "caught on the last card: no win")
+
+
+## Every game's AI, all three levels, finishes whole matches with legal moves
+## (the newer cartridges; Rummy and Blackjack have their own tests).
+func test_ai_all_games() -> void:
+	for kind in ["cheat"]:
+		var wins := {"easy": 0, "normal": 0, "hard": 0}
+		for s in range(1, 9):
+			var n := 2 + s % 5
+			var names := []
+			for i in range(n):
+				names.append("P%d" % (i + 1))
+			var g = Games.make(kind)
+			g.setup(names, {}, s * 37)
+			for i in range(n):
+				g.players[i].bot = Bot.LEVELS[(i + s) % 3]
+			g.start_round()
+			var memories := {}
+			var steps := 0
+			var refused := 0
+			while g.phase != "match_over" and steps < 30000:
+				steps += 1
+				if g.phase == "round_over":
+					g.start_round()
+					continue
+				var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+				var mem: Dictionary = memories.get_or_add(seat, {})
+				var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
+				if act.is_empty():
+					check(false, "%s seed %d: no move in phase %s" % [kind, s, g.phase])
+					return
+				if not Session.perform(g, seat, act[0], act[1], true)["ok"]:
+					refused += 1
+					Bot.note_failure(mem, act)
+				if g.phase == "play":
+					var count := 0
+					for p in g.players:
+						count += p.hand.size()
+					for m in g.melds:
+						count += m["cards"].size()
+					for c in g.stock + g.burned + g.discard_pile:
+						if not c.has("item"):
+							count += 1
+					if count != 52:
+						check(false, "%s seed %d: %d cards in play" % [kind, s, count])
+						return
+			check(g.phase == "match_over", "%s seed %d: match finishes (round %d)" % [kind, s, g.round_num])
+			check(refused < 20, "%s seed %d: AI moves are legal (%d refused)" % [kind, s, refused])
+			if g.winner >= 0:
+				wins[g.players[g.winner].bot] += 1
+		print("  %s AI wins by level: %s" % [kind, wins])

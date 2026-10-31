@@ -79,8 +79,20 @@ const GOFISH := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round.", "copies": 1},
 }
 
+const CHEAT := {
+	"beer": {"copies": 0},
+	"magnifier": {"text": "Secretly look at a card from the last play. If any of them is a lie, you'll see it."},
+	"shakedown": {"text": "A player of your choice takes 3 cards from the bottom of the pile."},
+	"revolver": {"text": "A player who lies on their next play and gets caught also plays Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"text": "A player of your choice must put down at least 2 cards on their next turn."},
+	"sticky_fingers": {"text": "Slip the top card of the pile into your hand.", "needs": "", "copies": 1},
+	"dumpster_dive": {"copies": 0},
+	"garbage_day": {"text": "A player of your choice picks up the whole pile."},
+	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it always tells the truth.", "copies": 1},
+}
+
 ## Each game's changes to the items, by game.
-const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH}
+const OVERRIDES := {"blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT}
 
 ## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.

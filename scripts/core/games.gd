@@ -12,11 +12,13 @@ extends RefCounted
 const Game = preload("res://scripts/core/game.gd")
 const Blackjack = preload("res://scripts/core/blackjack.gd")
 const GoFish = preload("res://scripts/core/gofish.gd")
+const Cheat = preload("res://scripts/core/cheat.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
 	"blackjack": {"name": "BLACKJACK", "color": Color(0.1, 0.32, 0.18), "min": 2, "max": 6},
 	"gofish": {"name": "GO FISH", "color": Color(0.12, 0.3, 0.55), "min": 2, "max": 6},
+	"cheat": {"name": "CHEAT", "color": Color(0.5, 0.36, 0.08), "min": 2, "max": 6},
 }
 
 ## Shotgun matches of a game to finish before its normal mode unlocks.
@@ -51,6 +53,8 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = Blackjack.new()
 		"gofish":
 			g = GoFish.new()
+		"cheat":
+			g = Cheat.new()
 		_:
 			g = Game.new()
 	if normal:

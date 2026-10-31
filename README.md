@@ -9,8 +9,10 @@ for whoever wins the hand.
 - **Shotgun Rummy**: classic Rummy. Go out first.
 - **Shotgun Blackjack**: everyone against the dealer, who's one of the players.
 - **Shotgun Go Fish**: ask for cards, collect books of four.
+- **Shotgun Cheat**: play cards face down and lie about them. Get caught and
+  pick up the pile.
 
-Coming next: Cheat, Hearts, Spades, Snap and President.
+Coming next: Hearts, Spades, Snap and President.
 
 ### Cartridges
 
@@ -217,6 +219,25 @@ the game ends for everyone. When exporting an app for Android, tick the
   makes someone get a card off another player or spin. Double Down, Dumpster
   Dive and Garbage Day aren't in the Go Fish deck.
 
+## How to play Shotgun Cheat
+
+- **The deal.** All 52 cards are dealt out, plus 2 items each.
+- **Your turn.** Cards go down in order: aces, then twos, up to kings, then
+  round again. Tap 1 to 4 cards and **PLAY** them face down as the rank that's
+  due. You can lie.
+- **CHEAT!** Before you play you can call **CHEAT!** on the player before you.
+  If any of their cards isn't what they said, they pick up the whole pile and
+  you get an item. If they told the truth, you pick it up.
+- **Trumps** always count as the rank you said: they're never a lie.
+- **Winning.** Play your last card and you win, unless the next player calls
+  CHEAT! and catches you. The winner gets 1 shell, +1 for every 15 cards the
+  others are left holding (max 3).
+- **Items.** The magnifier peeks at the last play (it shows you a lie if there
+  is one), Shakedown makes someone take 3 cards off the bottom of the pile,
+  Garbage Day makes someone pick up the whole pile, Sticky Fingers slips the
+  top card into your hand, Double Down makes someone put down 2+ cards, and the
+  Revolver makes a caught liar spin as well.
+
 ### Items (Rummy)
 
 Everyone is dealt 2 items each round; the rest are shuffled into the stock.
@@ -257,6 +278,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/blackjack.gd` | Shotgun Blackjack's rules. Builds on `game.gd` for the players, items, health and shotgun. |
 | `scripts/core/blackjack_bot.gd` | The Blackjack AI. |
 | `scripts/core/gofish.gd`, `gofish_bot.gd` | Go Fish's rules and AI. |
+| `scripts/core/cheat.gd`, `cheat_bot.gd` | Cheat's rules and AI. |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
 | `scripts/core/bot.gd` | The AI players (easy, normal, hard): one move at a time, using the same actions as a person. |

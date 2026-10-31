@@ -6,8 +6,9 @@ extends SceneTree
 
 const Bot = preload("res://scripts/core/bot.gd")
 const GoFishBot = preload("res://scripts/core/gofish_bot.gd")
+const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 
-const KINDS := ["gofish"]
+const KINDS := ["gofish", "cheat"]
 
 var fails := 0
 var main
@@ -94,6 +95,17 @@ func _play(kind: String, what: String) -> void:
 					continue
 				main.mode_ui.rank = ask[1]
 				main.mode_ui._ask(ask[0])
+			"cheat":
+				if g.pending_win >= 0:
+					if my_moves % 2 == 0:
+						main.mode_ui._call_pressed()
+					else:
+						main.mode_ui._first_pressed()
+				elif g.can_call(0) and my_moves % 5 == 0:
+					main.mode_ui._call_pressed()
+				else:
+					main.selected = CheatBot.choose_play(g, 0, "normal")
+					main.mode_ui._first_pressed()
 	check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
 	check(my_moves > 0, "%s %s: you played" % [kind, what])
 	if what == "tutorial":

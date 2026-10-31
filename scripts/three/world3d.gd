@@ -648,12 +648,16 @@ func sync(s: Dictionary) -> void:
 		var xf := stock_xf.translated(Vector3(0, 0.003 * i, 0))
 		var top_one := i == stock_n - 1
 		_place(seen, "stock-%d" % i, {}, TABLE_CARD, xf, false, true, "stock" if top_one else "", "", "amber" if top_one and s["can_draw"] else "", false, xf)
-	if stock_n == 0:
+	if stock_n == 0 and game.kind == "rummy":
 		_label_at("SHUFFLE", stock_xf.origin + Vector3(0, 0.01, 0), 22, Palette.DIM)
-	_label_at("%s %d" % ["POND" if game.kind == "gofish" else "STOCK", game.stock.size()], stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+	if stock_n > 0 or game.kind == "rummy":
+		_label_at("%s %d" % ["POND" if game.kind == "gofish" else "STOCK", game.stock.size()], stock_xf.origin + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 
 	# the discard pile: the top few, a bit messy
 	var pile: Array = game.discard_pile
+	if game.kind == "cheat":
+		_cheat_pile(seen, game, discard_base, stock_xf)
+		pile = []
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
 		var c: Dictionary = pile[i]
@@ -749,6 +753,24 @@ func sync(s: Dictionary) -> void:
 	_sync_gun(game, viewer)
 	_sync_spots(game, viewer)
 	_sync_dealer_chip(game, viewer)
+
+
+## Cheat: the pile, face down and messy, with what's due next.
+func _cheat_pile(seen: Dictionary, game, base: Vector3, spawn: Transform3D) -> void:
+	var pile: Array = game.discard_pile
+	var from := maxi(0, pile.size() - 14)
+	var center := Vector3(-0.2, base.y, base.z) # where the stock would be
+	for i in range(from, pile.size()):
+		var c: Dictionary = pile[i]
+		var yaw := (hash(str(c["id"])) % 100) / 100.0 * 0.9 - 0.45
+		var off := Vector3(((hash(str(c["id"]) + "x") % 100) / 100.0 - 0.5) * 0.04, 0.0025 * (i - from), ((hash(str(c["id"]) + "z") % 100) / 100.0 - 0.5) * 0.04)
+		_place(seen, "pile-%d" % i, {}, TABLE_CARD, _flat(center + off, yaw, false), false, true, "", "", "", false, spawn)
+	_label_at("PILE %d" % pile.size(), center + Vector3(0, 0.01, 0.16), 26, Palette.DIM)
+	var lp: Dictionary = game.last_play
+	if not lp.is_empty():
+		_label_at("%s: %d × %s" % [game.players[int(lp["seat"])].name, lp["count"], game.rank_name(int(lp["rank"]))], base + Vector3(0, 0.01, -0.04), 24, Palette.INK)
+	if game.phase == "play":
+		_label_at("NEXT: %s" % game.rank_name(game.required), base + Vector3(0, 0.01, 0.06), 34, Palette.AMBER)
 
 
 ## Blackjack: a player's cards lie in a row on the felt in front of them,
