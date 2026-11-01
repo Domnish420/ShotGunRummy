@@ -93,3 +93,23 @@ func _finish_round() -> void:
 		return
 	var w: int = winners[0]
 	_end_with(w, mini(int(options["max_shells"]), 1 + (1 if best == 0 else 0)), {"points": best, "hands": hands, "moon": false, "reason": ""})
+
+
+# ---------------------------------------------------------------- items
+
+func _garbage_blocker(seat: int) -> String:
+	return "" if points(seat) > 0 else "You haven't taken any points to dump."
+
+
+## Garbage Day: your worst point card goes into someone else's tricks.
+func _garbage_day(p: Player, target: int) -> Dictionary:
+	var mine: Array = taken.get(p.seat, [])
+	var worst: Dictionary = {}
+	for c in mine:
+		if worst.is_empty() or points_of(c) > points_of(worst):
+			worst = c
+	mine.erase(worst)
+	if not taken.has(target):
+		taken[target] = []
+	taken[target].append(worst)
+	return {"text": "%s dumps %s onto %s's tricks" % [p.name, Cards.card_name(worst), players[target].name], "reveal": worst, "private": false}

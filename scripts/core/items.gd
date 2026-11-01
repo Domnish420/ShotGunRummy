@@ -65,45 +65,44 @@ const BLACKJACK := {
 	"double_down": {"text": "A player of your choice is dealt 1 more card, right now, even if they've stood.", "copies": 2},
 	"sticky_fingers": {"text": "Steal a face-up card from another player's hand.", "copies": 1, "needs": "table_card"},
 	"dumpster_dive": {"text": "Take the top card of the discard pile.", "copies": 1},
-	"garbage_day": {"copies": 0},
+	"garbage_day": {"text": "A player of your choice is dealt the top card of the discard pile, face up."},
 	"joker_paint": {"text": "A card in your hand is a trump (worth whatever you need) for the rest of the round.", "copies": 1},
 }
 
 const GOFISH := {
 	"shakedown": {"text": "A player of your choice throws a random card back into the pond."},
 	"revolver": {"text": "A player must get a card off someone on their next turn, or play Russian roulette (1 in 6: lose 2 health)."},
-	"double_down": {"copies": 0},
+	"double_down": {"text": "Fish 2 cards from the pond right now.", "needs": ""},
 	"sticky_fingers": {"text": "Steal a card from someone's book. The rest of the book goes back into their hand.", "copies": 1},
-	"dumpster_dive": {"copies": 0},
-	"garbage_day": {"copies": 0},
+	"dumpster_dive": {"text": "Dig through the pond for a card that matches one in your hand."},
+	"garbage_day": {"text": "A player of your choice throws their whole hand back in the pond and fishes the same number of new cards."},
 	"beer": {"text": "Burn the top card of the pond. Everyone sees it."},
 	"magnifier": {"text": "Secretly look at the top card of the pond."},
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round.", "copies": 1},
 }
 
 const CHEAT := {
-	"beer": {"copies": 0},
+	"beer": {"text": "Burn the top card of the pile: it's turned face up for everyone and set aside."},
 	"magnifier": {"text": "Secretly look at a card from the last play. If any of them is a lie, you'll see it."},
 	"shakedown": {"text": "A player of your choice takes 3 cards from the bottom of the pile."},
 	"revolver": {"text": "A player who lies on their next play and gets caught also plays Russian roulette (1 in 6: lose 2 health)."},
 	"double_down": {"text": "A player of your choice must put down at least 2 cards on their next turn."},
 	"sticky_fingers": {"text": "Slip the top card of the pile into your hand.", "needs": "", "copies": 1},
-	"dumpster_dive": {"copies": 0},
+	"dumpster_dive": {"text": "Slip a random card from your hand under the pile."},
 	"garbage_day": {"text": "A player of your choice picks up the whole pile."},
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it always tells the truth.", "copies": 1},
 }
 
 ## Hearts and Spades: no stock or discard pile, and every trick needs a card
-## from everyone, so items that skip turns or move cards in and out are out.
+## from everyone, so here the items never change how many cards anyone holds.
 const TRICKS := {
-	"beer": {"copies": 0},
-	"magnifier": {"copies": 0},
-	"handcuffs": {"copies": 0},
-	"shakedown": {"copies": 0},
-	"switcheroo": {"copies": 0},
-	"sticky_fingers": {"copies": 0},
-	"dumpster_dive": {"copies": 0},
-	"garbage_day": {"copies": 0},
+	"beer": {"text": "A random card of a player of your choice is shown to everyone until the trick ends.", "needs": "player"},
+	"magnifier": {"text": "Secretly see the highest card of the next player to play."},
+	"handcuffs": {"text": "A player of your choice must play their lowest card next."},
+	"shakedown": {"text": "Take a random card from a player of your choice. They get your lowest card back."},
+	"switcheroo": {"text": "Swap your whole hand with a player holding as many cards as you."},
+	"sticky_fingers": {"text": "Swap a random card of yours for the card a player of your choice played to this trick.", "needs": "player"},
+	"dumpster_dive": {"text": "Take the best card from the last trick. A random card of yours goes in its place."},
 	"bad_trade": {"copies": 1},
 	"spotlight": {"text": "A player's whole hand is shown to everyone until the trick ends.", "copies": 2},
 	"flashbang": {"text": "Every other player shows 2 random cards until the trick ends."},
@@ -112,32 +111,40 @@ const TRICKS := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: play it any time, it wins the trick.", "copies": 1},
 }
 
+const HEARTS := {
+	"garbage_day": {"text": "Dump your worst point card onto the tricks of a player of your choice."},
+}
+
+const SPADES := {
+	"garbage_day": {"text": "Give one of the tricks you've won to a player of your choice."},
+}
+
 const SNAP := {
-	"beer": {"copies": 0},
+	"beer": {"text": "Burn the next card of a player of your choice's pile. Everyone sees it.", "needs": "player"},
 	"magnifier": {"text": "Secretly look at your next card."},
 	"phone": {"text": "See another player's next card."},
 	"handcuffs": {"text": "A player of your choice skips their next flip."},
-	"shakedown": {"copies": 0},
-	"spotlight": {"copies": 0},
-	"flashbang": {"copies": 0},
+	"shakedown": {"text": "A player of your choice flips their next card onto the middle right now. Get ready to SNAP!"},
+	"spotlight": {"text": "Everyone sees the next card in a player of your choice's pile."},
+	"flashbang": {"text": "Everyone sees the next card in every other pile."},
 	"revolver": {"text": "If a player of your choice snaps wrong, they also play Russian roulette (1 in 6: lose 2 health)."},
 	"double_down": {"text": "A player of your choice flips 2 cards on their next turn."},
 	"sticky_fingers": {"text": "Steal 3 of another player's won cards.", "needs": "player", "copies": 1},
-	"dumpster_dive": {"copies": 0},
-	"garbage_day": {"copies": 0},
+	"dumpster_dive": {"text": "Take the bottom 3 cards of the middle as cards you've won."},
+	"garbage_day": {"text": "A player of your choice dumps 5 of their won cards under the middle: the next good SNAP wins them."},
 	"joker_paint": {"text": "The top card in the middle turns wild: it matches anything. Get ready to SNAP!", "needs": "", "copies": 2},
 }
 
 const PRESIDENT := {
-	"beer": {"copies": 0},
-	"magnifier": {"copies": 0},
+	"beer": {"text": "Knock the pile over: it clears and you lead."},
+	"magnifier": {"text": "Secretly see the best card of a player of your choice.", "needs": "player"},
 	"handcuffs": {"text": "A player of your choice passes their next turn."},
 	"shakedown": {"text": "Shove your worst card onto a player of your choice."},
 	"revolver": {"text": "If a player of your choice passes on their next turn, they play Russian roulette (1 in 6: lose 2 health)."},
-	"double_down": {"copies": 0},
-	"sticky_fingers": {"copies": 0},
-	"dumpster_dive": {"copies": 0},
-	"garbage_day": {"copies": 0},
+	"double_down": {"text": "A player of your choice sits out this pile and the next one."},
+	"sticky_fingers": {"text": "Steal a random card from a player of your choice. They get your worst card back.", "needs": "player"},
+	"dumpster_dive": {"text": "Dig the best card that's been played this round out of the pile and into your hand."},
+	"garbage_day": {"text": "A player of your choice picks up the play on the table. The pile clears and you lead."},
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it fills in any set.", "copies": 1},
 }
 
@@ -154,13 +161,16 @@ const POKER := {
 	"flashbang": {"text": "Every other player still in shows 1 card."},
 	"revolver": {"text": "If a player of your choice folds this hand, they play Russian roulette (1 in 6: lose 2 health)."},
 	"double_down": {"text": "A player of your choice can't fold this hand."},
-	"sticky_fingers": {"copies": 0},
-	"dumpster_dive": {"copies": 0},
-	"garbage_day": {"copies": 0},
+	"sticky_fingers": {"text": "Swap your lower card for a random card of a player of your choice.", "needs": "player"},
+	"dumpster_dive": {"text": "Throw away your lower card and get a new one."},
+	"garbage_day": {"text": "A player of your choice throws away both their cards and gets two new ones."},
 }
 
 ## Each game's changes to the items, by game.
 const OVERRIDES := {"poker": POKER, "blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT}
+
+## Changes on top of OVERRIDES, for games that share one set.
+const EXTRA := {"hearts": HEARTS, "spades": SPADES}
 
 ## Which game's rules the items follow (a key of games.gd's LIST). Set when a
 ## game starts.
@@ -177,9 +187,11 @@ static func def(item_id: String) -> Dictionary:
 		only["copies"] = 0
 		return only
 	var changes: Dictionary = OVERRIDES.get(mode, {})
-	if changes.has(item_id):
+	var extra: Dictionary = EXTRA.get(mode, {})
+	if changes.has(item_id) or extra.has(item_id):
 		var d: Dictionary = DEFS[item_id].duplicate()
-		d.merge(changes[item_id], true)
+		d.merge(changes.get(item_id, {}), true)
+		d.merge(extra.get(item_id, {}), true)
 		return d
 	return DEFS[item_id]
 
@@ -206,3 +218,23 @@ static func create_item_deck() -> Array:
 		for n in range(1, int(def(item_id)["copies"]) + 1):
 			deck.append({"id": "I-%s-%d" % [item_id, n], "item": item_id})
 	return deck
+
+
+## A plain way for an AI to use `card`: a random target or card if it needs
+## one. [] if there's nothing to use it on.
+static func any_use(game, seat: int, card: Dictionary) -> Array:
+	var item_id: String = card["item"]
+	var target := -1
+	var choice := ""
+	match needs(item_id):
+		"player":
+			var targets: Array = game.item_targets(seat, item_id)
+			if targets.is_empty():
+				return []
+			target = targets[game.rng.randi_range(0, targets.size() - 1)]
+		"meld_card", "hand_card", "table_card":
+			var choices: Array = game.item_choices(seat, item_id)
+			if choices.is_empty():
+				return []
+			choice = choices[game.rng.randi_range(0, choices.size() - 1)]
+	return [card["id"], target, choice]

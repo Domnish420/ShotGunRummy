@@ -375,6 +375,12 @@ func perform_action(seat: int, action: String, args: Array) -> Dictionary:
 # ---------------------------------------------------------------- items
 
 func item_targets(seat: int, item_id: String) -> Array:
+	if item_id == "garbage_day":
+		var out := []
+		for p in others(seat):
+			if not p.hand.is_empty():
+				out.append(p.seat)
+		return out
 	if item_id == "revolver":
 		var out := []
 		for p in others(seat):
@@ -393,6 +399,18 @@ func item_choices(seat: int, item_id: String) -> Array:
 					out.append(c["id"])
 		return out
 	return super.item_choices(seat, item_id)
+
+
+func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
+	var card := find_item(seat, item_card_id)
+	if not card.is_empty() and card["item"] in ["double_down", "dumpster_dive", "garbage_day"]:
+		var err := _basic_item_blocker(seat, item_card_id, target, choice)
+		if err != "":
+			return err
+		if stock.is_empty():
+			return "The pond is empty."
+		return ""
+	return super.item_blocker(seat, item_card_id, target, choice)
 
 
 func use_item(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> Dictionary:
@@ -428,6 +446,40 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 							owner.hand.append(rest)
 						melds.erase(m)
 						return {"text": "%s steals %s from %s's book. The rest goes back in their hand" % [p.name, Cards.card_name(c), owner.name], "reveal": c, "private": false}
+		"double_down":
+			var got := []
+			for i in range(2):
+				var c := _fish(p)
+				if not c.is_empty():
+					got.append(c)
+			return {"text": "%s doubles down and fishes %d card%s" % [p.name, got.size(), "" if got.size() == 1 else "s"]}
+		"dumpster_dive":
+			var ranks := {}
+			for c in p.hand:
+				if not Cards.is_wild(c, trump_rank):
+					ranks[int(c["rank"])] = true
+			for i in range(stock.size() - 1, -1, -1):
+				var c: Dictionary = stock[i]
+				if not c.has("item") and ranks.has(int(c["rank"])):
+					stock.remove_at(i)
+					p.hand.append(c)
+					return {"text": "%s digs through the pond and finds a match" % p.name, "reveal": c, "private": true}
+			var fished := _fish(p)
+			if fished.is_empty():
+				return {"text": "%s digs through the pond and comes up empty" % p.name}
+			return {"text": "%s digs through the pond: no match, so they take a card" % p.name, "reveal": fished, "private": true}
+		"garbage_day":
+			var dumped: Player = players[target]
+			var n := dumped.hand.size()
+			for c in dumped.hand:
+				c.erase("shown")
+				stock.append(c)
+			dumped.hand = []
+			known[target] = {} # whatever they asked for, it's gone
+			stock = _shuffle(stock)
+			for i in range(n):
+				_fish(dumped)
+			return {"text": "%s makes %s throw their hand back in the pond and fish %d new cards" % [p.name, dumped.name, n]}
 		"joker_paint":
 			for c in p.hand:
 				if c["id"] == choice:

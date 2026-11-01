@@ -38,7 +38,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -745,8 +745,6 @@ func test_bj_deal() -> void:
 	for c in g.stock:
 		if c.has("item"):
 			deck_items += 1
-	for c in g.stock:
-		check(not (c.has("item") and c["item"] == "garbage_day"), "no Garbage Day in blackjack")
 
 
 func test_bj_turns() -> void:
@@ -765,6 +763,9 @@ func test_bj_turns() -> void:
 	g.hit(second)
 	check(g.players[second].stood and g.turn != second, "21 stands by itself")
 	var third := g.turn
+	g.players[third].hand = cards("2H 3C") # not a blackjack, whatever was dealt
+	g.players[third].hand[1]["shown"] = true
+	g.stock = g.stock.filter(func(c): return not c.has("item")) # just the one item below
 	g.stock.append({"id": "I-beer-9", "item": "beer"})
 	var before: int = g.players[third].items.size()
 	var stock_before: int = g.stock.size()
@@ -1463,6 +1464,73 @@ func test_items_scarce() -> void:
 			if c.has("item"):
 				none = false
 		check(none, "%s normal: no items at all" % kind)
+
+
+## Every item is in every game's deck (the trump ones only in Rummy), and
+## each one really works there: AIs play, and every few moves the player on
+## turn is handed an item they haven't tried yet.
+func test_every_item_everywhere() -> void:
+	for kind in Games.kinds():
+		var g = Games.make(kind)
+		g.setup(["P1", "P2", "P3", "P4"], {}, 11)
+		for p in g.players:
+			p.bot = "normal"
+		g.start_round()
+		var todo := []
+		for id in Items.DEFS:
+			var copies := int(Items.def(id)["copies"])
+			if Items.RUMMY_ONLY.has(id) and kind != "rummy":
+				check(copies == 0, "%s: %s is Rummy only" % [kind, id])
+				continue
+			check(copies > 0, "%s: %s is in the deck" % [kind, id])
+			todo.append(id)
+		var memories := {}
+		var steps := 0
+		var n := 0
+		while not todo.is_empty() and steps < 60000:
+			steps += 1
+			if g.phase == "match_over":
+				for p in g.players:
+					p.alive = true
+					p.hp = p.max_hp
+				g.phase = "round_over"
+			if g.phase == "round_over":
+				g.start_round()
+				continue
+			if kind == "snap" and g.phase == "play" and g.snap_ready():
+				g.snap(g.turn)
+				continue
+			var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+			if g.phase in ["play", "draw"] and steps % 3 == 0:
+				var id: String = todo[n % todo.size()]
+				n += 1
+				if id == "cigarettes" and g.players[seat].hp == g.players[seat].max_hp:
+					g.players[seat].hp -= 1
+				var card_id := "I-%s-77" % id
+				g.players[seat].items.append({"id": card_id, "item": id})
+				var target := -1
+				var choice := ""
+				if Items.needs(id) == "player":
+					var ts: Array = g.item_targets(seat, id)
+					target = ts[0] if not ts.is_empty() else -1
+				elif Items.needs(id) != "":
+					var cs: Array = g.item_choices(seat, id)
+					choice = cs[0] if not cs.is_empty() else ""
+				if g.item_blocker(seat, card_id, target, choice) == "":
+					var res: Dictionary = g.use_item(seat, card_id, target, choice)
+					check(res["ok"], "%s: %s works (%s)" % [kind, id, res.get("error", "")])
+					if res["ok"]:
+						todo.erase(id)
+				g.players[seat].items = g.players[seat].items.filter(func(c): return c["id"] != card_id)
+				continue
+			var mem: Dictionary = memories.get_or_add(seat, {})
+			var act := Bot.next_action(g, seat, g.players[seat].bot, mem)
+			if act.is_empty():
+				break
+			var res: Dictionary = Session.perform(g, seat, act[0], act[1], true)
+			if not res["ok"]:
+				Bot.note_failure(mem, act)
+		check(todo.is_empty(), "%s: every item got used (never: %s)" % [kind, todo])
 
 
 # ================================================================ poker

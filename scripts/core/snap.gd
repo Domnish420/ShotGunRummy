@@ -270,7 +270,12 @@ func go_out_check(_seat: int) -> Dictionary:
 func item_targets(seat: int, item_id: String) -> Array:
 	var out := []
 	match item_id:
-		"sticky_fingers":
+		"beer", "spotlight", "shakedown":
+			for p in others(seat):
+				if not _next_card(p).is_empty():
+					out.append(p.seat)
+			return out
+		"sticky_fingers", "garbage_day":
 			for p in others(seat):
 				if not won.get(p.seat, []).is_empty():
 					out.append(p.seat)
@@ -290,6 +295,15 @@ func item_targets(seat: int, item_id: String) -> Array:
 
 func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
 	var card := find_item(seat, item_card_id)
+	if not card.is_empty() and card["item"] in ["beer", "flashbang", "dumpster_dive", "garbage_day"]:
+		var err := _basic_item_blocker(seat, item_card_id, target, choice)
+		if err != "":
+			return err
+		if card["item"] == "dumpster_dive" and discard_pile.is_empty():
+			return "There's nothing in the middle."
+		if card["item"] == "flashbang" and not others(seat).any(func(o): return not _next_card(o).is_empty()):
+			return "Nobody has any cards left to show."
+		return ""
 	if not card.is_empty() and card["item"] in ["magnifier", "joker_paint"]:
 		var err := _guard(seat)
 		if err != "":
@@ -324,6 +338,49 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 			var marked: Player = players[target]
 			marked.ultimatum = true
 			return {"text": "%s slides the revolver to %s: snap wrong and spin it" % [p.name, marked.name]}
+		"beer":
+			var mark: Player = players[target]
+			var burnt := _next_card(mark)
+			mark.hand.erase(burnt)
+			burned.append(burnt)
+			return {"text": "%s cracks a beer and burns %s's next card: %s" % [p.name, mark.name, Cards.card_name(burnt)], "reveal": burnt, "private": false}
+		"spotlight":
+			var lit: Player = players[target]
+			var next := _next_card(lit)
+			return {"text": "%s shines a spotlight on %s's pile: their next card is %s" % [p.name, lit.name, Cards.card_name(next)], "reveal": next, "private": false}
+		"flashbang":
+			var shown := []
+			for o in others(p.seat):
+				var next := _next_card(o)
+				if not next.is_empty():
+					shown.append("%s: %s" % [o.name, Cards.card_name(next)])
+			return {"text": "%s sets off a flashbang. Next up: %s" % [p.name, ", ".join(shown)]}
+		"shakedown":
+			var mark: Player = players[target]
+			while not mark.hand.is_empty():
+				var c: Dictionary = mark.hand.pop_back()
+				if c.has("item"):
+					mark.items.append(c)
+					continue
+				discard_pile.append(c)
+				flips += 1
+				_emit("flip", {"seat": mark.seat, "card": c, "ready": snap_ready()})
+				return {"text": "%s shakes down %s, who flips %s" % [p.name, mark.name, Cards.card_name(c)]}
+			return {"text": "%s shakes down %s, but their pile is empty" % [p.name, mark.name]}
+		"dumpster_dive":
+			var n := mini(3, discard_pile.size())
+			var mine: Array = won.get(p.seat, [])
+			for i in range(n):
+				mine.append(discard_pile.pop_front())
+			won[p.seat] = mine
+			return {"text": "%s digs %d card%s out from under the middle" % [p.name, n, "" if n == 1 else "s"]}
+		"garbage_day":
+			var dumped: Player = players[target]
+			var theirs: Array = won[target]
+			var n := mini(5, theirs.size())
+			for i in range(n):
+				discard_pile.insert(0, theirs.pop_back())
+			return {"text": "%s makes %s dump %d won card%s under the middle" % [p.name, dumped.name, n, "" if n == 1 else "s"]}
 		"joker_paint":
 			var top: Dictionary = discard_pile[-1]
 			top["wild"] = true

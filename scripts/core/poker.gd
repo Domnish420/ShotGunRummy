@@ -443,7 +443,32 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 		if board.size() >= 5 or stock.is_empty():
 			return "All the cards in the middle are out."
 		return ""
+	if not card.is_empty() and card["item"] in ["sticky_fingers", "dumpster_dive", "garbage_day"]:
+		var err := _basic_item_blocker(seat, item_card_id, target, choice)
+		if err != "":
+			return err
+		var spare := stock.size() - (5 - board.size()) # keep enough for the middle
+		if card["item"] == "dumpster_dive" and spare < 1:
+			return "There are no spare cards in the deck."
+		if card["item"] == "garbage_day" and spare < 2:
+			return "There aren't enough spare cards in the deck."
+		if players[seat].hand.is_empty():
+			return "You have no cards."
+		return ""
 	return super.item_blocker(seat, item_card_id, target, choice)
+
+
+## Aces high.
+static func _card_value(c: Dictionary) -> int:
+	return 14 if int(c["rank"]) == 1 else int(c["rank"])
+
+
+func _lower(cards: Array) -> Dictionary:
+	var low: Dictionary = cards[0]
+	for c in cards:
+		if _card_value(c) < _card_value(low):
+			low = c
+	return low
 
 
 func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dictionary:
@@ -490,6 +515,28 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 		"double_down":
 			must_call[target] = true
 			return {"text": "%s doubles down on %s: they can't fold this hand" % [p.name, players[target].name]}
+		"sticky_fingers":
+			var mark: Player = players[target]
+			var mine := _lower(p.hand)
+			var took: Dictionary = _random_card(mark.hand)
+			p.hand[p.hand.find(mine)] = took
+			mark.hand[mark.hand.find(took)] = mine
+			took.erase("shown")
+			mine.erase("shown")
+			return {"text": "%s swaps their lower card for one of %s's" % [p.name, mark.name], "reveal": took, "private": true}
+		"dumpster_dive":
+			var old := _lower(p.hand)
+			var fresh: Dictionary = stock.pop_back()
+			p.hand[p.hand.find(old)] = fresh
+			burned.append(old)
+			return {"text": "%s throws away %s and takes a new card" % [p.name, Cards.card_name(old)], "reveal": fresh, "private": true}
+		"garbage_day":
+			var dumped: Player = players[target]
+			var thrown: Array = dumped.hand.duplicate()
+			burned.append_array(thrown)
+			dumped.hand = [stock.pop_back(), stock.pop_back()]
+			dumped.exposed = false
+			return {"text": "%s makes %s throw away %s and take two new cards" % [p.name, dumped.name, Cards.cards_text(thrown)]}
 		"bad_trade":
 			var partner: Player = players[target]
 			var give: Dictionary = _random_card(p.hand)

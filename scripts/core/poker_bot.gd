@@ -122,4 +122,10 @@ static func _use(game, seat: int, card: Dictionary, level: String) -> Array:
 		"switcheroo", "bad_trade":
 			if other >= 0 and strength(game, seat) < 0.25 and level == "hard":
 				return [id, other, ""]
+		_:
+			# anything else: use it now and then
+			if game.rng.randf() < 0.5:
+				var any_pick: Array = Items.any_use(game, seat, card)
+				if not any_pick.is_empty():
+					return any_pick
 	return []

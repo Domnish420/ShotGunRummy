@@ -301,6 +301,15 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 				if discard_pile.is_empty():
 					return "The pile is empty."
 				return ""
+			"beer", "dumpster_dive":
+				var err := _basic_item_blocker(seat, item_card_id, target, choice)
+				if err != "":
+					return err
+				if card["item"] == "beer" and discard_pile.is_empty():
+					return "The pile is empty."
+				if card["item"] == "dumpster_dive" and players[seat].hand.size() <= 1:
+					return "Keep your last card: play it to win."
+				return ""
 	return super.item_blocker(seat, item_card_id, target, choice)
 
 
@@ -330,6 +339,16 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 			for i in range(n):
 				mark.hand.append(discard_pile.pop_front())
 			return {"text": "%s shakes down %s, who takes %d card%s from the bottom of the pile" % [p.name, mark.name, n, "" if n == 1 else "s"]}
+		"beer":
+			var burnt: Dictionary = discard_pile.pop_back()
+			burned.append(burnt)
+			return {"text": "%s cracks a beer and burns the top card of the pile: %s" % [p.name, Cards.card_name(burnt)], "reveal": burnt, "private": false}
+		"dumpster_dive":
+			var hidden: Dictionary = _random_card(p.hand)
+			p.hand.erase(hidden)
+			hidden.erase("shown")
+			discard_pile.insert(0, hidden)
+			return {"text": "%s slips a card under the pile" % p.name, "reveal": hidden, "private": true}
 		"sticky_fingers":
 			var top: Dictionary = discard_pile.pop_back()
 			p.hand.append(top)

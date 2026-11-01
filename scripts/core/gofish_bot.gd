@@ -197,4 +197,10 @@ static func _smart_use(game, seat: int, card: Dictionary) -> Array:
 								return [id, -1, cid]
 		"magnifier", "beer":
 			pass
+		_:
+			# anything else: use it now and then
+			if game.rng.randf() < 0.5:
+				var any_pick: Array = Items.any_use(game, seat, card)
+				if not any_pick.is_empty():
+					return any_pick
 	return []

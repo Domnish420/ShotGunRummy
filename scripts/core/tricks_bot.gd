@@ -195,6 +195,13 @@ static func _pick_item(game, seat: int, level: String, memory: Dictionary) -> Ar
 			"revolver", "double_down":
 				if other >= 0 and (level != "easy" or game.rng.randf() < 0.3):
 					pick = [id, other, ""]
+			"garbage_day":
+				# Spades: giving a trick away only helps a nil bid or one already made
+				if game.kind == "hearts" or int(game.tricks_won.get(seat, 0)) > int(game.bids.get(seat, 0)) or int(game.bids.get(seat, 0)) == 0:
+					pick = Items.any_use(game, seat, card)
+			_:
+				if game.rng.randf() < 0.5:
+					pick = Items.any_use(game, seat, card)
 		if pick.is_empty() or (pick[1] == -1 and Items.needs(item_id) == "player"):
 			continue
 		if memory["failed"].has(var_to_str(["use_item", pick])) or game.item_blocker(seat, pick[0], pick[1], pick[2]) != "":

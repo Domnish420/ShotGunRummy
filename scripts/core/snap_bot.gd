@@ -76,4 +76,10 @@ static func _use(game, seat: int, card: Dictionary, level: String) -> Array:
 			# a wild top card is a snap for whoever's quickest: worth it if we're quick
 			if level == "hard" and not game.discard_pile.is_empty():
 				return [id, -1, ""]
+		_:
+			# anything else: use it now and then
+			if game.rng.randf() < 0.5:
+				var any_pick: Array = Items.any_use(game, seat, card)
+				if not any_pick.is_empty():
+					return any_pick
 	return []

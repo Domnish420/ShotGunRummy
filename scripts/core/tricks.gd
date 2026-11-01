@@ -138,6 +138,13 @@ func legal_cards(seat: int) -> Array:
 			if _strength(c) > _strength(top):
 				top = c
 		out = [top]
+	# Handcuffs: your lowest legal card
+	if players[seat].cuffed and out.size() > 1:
+		var low: Dictionary = out[0]
+		for c in out:
+			if _strength(c) < _strength(low):
+				low = c
+		out = [low]
 	return out
 
 
@@ -163,12 +170,15 @@ func play_card(seat: int, card_id: String) -> Dictionary:
 	if not legal_cards(seat).has(card):
 		if p.extra_draws > 0:
 			return _fail("Double Down: play your highest card.")
+		if p.cuffed:
+			return _fail("Handcuffed: play your lowest card.")
 		if not trick.is_empty():
 			return _fail("Follow suit: play a %s if you have one." % SUIT_WORDS.get(led_suit(), led_suit()))
 		return _fail(_lead_rule())
 	p.hand.erase(card)
 	card.erase("shown")
 	p.extra_draws = 0
+	p.cuffed = false
 	trick.append({"seat": seat, "card": card})
 	_on_card_played(seat, card)
 	_emit("trick_card", {"seat": seat, "card": card})
@@ -343,6 +353,32 @@ func go_out_check(_seat: int) -> Dictionary:
 func item_targets(seat: int, item_id: String) -> Array:
 	var out := []
 	match item_id:
+		"beer":
+			for p in others(seat):
+				if p.hand.any(func(c): return not c.get("shown", false)):
+					out.append(p.seat)
+			return out
+		"handcuffs":
+			for p in others(seat):
+				if not p.cuffed and p.hand.size() >= 2:
+					out.append(p.seat)
+			return out
+		"shakedown", "bad_trade":
+			for p in others(seat):
+				if not p.hand.is_empty():
+					out.append(p.seat)
+			return out
+		"switcheroo":
+			var mine: int = players[seat].hand.size()
+			for p in others(seat):
+				if mine > 0 and p.hand.size() == mine:
+					out.append(p.seat)
+			return out
+		"sticky_fingers":
+			for t in trick:
+				if t["seat"] != seat:
+					out.append(t["seat"])
+			return out
 		"double_down":
 			for p in others(seat):
 				if p.extra_draws == 0 and p.hand.size() >= 2:
@@ -356,8 +392,126 @@ func item_targets(seat: int, item_id: String) -> Array:
 	return super.item_targets(seat, item_id)
 
 
+## The next player still to play this trick after `seat`, or -1.
+func _next_in_trick(seat: int) -> int:
+	var played := {}
+	for t in trick:
+		played[t["seat"]] = true
+	var i := _expected.find(seat)
+	if i < 0:
+		return -1
+	for k in range(1, _expected.size()):
+		var s: int = _expected[(i + k) % _expected.size()]
+		if not played.has(s) and s != seat and players[s].alive and not players[s].hand.is_empty():
+			return s
+	return -1
+
+
+func _lowest(cards: Array) -> Dictionary:
+	var low: Dictionary = cards[0]
+	for c in cards:
+		if _strength(c) < _strength(low):
+			low = c
+	return low
+
+
+func _highest(cards: Array) -> Dictionary:
+	var top: Dictionary = cards[0]
+	for c in cards:
+		if _strength(c) > _strength(top):
+			top = c
+	return top
+
+
+func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
+	var card := find_item(seat, item_card_id)
+	if card.is_empty() or not card["item"] in ["beer", "magnifier", "shakedown", "dumpster_dive", "garbage_day"]:
+		return super.item_blocker(seat, item_card_id, target, choice)
+	var err := _basic_item_blocker(seat, item_card_id, target, choice)
+	if err != "":
+		return err
+	var me: Player = players[seat]
+	match card["item"]:
+		"magnifier":
+			if _next_in_trick(seat) < 0:
+				return "Nobody plays after you in this trick."
+		"shakedown", "dumpster_dive":
+			if me.hand.is_empty():
+				return "You have no cards to swap."
+			if card["item"] == "dumpster_dive" and last_trick.is_empty():
+				return "No trick has been won yet."
+		"garbage_day":
+			return _garbage_blocker(seat)
+	return ""
+
+
+## Hearts and Spades each have their own Garbage Day.
+func _garbage_blocker(_seat: int) -> String:
+	return "Nothing to dump."
+
+
+func _garbage_day(_p: Player, _target: int) -> Dictionary:
+	return {"text": ""}
+
+
 func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dictionary:
 	match item_id:
+		"beer":
+			var mark: Player = players[target]
+			var c: Dictionary = _random_card(mark.hand.filter(func(x): return not x.get("shown", false)))
+			c["shown"] = true
+			return {"text": "%s cracks a beer over %s: everyone sees their %s" % [p.name, mark.name, Cards.card_name(c)], "reveal": c, "private": false}
+		"magnifier":
+			var nxt: Player = players[_next_in_trick(p.seat)]
+			return {"text": "%s peeks at %s's best card" % [p.name, nxt.name], "reveal": _highest(nxt.hand), "private": true}
+		"handcuffs":
+			var cuffed: Player = players[target]
+			cuffed.cuffed = true
+			return {"text": "%s handcuffs %s: they play their lowest card next" % [p.name, cuffed.name]}
+		"shakedown":
+			var mark: Player = players[target]
+			var took: Dictionary = _random_card(mark.hand)
+			var low := _lowest(p.hand)
+			mark.hand.erase(took)
+			p.hand.erase(low)
+			took.erase("shown")
+			low.erase("shown")
+			p.hand.append(took)
+			mark.hand.append(low)
+			return {"text": "%s shakes down %s for a card and hands back their lowest" % [p.name, mark.name], "reveal": took, "private": true}
+		"sticky_fingers":
+			for t in trick:
+				if t["seat"] == target:
+					var theirs: Dictionary = t["card"]
+					var mine: Dictionary = _random_card(p.hand)
+					p.hand.erase(mine)
+					mine.erase("shown")
+					t["card"] = mine
+					p.hand.append(theirs)
+					_on_card_played(target, mine)
+					return {"text": "%s swaps %s out of the trick: %s's card is %s now" % [p.name, Cards.card_name(theirs), players[target].name, Cards.card_name(mine)], "reveal": mine, "private": false}
+		"dumpster_dive":
+			var w: int = int(last_trick["winner"])
+			var entries: Array = last_trick["cards"]
+			var best: Dictionary = entries[0]
+			for e in entries:
+				if _strength(e["card"]) > _strength(best["card"]):
+					best = e
+			var pile: Array = taken.get(w, [])
+			var mine: Dictionary = _random_card(p.hand)
+			for i in range(pile.size()):
+				if pile[i]["id"] == best["card"]["id"]:
+					var dug: Dictionary = pile[i]
+					p.hand.erase(mine)
+					mine.erase("shown")
+					pile[i] = mine
+					best["card"] = mine.duplicate(true)
+					dug.erase("shown")
+					p.hand.append(dug)
+					return {"text": "%s digs %s out of the last trick and leaves a card in its place" % [p.name, Cards.card_name(dug)], "reveal": dug, "private": false}
+			return {"text": "%s digs through the last trick and finds nothing" % p.name}
+		"garbage_day":
+			return _garbage_day(p, target)
 		"double_down":
 			var loaded: Player = players[target]
 			loaded.extra_draws = 1

@@ -828,30 +828,11 @@ func _meld_with_card(card_id: String) -> Dictionary:
 ## Why this item can't be used right now, or "" if it can.
 ## Leave `target` / `choice` empty to ask "could I use this at all?".
 func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
-	var err := _guard(seat)
+	var err := _basic_item_blocker(seat, item_card_id, target, choice)
 	if err != "":
 		return err
-	var card := find_item(seat, item_card_id)
-	if card.is_empty():
-		return "That item isn't yours."
-	var limit := int(options["items_per_turn"])
-	if limit > 0 and items_used_this_turn >= limit:
-		return "You've already used an item this turn."
-	var item_id: String = card["item"]
+	var item_id: String = find_item(seat, item_card_id)["item"]
 	var p: Player = players[seat]
-	match Items.needs(item_id):
-		"player":
-			var targets := item_targets(seat, item_id)
-			if targets.is_empty():
-				return "Nobody to use it on."
-			if target >= 0 and not targets.has(target):
-				return "You can't use it on them."
-		"meld_card", "hand_card", "table_card":
-			var choices := item_choices(seat, item_id)
-			if choices.is_empty():
-				return "Nothing to use it on." if item_id == "joker_paint" else "There's nothing on the table you can take."
-			if choice != "" and not choices.has(choice):
-				return "You can't use it on that card."
 	match item_id:
 		"cigarettes":
 			if p.hp >= p.max_hp:
@@ -884,6 +865,35 @@ func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: Str
 					anyone = true
 			if not anyone:
 				return "Nobody has any cards to show."
+	return ""
+
+
+## The checks every item has: your turn, your item, the per-turn limit, and a
+## target or card to use it on. Games with their own blockers start here.
+func _basic_item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
+	var err := _guard(seat)
+	if err != "":
+		return err
+	var card := find_item(seat, item_card_id)
+	if card.is_empty():
+		return "That item isn't yours."
+	var limit := int(options["items_per_turn"])
+	if limit > 0 and items_used_this_turn >= limit:
+		return "You've already used an item this turn."
+	var item_id: String = card["item"]
+	match Items.needs(item_id):
+		"player":
+			var targets := item_targets(seat, item_id)
+			if targets.is_empty():
+				return "Nobody to use it on."
+			if target >= 0 and not targets.has(target):
+				return "You can't use it on them."
+		"meld_card", "hand_card", "table_card":
+			var choices := item_choices(seat, item_id)
+			if choices.is_empty():
+				return "Nothing to use it on." if item_id == "joker_paint" else "There's nothing on the table you can take."
+			if choice != "" and not choices.has(choice):
+				return "You can't use it on that card."
 	return ""
 
 

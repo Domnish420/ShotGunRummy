@@ -298,6 +298,12 @@ static func _smart_use(game, seat: int, card: Dictionary, level: String, memory:
 				var after: int = game.total(me.hand, game.trump_rank % 13 + 1)
 				if after <= 21 and after > t:
 					return [id, -1, ""]
+		_:
+			# anything else: use it now and then
+			if game.rng.randf() < 0.5:
+				var any_pick: Array = Items.any_use(game, seat, card)
+				if not any_pick.is_empty():
+					return any_pick
 	return []
 
 

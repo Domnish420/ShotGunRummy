@@ -149,3 +149,16 @@ func load_snapshot(d: Dictionary) -> void:
 	super.load_snapshot(d)
 	bids = d.get("bids", {})
 	bidding = d.get("bidding", false)
+
+
+# ---------------------------------------------------------------- items
+
+func _garbage_blocker(seat: int) -> String:
+	return "" if int(tricks_won.get(seat, 0)) > 0 else "You haven't won a trick to give away."
+
+
+## Garbage Day: one of your tricks goes to someone else.
+func _garbage_day(p: Player, target: int) -> Dictionary:
+	tricks_won[p.seat] = int(tricks_won.get(p.seat, 0)) - 1
+	tricks_won[target] = int(tricks_won.get(target, 0)) + 1
+	return {"text": "%s hands one of their tricks to %s" % [p.name, players[target].name]}

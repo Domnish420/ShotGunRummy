@@ -161,7 +161,10 @@ func _next_turn() -> void:
 		if passed.has(turn):
 			continue
 		if p.cuffed:
-			p.cuffed = false
+			if p.extra_draws > 0:
+				p.extra_draws -= 1 # Double Down: they sit out the next pile too
+			else:
+				p.cuffed = false
 			passed[turn] = true
 			_emit("turn_skipped", {"seat": turn})
 			continue
@@ -314,16 +317,41 @@ func item_targets(seat: int, item_id: String) -> Array:
 				if not p.ultimatum and not p.hand.is_empty():
 					out.append(p.seat)
 			return out
-		"handcuffs", "shakedown":
+		"handcuffs", "shakedown", "double_down", "magnifier", "sticky_fingers", "garbage_day":
 			for p in others(seat):
-				if not p.hand.is_empty() and (item_id != "handcuffs" or not p.cuffed):
+				if not p.hand.is_empty() and (not item_id in ["handcuffs", "double_down"] or not p.cuffed):
 					out.append(p.seat)
 			return out
 	return super.item_targets(seat, item_id)
 
 
+## The best card played this round that isn't part of the play to beat.
+func _best_played() -> Dictionary:
+	var keep: Array = pile_top.get("ids", [])
+	var best := {}
+	for c in discard_pile:
+		if not keep.has(c["id"]) and (best.is_empty() or _sort_value(c) > _sort_value(best)):
+			best = c
+	return best
+
+
 func item_blocker(seat: int, item_card_id: String, target: int = -1, choice: String = "") -> String:
 	var card := find_item(seat, item_card_id)
+	if not card.is_empty() and card["item"] in ["beer", "magnifier", "sticky_fingers", "dumpster_dive", "garbage_day"]:
+		var err := _basic_item_blocker(seat, item_card_id, target, choice)
+		if err != "":
+			return err
+		match card["item"]:
+			"beer", "garbage_day":
+				if pile_top.is_empty():
+					return "There's nothing on the pile."
+			"sticky_fingers":
+				if players[seat].hand.is_empty():
+					return "You need a card to give back."
+			"dumpster_dive":
+				if _best_played().is_empty():
+					return "Nothing's been played yet to dig out."
+		return ""
 	if not card.is_empty() and card["item"] == "shakedown" and players[seat].hand.size() <= 1:
 		return "You need a card to give away."
 	return super.item_blocker(seat, item_card_id, target, choice)
@@ -344,6 +372,49 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 			var cuffed: Player = players[target]
 			cuffed.cuffed = true
 			return {"text": "%s handcuffs %s: they pass their next turn" % [p.name, cuffed.name]}
+		"double_down":
+			var benched: Player = players[target]
+			benched.cuffed = true
+			benched.extra_draws = 1
+			return {"text": "%s doubles down on %s: they sit out this pile and the next" % [p.name, benched.name]}
+		"beer":
+			_clear_pile()
+			return {"text": "%s cracks a beer and knocks the pile over. They lead" % p.name}
+		"magnifier":
+			var mark: Player = players[target]
+			var best: Dictionary = mark.hand[0]
+			for c in mark.hand:
+				if _sort_value(c) > _sort_value(best):
+					best = c
+			return {"text": "%s peeks at %s's best card" % [p.name, mark.name], "reveal": best, "private": true}
+		"sticky_fingers":
+			var mark: Player = players[target]
+			var worst: Dictionary = p.hand[0]
+			for c in p.hand:
+				if _sort_value(c) < _sort_value(worst):
+					worst = c
+			var took: Dictionary = _random_card(mark.hand)
+			mark.hand.erase(took)
+			p.hand.erase(worst)
+			p.hand.append(took)
+			mark.hand.append(worst)
+			return {"text": "%s pinches a card off %s and hands back their worst" % [p.name, mark.name], "reveal": took, "private": true}
+		"dumpster_dive":
+			var dug := _best_played()
+			discard_pile.erase(dug)
+			p.hand.append(dug)
+			return {"text": "%s digs %s out of the pile" % [p.name, Cards.card_name(dug)], "reveal": dug, "private": false}
+		"garbage_day":
+			var dumped: Player = players[target]
+			var ids: Array = pile_top["ids"]
+			var picked := []
+			for c in discard_pile.duplicate():
+				if ids.has(c["id"]):
+					discard_pile.erase(c)
+					dumped.hand.append(c)
+					picked.append(c)
+			_clear_pile()
+			return {"text": "%s makes %s pick up %s. %s leads" % [p.name, dumped.name, Cards.cards_text(picked), p.name]}
 		"revolver":
 			var marked: Player = players[target]
 			marked.ultimatum = true

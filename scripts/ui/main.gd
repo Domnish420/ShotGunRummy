@@ -2045,7 +2045,7 @@ func _handle(res: Dictionary) -> bool:
 
 const BLACKJACK_RULES := [
 	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player is the dealer, and everyone else plays against them. The player to the dealer's left goes first, play goes round to the left, and the dealer plays last. Next round the deal moves one seat to the right.",
-	"THE DEAL. Everyone gets 2 cards, one face down and one face up. Items are rare: only 3 are shuffled into the stock each round. The deck is shuffled fresh every round.",
+	"THE DEAL. Everyone gets 2 cards, one face down and one face up. One card is burned face up onto the discard pile. Items are rare: only 3 are shuffled into the stock each round. The deck is shuffled fresh every round.",
 	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",

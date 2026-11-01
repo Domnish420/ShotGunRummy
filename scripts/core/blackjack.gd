@@ -139,9 +139,12 @@ func start_round() -> Dictionary:
 		for s in _order:
 			if not items.is_empty():
 				players[s].items.append(items.pop_back())
+	# one card is burned face up, so the discard pile has something to dig in
+	var burn: Dictionary = deck.pop_back()
+	burn["shown"] = true
 	stock = _shuffle(deck + items) if options["items_in_stock"] else deck
 	item_deck = [] if options["items_in_stock"] else items
-	discard_pile = []
+	discard_pile = [burn]
 	melds = []
 	burned = []
 	gun = null
@@ -456,7 +459,7 @@ func item_targets(seat: int, item_id: String) -> Array:
 			"shakedown":
 				if not p.bust and p.hand.size() >= 3:
 					out.append(p.seat)
-			"switcheroo", "bad_trade", "double_down":
+			"switcheroo", "bad_trade", "double_down", "garbage_day":
 				if not p.bust and not p.hand.is_empty():
 					out.append(p.seat)
 			_:
@@ -576,6 +579,12 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 						c["shown"] = true
 						p.hand.append(c)
 						return {"text": "%s steals %s from %s" % [p.name, Cards.card_name(c), o.name], "reveal": c, "private": false}
+		"garbage_day":
+			var fed: Player = players[target]
+			var junk: Dictionary = discard_pile.pop_back()
+			junk["shown"] = true
+			fed.hand.append(junk)
+			return {"text": "%s makes %s take %s off the discard pile" % [p.name, fed.name, Cards.card_name(junk)], "reveal": junk, "private": false}
 		"dumpster_dive":
 			var grabbed: Dictionary = discard_pile.pop_back()
 			grabbed["shown"] = true

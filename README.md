@@ -213,7 +213,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   left, and the dealer plays last. Each round the deal moves one seat to the
   right, just like Rummy.
 - **The deal.** Everyone gets 2 cards, one face down and one face up.
-  Only 3 rare items are shuffled into the stock. The deck is
+  Only 3 rare items are shuffled into the stock, and one card is burned face up onto
+  the discard pile. The deck is
   shuffled fresh every round.
 - **Your turn.** **HIT** (or tap the stock) to take a card, as often as you
   like, then **STAND**. Use items any time in your turn. Draw an item and you
@@ -257,8 +258,9 @@ the game ends for everyone. When exporting an app for Android, tick the
   Most books wins and gets 1 shell for every book they're ahead (1 to 3).
 - **Items.** Shakedown throws a card back in the pond, Sticky Fingers steals a
   card from someone's book (the rest goes back in their hand), the Revolver
-  makes someone get a card off another player or spin. Double Down, Dumpster
-  Dive and Garbage Day aren't in the Go Fish deck.
+  makes someone get a card off another player or spin. Double Down fishes 2
+  cards, Dumpster Dive digs the pond for a card that matches your hand, and
+  Garbage Day makes someone throw their hand back and fish a new one.
 
 ## How to play Cheat
 
@@ -298,10 +300,12 @@ trick (the first one played, if there's more than one).
   the other suits and can't be led until one has been played. Make your bid:
   10 a trick, +1 for each extra; miss it: −10 a trick; nil: ±50. Best round
   score wins, with 1 shell, +1 for making the bid exactly, +1 for making nil.
-- **Items.** No stock or discard pile here, so the items that need one (and
-  the ones that skip turns or move cards in and out) are left out. The Revolver
-  makes someone spin if they win the next trick, and Double Down makes someone
-  play their highest card next.
+- **Items.** Every trick needs a card from everyone, so here the items swap
+  cards rather than add or take them. The Revolver makes someone spin if they
+  win the next trick, Double Down makes someone play their highest card next
+  and Handcuffs their lowest. Sticky Fingers swaps a card out of the trick,
+  Dumpster Dive digs the best card out of the last one, and Garbage Day dumps
+  your worst point card on someone (Hearts) or gives away a trick (Spades).
 
 ## How to play Snap
 
@@ -349,6 +353,10 @@ trick (the first one played, if there's more than one).
   it, Spotlight turns someone's cards up, Double Down stops someone folding,
   the Revolver makes a folder spin, Shakedown swaps one of someone's cards
   for a new one.
+
+Every item can turn up in every game (Tarot and Joker Paint are about trumps,
+so they're Rummy only). Each game has its own version where it needs one: the
+card on an item always says what it does in the game you're playing.
 
 ### Items (Rummy)
 
