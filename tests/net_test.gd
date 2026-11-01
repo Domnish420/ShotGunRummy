@@ -55,12 +55,12 @@ func _run() -> void:
 	var host = phones[0]
 	host.game_kind = "rummy" # settings may remember another game
 	host.normal_mode = false
-	host._name_edit.text = "sam"
+	host.profile_name = "SAM"
 	host._on_host_pressed()
 	check(host.session.is_host(), "host is hosting")
 
 	var p1 = phones[1]
-	p1._name_edit.text = "alex"
+	p1.profile_name = "ALEX"
 	p1._on_join_pressed()
 	for i in range(120):
 		await _frames(1)
@@ -71,7 +71,7 @@ func _run() -> void:
 	p1._join_typed_ip()
 
 	var p2 = phones[2]
-	p2._name_edit.text = "jo"
+	p2.profile_name = "JO"
 	p2._on_join_pressed()
 	p2._ip_edit.text = "127.0.0.1"
 	p2._join_typed_ip()
@@ -132,13 +132,13 @@ func _test_blackjack() -> void:
 	var host = phones[0]
 	host.show_menu()
 	await _frames(4)
-	host._name_edit.text = "sam"
+	host.profile_name = "SAM"
 	host._on_host_pressed()
 	host._cycle_lobby_game()
 	check(host.session.game_kind == "blackjack", "the host picks Blackjack")
 	for main in [phones[1], phones[2]]:
 		main.show_menu()
-		main._name_edit.text = "x"
+		main.profile_name = "X"
 		main._on_join_pressed()
 		main._ip_edit.text = "127.0.0.1"
 		main._join_typed_ip()
@@ -161,11 +161,11 @@ func _test_leaving() -> void:
 	var host = phones[0]
 	host.show_menu()
 	await _frames(4)
-	host._name_edit.text = "sam"
+	host.profile_name = "SAM"
 	host._on_host_pressed()
 	for main in [phones[1], phones[2]]:
 		main.show_menu()
-		main._name_edit.text = "x"
+		main.profile_name = "X"
 		main._on_join_pressed()
 		main._ip_edit.text = "127.0.0.1"
 		main._join_typed_ip()

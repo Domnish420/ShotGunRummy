@@ -60,7 +60,7 @@ func _overlay_text() -> String:
 func _run() -> void:
 	await _frames(6)
 	await _shot("00_menu")
-	main._name_edit.text = "sam"
+	main.profile_name = "SAM"
 	main._on_host_pressed()
 	await _frames()
 	await _shot("00b_host_lobby")

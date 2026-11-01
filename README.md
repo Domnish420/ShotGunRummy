@@ -88,6 +88,25 @@ be nudged by hand in the JSON. Whoever you play as is saved, and other players s
 table, online too. In pass & play each player picks a
 character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 
+### Your name, unlocks and card skins
+
+The first time the game opens it asks **WHO'S PLAYING?**: sign your name
+once and it's kept (change it from the character screen's **NAME** button).
+
+**Unlocks.** Some bodies, hats, face pieces, outfit colours, the glowing eyes
+and most card skins start locked (🔒). Each says what unlocks it: play or win
+matches, win rounds, hit with shotgun shells, take players out, or play
+different cartridges. Your stats count in every match you play (not the
+demos), and anything you unlock is announced at the table. Ready-made
+characters that use a locked part are locked too. The rules are plain data in
+`scripts/core/unlocks.gd`.
+
+**Card skins.** **CARDS** on the main menu picks how your cards look, front
+and back: Classic, Casino Felt, Blood Money (shotgun shells), Pumpkin, Bone
+Yard (skulls), Noir, Rave (neon) and High Roller (gold). It's just for you:
+everyone at the table sees their own skin. Skins are in
+`scripts/ui/card_skins.gd`, drawn by `scripts/ui/card_art.gd`.
+
 Change the sharpness under **GRAPHICS** on the main menu or the in-game MENU:
 **PS2** (chunkiest), **PS3** (default) or **SHARP** (full resolution, no
 dithering).

@@ -17,6 +17,9 @@ const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Games = preload("res://scripts/core/games.gd")
+const Unlocks = preload("res://scripts/core/unlocks.gd")
+const CardSkins = preload("res://scripts/ui/card_skins.gd")
+const LooksT = preload("res://scripts/core/looks.gd")
 const FaceAnchors = preload("res://scripts/three/face_anchors.gd")
 
 var _failures := 0
@@ -38,7 +41,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1541,6 +1544,47 @@ func test_every_item_everywhere() -> void:
 			if not res["ok"]:
 				Bot.note_failure(mem, act)
 		check(todo.is_empty(), "%s: every item got used (never: %s)" % [kind, todo])
+
+
+## Character parts and card skins: some free, the rest unlock with stats.
+func test_unlocks() -> void:
+	var none := Unlocks.clean_stats({})
+	# every rule names something real
+	for v in Unlocks.RULES["base"]:
+		check(LooksT.BASES.has(v), "unlock: body %s exists" % v)
+	for v in Unlocks.RULES["hat"]:
+		check(LooksT.HATS.has(v), "unlock: hat %s exists" % v)
+	for v in Unlocks.RULES["face"]:
+		check(LooksT.FACES.has(v), "unlock: face %s exists" % v)
+	for v in Unlocks.RULES["outfit"]:
+		check(int(v) > 0 and int(v) < LooksT.OUTFITS.size(), "unlock: outfit %s exists" % v)
+	for v in Unlocks.RULES["card"]:
+		check(CardSkins.SKINS.has(v), "unlock: card skin %s exists" % v)
+	for id in CardSkins.ORDER:
+		check(CardSkins.SKINS.has(id), "card skin %s is defined" % id)
+		for k in ["name", "paper", "edge", "ink", "red", "back", "back_dark", "back_edge", "pattern"]:
+			check(CardSkins.SKINS[id].has(k), "card skin %s has %s" % [id, k])
+	check(Unlocks.is_unlocked("card", "classic", none), "classic cards are free")
+	check(not Unlocks.is_unlocked("card", "gold", none), "gold cards are locked at the start")
+	check(Unlocks.is_unlocked("hat", "bowler", none) and not Unlocks.is_unlocked("hat", "cowboy", none), "some hats free, some locked")
+	check(Unlocks.need_text("hat", "cowboy", none) == "WIN 3 MATCHES (0/3)", "says what unlocks it: %s" % Unlocks.need_text("hat", "cowboy", none))
+	check(Unlocks.need_text("hat", "bowler", none) == "", "free things need nothing")
+	var free_presets := 0
+	for i in range(LooksT.PRESETS.size()):
+		if Unlocks.look_unlocked(LooksT.preset(i), none):
+			free_presets += 1
+	check(free_presets >= 4, "a few characters are free at the start (%d)" % free_presets)
+	check(free_presets < LooksT.PRESETS.size(), "and some are locked")
+	var after := none.duplicate()
+	after["match_wins"] = 3
+	var fresh := Unlocks.newly_unlocked(none, after)
+	check(fresh.has("COWBOY HAT") and fresh.has("HOODED ROGUE"), "winning 3 matches unlocks the cowboy hat and more: %s" % [fresh])
+	check(Unlocks.newly_unlocked(after, after).is_empty(), "nothing unlocks twice")
+	var all := {}
+	for k in Unlocks.STATS:
+		all[k] = 999
+	for i in range(LooksT.PRESETS.size()):
+		check(Unlocks.look_unlocked(LooksT.preset(i), all), "every character can be unlocked: %s" % LooksT.PRESETS[i]["name"])
 
 
 # ================================================================ poker

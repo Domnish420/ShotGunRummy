@@ -31,6 +31,9 @@ const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
 const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
 const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
+const Unlocks = preload("res://scripts/core/unlocks.gd")
+const CardSkins = preload("res://scripts/ui/card_skins.gd")
+const CardArt = preload("res://scripts/ui/card_art.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -65,6 +68,10 @@ var _lesson_time := 0.0 # seconds left on the card showing
 var _lesson_then := Callable()
 var _demo_wait := 0.0
 var played := {} # kind -> shotgun matches finished (normal mode unlocks)
+var stats := {} # your stats, for unlocks (see unlocks.gd)
+var tried_kinds := {} # kind -> true: cartridges you've finished a match of
+var card_skin := "classic" # how your cards look (see card_skins.gd)
+var _last_shooter := -1 # who fired the last shell, for knockouts
 var tutorial_offered := false
 var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
 var coach_label: Label
@@ -380,6 +387,7 @@ func _name(seat: int) -> String:
 # ================================================================ settings
 
 func _load_settings() -> void:
+	stats = Unlocks.clean_stats({})
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		# the game used to be called Shotgun Rummy: on a computer its settings
@@ -405,6 +413,12 @@ func _load_settings() -> void:
 	custom_looks = []
 	for c in cfg.get_value("profile", "customs", []):
 		custom_looks.append(Looks.clean(c))
+	stats = Unlocks.clean_stats(cfg.get_value("progress", "stats", {}))
+	tried_kinds = cfg.get_value("progress", "tried", {})
+	card_skin = CardSkins.clean(cfg.get_value("profile", "cards", "classic"))
+	if not Unlocks.is_unlocked("card", card_skin, stats):
+		card_skin = "classic"
+	CardArt.skin = CardSkins.get_skin(card_skin)
 
 
 func _save_settings() -> void:
@@ -423,6 +437,9 @@ func _save_settings() -> void:
 	cfg.set_value("video", "graphics", graphics)
 	cfg.set_value("profile", "look", my_look)
 	cfg.set_value("profile", "customs", custom_looks)
+	cfg.set_value("progress", "stats", stats)
+	cfg.set_value("progress", "tried", tried_kinds)
+	cfg.set_value("profile", "cards", card_skin)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -450,6 +467,53 @@ func _paper_button(text: String, on_press: Callable, font_size: int = 32) -> But
 	return b
 
 
+## The first thing you see: sign your name. After that it's yours (change it
+## from the character screen).
+func show_name_screen() -> void:
+	world.hide_carousel()
+	world.set_menu_mode(true)
+	var box := _paper()
+	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("WHO'S PLAYING?", 34, Palette.CARD_INK, true))
+	if menu_message != "":
+		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
+		menu_message = ""
+	_name_edit = LineEdit.new()
+	_typing_sounds(_name_edit)
+	_name_edit.text = profile_name
+	_name_edit.placeholder_text = "SIGN HERE"
+	_name_edit.max_length = 10
+	_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_edit.add_theme_font_size_override("font_size", 40)
+	_name_edit.text_submitted.connect(func(_t: String) -> void: _confirm_name())
+	box.add_child(_name_edit)
+	box.add_child(_paper_button("THAT'S ME", _confirm_name, 30))
+	_name_edit.grab_focus.call_deferred()
+
+
+func _confirm_name() -> void:
+	var n := _name_edit.text.strip_edges().to_upper().left(10) if _name_edit != null and is_instance_valid(_name_edit) else ""
+	if n == "":
+		menu_message = "Sign your name first."
+		show_name_screen()
+		return
+	_sound("save")
+	profile_name = n
+	if not player_names.is_empty():
+		player_names[0] = n
+	_name_edit = null
+	_save_settings()
+	show_menu()
+
+
+func _change_name() -> void:
+	world.hide_preview()
+	var old := profile_name
+	profile_name = ""
+	show_menu()
+	_name_edit.text = old
+
+
 func show_menu() -> void:
 	session.leave()
 	session.stop_scan()
@@ -463,6 +527,9 @@ func show_menu() -> void:
 		_lesson_panel.visible = false
 	world.hide_carousel()
 	world.set_menu_mode(true)
+	if profile_name == "":
+		show_name_screen()
+		return
 	var box := _paper()
 	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_paper_button("CARTRIDGES: %s  ▸" % _game_title(game_kind, normal_mode), show_cartridges, 26))
@@ -470,17 +537,8 @@ func show_menu() -> void:
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
 		menu_message = ""
-	var row := HBoxContainer.new()
-	row.add_child(_tag("NAME", 30, Palette.CARD_INK))
-	_name_edit = LineEdit.new()
-	_typing_sounds(_name_edit)
-	_name_edit.text = profile_name
-	_name_edit.placeholder_text = "SIGN HERE"
-	_name_edit.max_length = 10
-	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(_name_edit)
-	box.add_child(row)
 	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
+	box.add_child(_paper_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 28))
 	if OS.has_feature("web"):
 		# browsers can't open the connections lobbies use
 		box.add_child(_label("Lobbies with friends need the download version. Here you can play on this device.", 22, Palette.CARD_INK, true))
@@ -863,7 +921,7 @@ func _take_name() -> String:
 
 ## Keeps the name typed on the main menu, if there is one.
 func _keep_menu_name() -> void:
-	if _name_edit == null or not is_instance_valid(_name_edit):
+	if _name_edit == null or not is_instance_valid(_name_edit) or not _name_edit.is_inside_tree():
 		return
 	var n := _name_edit.text.strip_edges().to_upper()
 	if n != "":
@@ -1147,9 +1205,7 @@ func _all_characters() -> Array:
 
 
 func _open_customiser() -> void:
-	var n := _name_edit.text.strip_edges().to_upper().left(10)
-	if n != "":
-		profile_name = n
+	_keep_menu_name()
 	_picked = my_look.duplicate()
 	show_character_select()
 
@@ -1172,7 +1228,8 @@ func show_character_select() -> void:
 	var picked_tile: Control = null
 	for i in range(all.size()):
 		var look: Dictionary = all[i]
-		var tile := _button(_short_name(look), _pick_character.bind(look), 20)
+		var locked := not Unlocks.look_unlocked(look, stats)
+		var tile := _button(("🔒 " if locked else "") + _short_name(look), _pick_character.bind(look), 20)
 		tile.custom_minimum_size = Vector2(0, 58)
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tile.clip_text = true
@@ -1192,9 +1249,13 @@ func show_character_select() -> void:
 	if picked_tile != null:
 		scroll.ensure_control_visible.call_deferred(picked_tile)
 
+	var note := _lock_note(_picked)
+	if note != "":
+		box.add_child(_label(note, 22, Palette.PINK, true))
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
-	var choose := _button("PLAY AS %s" % _short_name(_picked), _choose_character, 24)
+	var choose := _button("PLAY AS %s" % _short_name(_picked) if note == "" else "LOCKED", _choose_character, 24)
+	choose.disabled = note != ""
 	Palette.accent(choose, Palette.AMBER)
 	choose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(choose)
@@ -1206,9 +1267,15 @@ func show_character_select() -> void:
 			b.custom_minimum_size = Vector2(110, 64)
 			buttons.add_child(b)
 	box.add_child(buttons)
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 8)
+	var rename := _button("NAME: %s" % profile_name, _change_name, 22)
 	var back := _button("BACK", _leave_customiser, 24)
-	back.custom_minimum_size = Vector2(0, 52)
-	box.add_child(back)
+	for b in [rename, back]:
+		b.custom_minimum_size = Vector2(0, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bottom.add_child(b)
+	box.add_child(bottom)
 
 
 ## The shared layout: title, the 3D preview showing through, and a panel at
@@ -1251,7 +1318,19 @@ func _pick_character(look: Dictionary) -> void:
 	show_character_select()
 
 
+## "LOCKED: WIN 3 MATCHES (1/3) FOR THE COWBOY HAT", or "" if it's all yours.
+func _lock_note(look: Dictionary) -> String:
+	var parts := Unlocks.locked_parts(look, stats)
+	if parts.is_empty():
+		return ""
+	var first: Array = parts[0]
+	var more := " (+%d MORE)" % (parts.size() - 1) if parts.size() > 1 else ""
+	return "LOCKED: %s FOR THE %s%s" % [Unlocks.need_text(first[0], first[1], stats), Unlocks.part_name(first[0], first[1]), more]
+
+
 func _choose_character() -> void:
+	if not Unlocks.look_unlocked(_picked, stats):
+		return
 	my_look = Looks.clean(_picked)
 	if not setup_looks.is_empty():
 		setup_looks[0] = my_look.duplicate()
@@ -1322,7 +1401,9 @@ func show_creator() -> void:
 	box.add_child(name_row)
 	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
 		var names: Dictionary = part[2]
-		box.add_child(_choice_row(part[0], names[_editing[part[1]]], _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
+		var value = _editing[part[1]]
+		var need := Unlocks.need_text(part[1], value, stats)
+		box.add_child(_choice_row(part[0] if need == "" else "%s · 🔒 %s" % [part[0], need], names[value] + ("" if need == "" else " 🔒"), _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
 	# where the face piece sits
 	var face: String = _editing.get("face", "none")
 	if face != "none":
@@ -1333,7 +1414,8 @@ func show_creator() -> void:
 		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT"}.get(face, "ANGLE")
 		box.add_child(_choice_row("  " + angle_word, _step_word(int(_editing.get("face_angle", 0))), _nudge_face.bind("face_angle", -1), _nudge_face.bind("face_angle", 1)))
 		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
-	box.add_child(_tag("OUTFIT: %s" % Looks.OUTFITS[int(_editing["outfit"])]["name"], 24, Palette.DIM))
+	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), stats)
+	box.add_child(_tag("OUTFIT: %s%s" % [Looks.OUTFITS[int(_editing["outfit"])]["name"], "" if outfit_need == "" else "  🔒 " + outfit_need], 24, Palette.DIM if outfit_need == "" else Palette.PINK))
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 6)
 	for i in range(Looks.OUTFITS.size()):
@@ -1344,17 +1426,22 @@ func show_creator() -> void:
 		var edge := Palette.AMBER if i == int(_editing["outfit"]) else Palette.BUTTON_EDGE
 		sw.add_theme_stylebox_override("normal", Palette.box(col_c.darkened(0.35) if i > 0 else Color(0.2, 0.18, 0.16), edge, 3, 2, 4))
 		sw.add_theme_stylebox_override("hover", Palette.box(col_c.darkened(0.2) if i > 0 else Color(0.25, 0.22, 0.2), edge, 3, 2, 4))
-		sw.text = "-" if i == 0 else ""
+		sw.text = "-" if i == 0 else ("🔒" if not Unlocks.is_unlocked("outfit", i, stats) else "")
 		sw.pressed.connect(_sound.bind("part"))
 		sw.pressed.connect(_set_part.bind("outfit", i))
 		swatches.add_child(sw)
 	box.add_child(swatches)
-	var eyes := _button("GLOWING EYES: %s" % ("ON" if _editing["eyes"] else "OFF"), _set_part.bind("eyes", not _editing["eyes"]), 24)
+	var eyes_need := Unlocks.need_text("eyes", true, stats)
+	var eyes := _button("GLOWING EYES: %s" % ("ON" if _editing["eyes"] else "OFF") + ("" if eyes_need == "" else "  🔒 " + eyes_need), _set_part.bind("eyes", not _editing["eyes"]), 22 if eyes_need != "" else 24)
 	eyes.custom_minimum_size = Vector2(0, 52)
 	box.add_child(eyes)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
-	var save := _button("SAVE", _save_creation)
+	var note := _lock_note(_editing)
+	if note != "":
+		box.add_child(_label(note, 20, Palette.PINK, true))
+	var save := _button("SAVE" if note == "" else "LOCKED", _save_creation)
+	save.disabled = note != ""
 	Palette.accent(save, Palette.AMBER)
 	var cancel := _button("CANCEL", show_character_select)
 	for b in [save, cancel]:
@@ -1409,6 +1496,8 @@ func _set_part(part: String, value) -> void:
 
 
 func _save_creation() -> void:
+	if not Unlocks.look_unlocked(_editing, stats):
+		return
 	_sound("save")
 	var char_name := str(_editing.get("name", "")).strip_edges().to_upper().left(20)
 	if char_name == "":
@@ -1721,6 +1810,7 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 		mode_ui.on_event(kind, d)
 	_event_sound(kind, d)
 	_demo_event(kind, d)
+	_count_stats(kind, d)
 	match kind:
 		"roulette":
 			world.roulette(d["seat"], d["hit"])
@@ -1827,6 +1917,134 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 					_log("NORMAL MODE UNLOCKED for %s." % Games.label(game.kind))
 			if d["winner"] >= 0:
 				_log("%s WALKS OUT." % _name(d["winner"]))
+
+
+# ================================================================ card skins
+
+## A card face and back drawn in one skin, side by side.
+class SkinPreview extends Control:
+	const Art = preload("res://scripts/ui/card_art.gd")
+	const Skins = preload("res://scripts/ui/card_skins.gd")
+	var skin_id := "classic"
+	var dim := false
+
+	func _draw() -> void:
+		var keep: Dictionary = Art.skin
+		Art.skin = Skins.get_skin(skin_id)
+		var font := get_theme_default_font()
+		var w := (size.x - 8.0) * 0.5
+		var card_size := Vector2(w, minf(size.y, w * 1.44))
+		Art.draw_card(self, font, Rect2(Vector2.ZERO, card_size), {"id": "KH", "rank": 13, "suit": "H"})
+		Art.draw_card(self, font, Rect2(Vector2(w + 8.0, 0), card_size), {}, true)
+		Art.skin = keep
+		if dim:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.55))
+
+
+## Pick how your cards look. Locked skins say what unlocks them.
+func show_card_skins() -> void:
+	_keep_menu_name()
+	world.hide_carousel()
+	var box := _paper(660.0)
+	box.add_child(_label("CARD SKINS", 52, Color(0.36, 0.06, 0.05), true))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 720)
+	box.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	for id in CardSkins.ORDER:
+		var unlocked := Unlocks.is_unlocked("card", id, stats)
+		var cell := VBoxContainer.new()
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.add_theme_constant_override("separation", 4)
+		var preview := SkinPreview.new()
+		preview.skin_id = id
+		preview.dim = not unlocked
+		preview.custom_minimum_size = Vector2(0, 190)
+		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(preview)
+		cell.add_child(_label(CardSkins.skin_name(id), 24, Palette.CARD_INK, true))
+		var b: Button
+		if id == card_skin:
+			b = _paper_button("IN USE", _noop, 20)
+			Palette.accent(b, Palette.AMBER)
+		elif unlocked:
+			b = _paper_button("USE", _set_card_skin.bind(id), 22)
+		else:
+			b = _paper_button("🔒 " + Unlocks.need_text("card", id, stats), _noop, 16)
+			b.disabled = true
+		b.custom_minimum_size = Vector2(0, 54)
+		b.clip_text = true
+		cell.add_child(b)
+		grid.add_child(cell)
+	box.add_child(_paper_button("BACK", show_menu, 26))
+
+
+func _set_card_skin(id: String) -> void:
+	if not Unlocks.is_unlocked("card", id, stats):
+		return
+	_sound("part")
+	card_skin = id
+	CardArt.skin = CardSkins.get_skin(id)
+	_save_settings()
+	world.textures.build() # redraw the 3D cards in the new skin
+	show_card_skins()
+
+
+# ================================================================ unlocks
+
+## Your seat, for your stats: online it's yours; at one phone it's the first
+## seat (the name on the phone).
+func _profile_seat() -> int:
+	return session.my_seat if _online() else 0
+
+
+## Keeps your stats up to date as the game goes (not in a demo, and not when
+## the seat is an AI's).
+func _count_stats(kind: String, d: Dictionary) -> void:
+	if game == null or tutorial or demo_stage != "" or _is_bot(_profile_seat()):
+		return
+	var me := _profile_seat()
+	match kind:
+		"round_end":
+			if int(d.get("winner", -1)) == me:
+				_bump({"round_wins": 1})
+		"shot":
+			_last_shooter = int(d.get("shooter", -1))
+			if _last_shooter == me and int(d.get("damage", 0)) > 0 and int(d.get("target", -1)) != me:
+				_bump({"shells_hit": 1})
+		"damage":
+			if str(d.get("source", "")) != "shotgun":
+				_last_shooter = -1
+		"eliminated":
+			if _last_shooter == me and int(d.get("seat", -1)) != me:
+				_bump({"knockouts": 1})
+		"match_end":
+			tried_kinds[game.kind] = true
+			var more := {"matches": 1, "games_tried": tried_kinds.size() - int(stats.get("games_tried", 0))}
+			if int(d.get("winner", -1)) == me:
+				more["match_wins"] = 1
+			_bump(more)
+
+
+## Adds to your stats, saves, and shouts about anything that just unlocked.
+func _bump(more: Dictionary) -> void:
+	var before := stats.duplicate()
+	for k in more:
+		stats[k] = int(stats.get(k, 0)) + int(more[k])
+	_save_settings()
+	var fresh := Unlocks.newly_unlocked(before, stats)
+	if fresh.is_empty():
+		return
+	for n in fresh:
+		_log("UNLOCKED: %s." % n)
+	_sound("fanfare")
+	world.announce("UNLOCKED\n%s" % "\n".join(fresh.slice(0, 3)))
 
 
 ## Every game event's sound.
