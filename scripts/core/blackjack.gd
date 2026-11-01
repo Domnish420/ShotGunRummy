@@ -3,7 +3,7 @@ extends "res://scripts/core/game.gd"
 ## shuffled into the stock, trump cards, health and the shotgun.
 ##
 ## Everyone plays against the dealer, who is one of the players:
-## - Everyone is dealt 2 cards (one face down, one face up). 3 rare items hide in the stock.
+## - Everyone is dealt 2 cards (one face down, one face up). A random few rare items hide in the stock.
 ## - Starting left of the dealer and going round to the left, each player
 ##   HITs (takes a card) as often as they like, then STANDs. The dealer plays
 ##   last. Use items any time on your turn. Draw an item and you keep it and

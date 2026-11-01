@@ -176,9 +176,9 @@ the game ends for everyone. When exporting an app for Android, tick the
 - **The table.** One player deals each round and the player to their left goes
   first. Next round the deal moves one seat to the right, so whoever dealt last
   round goes first.
-- **The deal.** Everyone gets 7 playing cards. Nobody starts with items: only 3
-  item cards are shuffled into the stock each round, so a draw can now and then
-  give you an item instead.
+- **The deal.** Everyone gets 7 playing cards. Nobody starts with items: a random
+  handful (sometimes none, sometimes lots) are shuffled into the stock each
+  round, so a draw can now and then give you an item instead.
 - **Your turn.** Draw 1 card (from the stock or the top of the discard pile),
   meld, lay off and use items as much as you like, then **discard 1 card**.
   If the stock gives you an item, keep it and draw again until you get a
@@ -213,7 +213,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   left, and the dealer plays last. Each round the deal moves one seat to the
   right, just like Rummy.
 - **The deal.** Everyone gets 2 cards, one face down and one face up.
-  Only 3 rare items are shuffled into the stock, and one card is burned face up onto
+  A random few rare items are shuffled into the stock, and one card is burned face up onto
   the discard pile. The deck is
   shuffled fresh every round.
 - **Your turn.** **HIT** (or tap the stock) to take a card, as often as you
@@ -310,7 +310,7 @@ trick (the first one played, if there's more than one).
 ## How to play Snap
 
 - **The deal.** All the cards go face down into everyone's own pile, with the
-  3 rare items shuffled in. Nobody looks at their pile.
+  a random few rare items shuffled in. Nobody looks at their pile.
 - **Your turn.** **FLIP** your top card onto the middle (or tap your pile).
   Flip an item and you keep it and flip again.
 - **SNAP!** When the top two cards in the middle match (same rank, or either
@@ -360,8 +360,9 @@ card on an item always says what it does in the game you're playing.
 
 ### Items (Rummy)
 
-Items are rare: nobody is dealt any, and only 3 are shuffled into the stock
-each round. Finding one can change the game.
+Items are rare and it's all luck: nobody is dealt any, and every item card
+has its own small chance of turning up each round (about 3 on average; some
+rounds have none, some have loads). Finding one can change the game.
 Use as many as you like on your turn. Copies are in brackets; tune them in
 `scripts/core/items.gd`.
 

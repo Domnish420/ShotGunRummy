@@ -14,7 +14,7 @@ extends RefCounted
 const GAMES := {
 	"rummy": [
 		["start", "RUMMY. The aim: get rid of every card in your hand by laying them down in MELDS."],
-		["start", "Everyone gets 7 cards. Nobody starts with items: just 3 rare ones are shuffled into the face-down STOCK."],
+		["start", "Everyone gets 7 cards. Nobody starts with items: a random few are shuffled into the face-down STOCK."],
 		["start", "TRUMPS. Each round one rank is wild: aces in round 1, twos in round 2, up to kings. A trump (gold star) stands in for any card in any meld."],
 		["start", "On your first turn you can't put anything down: just draw and discard."],
 		["draw:source=stock", "YOUR TURN: draw 1 card, from the stock or the top of the discard pile."],
@@ -29,7 +29,7 @@ const GAMES := {
 	],
 	"blackjack": [
 		["start", "BLACKJACK. Everyone plays against the DEALER, who's one of the players (the white chip)."],
-		["start", "Everyone gets 2 cards, one face down and one face up. Only 3 rare items hide in the stock."],
+		["start", "Everyone gets 2 cards, one face down and one face up. A random few rare items hide in the stock."],
 		["start", "Count your cards: 2 to 10 their number, J Q K are 10, an ace is 1 or 11. Get closer to 21 than the dealer, without going over."],
 		["hit", "HIT: take another card. As many as you like."],
 		["stand", "STAND: happy with your total, and your turn's over. 21 or 5 cards stands for you."],
@@ -39,7 +39,7 @@ const GAMES := {
 	],
 	"gofish": [
 		["start", "GO FISH. The aim: collect BOOKS, four of a kind."],
-		["start", "7 cards each (5 with 4 or more players). The rest are the POND, with 3 rare items hidden in it."],
+		["start", "7 cards each (5 with 4 or more players). The rest are the POND, with a random few rare items hidden in it."],
 		["ask", "YOUR TURN: pick a card you hold and ASK another player for that rank."],
 		["ask:count=0", "They didn't have any: GO FISH! Draw from the pond. Fish the rank you asked for and you go again."],
 		["go_fish:lucky=true", "A lucky catch: they fished the rank they asked for, so they go again."],
@@ -106,7 +106,7 @@ const GAMES := {
 ## The house rules every cartridge shares.
 const COMMON := [
 	["start", "THE DEALER: the white chip shows who deals. The player to their left goes first, and the deal moves one seat to the right each round."],
-	["loot", "ITEMS ARE RARE: nobody starts with any, and only 3 turn up each round. Finding one can change the game."],
+	["loot", "ITEMS ARE RARE: nobody starts with any, and how many turn up each round is pure luck. Finding one can change the game."],
 	["item_used", "ITEMS: tap one of your items, then USE ITEM. Use as many as you like on your turn, but they don't carry over to the next round."],
 	["round_end", "THE SHOTGUN: whoever wins the round is handed it, loaded with shells."],
 	["shot", "They pick who to shoot. Each shell takes 1 health, and everyone has 4."],

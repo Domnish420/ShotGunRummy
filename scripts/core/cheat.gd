@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## Shotgun Cheat. Same table as Shotgun Rummy: a rotating dealer, items, a
 ## wild trump rank, health and the shotgun.
 ##
-## - All 52 cards are dealt out, with no items. The round's 3 items wait in a
+## - All 52 cards are dealt out, with no items. The round's random few items wait in a
 ##   pile of their own.
 ## - Cards go down in rank order: aces first, then twos, up to kings, then
 ##   round again. On your turn put 1 to 4 cards face down on the pile and say

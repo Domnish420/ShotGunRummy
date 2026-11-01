@@ -9,8 +9,8 @@ extends RefCounted
 ##    round goes first.
 ##
 ## Rummy (the classic card game):
-##  - Everyone gets 7 playing cards. Nobody starts with items: only 3 item
-##    cards are shuffled into the stock each round, so a draw can give you one.
+##  - Everyone gets 7 playing cards. Nobody starts with items: a random few
+##    are shuffled into the stock each round, so a draw can give you one.
 ##  - Your turn: draw 1 card (stock or top of the discard pile), meld sets
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
 ##    the table, then discard 1 card. You can't discard the card you just took
@@ -91,7 +91,7 @@ var options := {
 	"hand_size": 7,
 	"items_dealt": 0, # nobody starts a round holding items
 	"items_in_stock": true,
-	"items_per_round": 3, # items are rare: only this many turn up each round
+	"items_per_round": 3, # items are rare: about this many turn up a round, at random
 	"max_hp": 4,
 	"items_per_turn": 0, # 0 = no limit
 	"rummy_bonus": true,
@@ -713,15 +713,22 @@ func _end_round(winner_seat: int, reason: String = "") -> void:
 	_check_normal_match()
 
 
-## This round's items: only a few (options.items_per_round), picked at random
-## from the item deck, so an item with more copies turns up more often. In
-## games with a stock they're shuffled into it; the others hand them out now
-## and then (see _loot).
+## This round's items, all down to luck: every card in the item deck has its
+## own small chance of being in the round, so on average about
+## options.items_per_round turn up. Some rounds have none, some have a pile,
+## and an item with more copies turns up more often. In games with a stock
+## they're shuffled into it; the others hand them out now and then (see _loot).
 func _round_items() -> Array:
-	var n := int(options.get("items_per_round", 3))
-	if n <= 0:
+	var average := float(options.get("items_per_round", 3))
+	var deck := Items.create_item_deck()
+	if average <= 0.0 or deck.is_empty():
 		return []
-	return _shuffle(Items.create_item_deck()).slice(0, n)
+	var chance := minf(1.0, average / deck.size())
+	var out := []
+	for c in _shuffle(deck):
+		if rng.randf() < chance:
+			out.append(c)
+	return out
 
 
 ## Games with nothing to draw: now and then an item turns up for `p`, while

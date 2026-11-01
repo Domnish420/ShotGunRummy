@@ -472,7 +472,7 @@ func test_deal() -> void:
 		else:
 			playing += 1
 	check(playing == 52 - 28 - 1, "the rest of the playing cards are the stock")
-	check(items == 3, "only 3 items are shuffled into the stock")
+	check(items < 15, "only a few items are shuffled into the stock (%d)" % items)
 	check(not g.top_discard().has("item"), "the discard pile starts with a playing card")
 
 
@@ -1437,14 +1437,19 @@ func test_trumps_only_rummy() -> void:
 					check(c["item"] != "tarot" and c["item"] != "joker_paint", "%s: no trump items dealt" % kind)
 
 
-## Items are rare: nobody is dealt any, and only 3 are in play each round.
+## Items are rare and random: nobody is dealt any, and how many turn up
+## each round varies, averaging about 3.
 func test_items_scarce() -> void:
 	for kind in Games.kinds():
-		for n in [2, 4, 6]:
+		var counts := {}
+		var sum := 0
+		var rounds := 0
+		for sd in range(1, 41):
+			var n: int = [2, 4, 6][sd % 3]
 			if n < int(Games.LIST[kind]["min"]) or n > int(Games.LIST[kind]["max"]):
-				continue
+				n = int(Games.LIST[kind]["min"])
 			var g = Games.make(kind)
-			g.setup(Array(["A", "B", "C", "D", "E", "F"]).slice(0, n), {}, 4)
+			g.setup(Array(["A", "B", "C", "D", "E", "F"]).slice(0, n), {}, sd)
 			g.start_round()
 			var total := 0
 			for c in g.stock + g.item_deck:
@@ -1455,7 +1460,12 @@ func test_items_scarce() -> void:
 				for c in p.hand:
 					if c.has("item"):
 						total += 1
-			check(total == 3, "%s with %d: 3 items this round (%d)" % [kind, n, total])
+			counts[total] = true
+			sum += total
+			rounds += 1
+		var avg := float(sum) / rounds
+		check(avg > 1.5 and avg < 4.5, "%s: about 3 items a round on average (%.1f)" % [kind, avg])
+		check(counts.size() >= 3, "%s: the number of items changes round to round (%s)" % [kind, counts.keys()])
 		var plain = Games.make(kind, true)
 		plain.setup(["A", "B", "C"], {}, 4)
 		plain.start_round()

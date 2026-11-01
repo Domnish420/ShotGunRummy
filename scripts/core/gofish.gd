@@ -2,7 +2,7 @@ extends "res://scripts/core/game.gd"
 ## Shotgun Go Fish. Same table as Shotgun Rummy: a rotating dealer, items
 ## shuffled into the pond, a wild trump rank, health and the shotgun.
 ##
-## - Everyone is dealt 7 cards (5 with 4 or more players) . 3 rare items hide in the pond. The
+## - Everyone is dealt 7 cards (5 with 4 or more players). A random few rare items hide in the pond. The
 ##   rest of the cards and items are the pond (the stock).
 ## - On your turn, ASK another player for a rank you hold. If they have any,
 ##   they hand over all of them and you go again. If not: GO FISH, draw from
