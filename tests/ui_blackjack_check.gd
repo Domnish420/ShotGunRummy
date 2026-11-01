@@ -78,7 +78,7 @@ func _initialize() -> void:
 			continue
 		if not g.is_turn_of(0) or main.world.dealing or main.world.fx_busy or step % 3 != 0:
 			continue
-		if g.hand_total(0) < 16:
+		if g.hand_total(0) < 16 or (my_hits == 0 and g.hand_total(0) < 21): # always try HIT at least once
 			main._meld_selected() # the HIT button
 			my_hits += 1
 		else:
