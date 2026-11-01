@@ -111,6 +111,105 @@ static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int) -> void:
 			var s := 0.62
 			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -hh * s), c + Vector2(hw * s, 0), c + Vector2(0, hh * s), c + Vector2(-hw * s, 0)]), skin["back_dark"])
 			draw_star(ci, c, hw * 0.35, fg)
+		"pixels":
+			# chunky pixels in four shades, like an old handheld's screen
+			var shades: Array = [skin["back_dark"], fg, skin["back_edge"], fg.lerp(skin["back_dark"], 0.5)]
+			var px := cell * 0.5
+			_grid(inner, px, func(c: Vector2, r: int, k: int) -> void:
+				ci.draw_rect(Rect2(c - Vector2(px, px) * 0.45, Vector2(px, px) * 0.9), shades[(r * 7 + k * 3 + (r * k) % 5) % 4]))
+		"bands":
+			# fat stripes across, three colours round and round
+			var cols: Array = [fg, skin["back_edge"], skin["back_dark"]]
+			var y := inner.position.y
+			var i := 0
+			while y < inner.end.y:
+				var h := minf(cell * 1.2, inner.end.y - y)
+				ci.draw_rect(Rect2(Vector2(inner.position.x, y), Vector2(inner.size.x, h)), cols[i % 3])
+				y += cell * 1.2
+				i += 1
+		"wire":
+			# strands of wire, knotted with little barbs
+			var y := inner.position.y + cell * 0.7
+			var row := 0
+			var wide := maxf(1.0, cell * 0.12)
+			while y < inner.end.y - cell * 0.3:
+				ci.draw_line(Vector2(inner.position.x, y), Vector2(inner.end.x, y), skin["back_edge"], wide)
+				var x := inner.position.x + (cell * 0.6 if row % 2 == 0 else cell * 1.3)
+				while x < inner.end.x - cell * 0.3:
+					var b := cell * 0.3
+					ci.draw_line(Vector2(x - b, y - b), Vector2(x + b, y + b), fg, wide)
+					ci.draw_line(Vector2(x - b, y + b), Vector2(x + b, y - b), fg, wide)
+					x += cell * 1.4
+				y += cell * 1.3
+				row += 1
+		"stars":
+			# a night sky with a crescent moon
+			_grid(inner, cell * 1.3, func(c: Vector2, r: int, k: int) -> void:
+				var big := (r + k) % 3 == 0
+				var jitter := Vector2(cell * 0.15 * ((r * 3 + k) % 3 - 1), cell * 0.15 * ((r + k * 2) % 3 - 1))
+				draw_star(ci, c + jitter, cell * (0.42 if big else 0.22), fg if big else skin["back_edge"]), true)
+			var moon := inner.position + Vector2(inner.size.x * 0.7, inner.size.y * 0.2)
+			ci.draw_circle(moon, cell * 0.9, fg)
+			ci.draw_circle(moon + Vector2(cell * 0.4, -cell * 0.2), cell * 0.8, skin["back_dark"])
+		"target":
+			# a bullseye with a crosshair, like a shooting-range card
+			var c := inner.get_center()
+			var rmax := minf(inner.size.x, inner.size.y) * 0.46
+			for i in range(5):
+				ci.draw_circle(c, rmax * (1.0 - i * 0.2), fg if i % 2 == 0 else skin["back_dark"])
+			var wide := maxf(1.0, cell * 0.1)
+			ci.draw_line(Vector2(inner.position.x, c.y), Vector2(inner.end.x, c.y), skin["back_dark"], wide)
+			ci.draw_line(Vector2(c.x, inner.position.y), Vector2(c.x, inner.end.y), skin["back_dark"], wide)
+		"hazard":
+			# thick warning stripes
+			var step := cell * 1.6
+			var t := -inner.size.y
+			while t < inner.size.x:
+				var seg := _clip_line(inner.position + Vector2(t, inner.size.y), inner.position + Vector2(t + inner.size.y, 0), inner)
+				if not seg.is_empty():
+					ci.draw_line(seg[0], seg[1], fg, step * 0.36)
+				t += step
+		"grid":
+			# drafting paper: fine lines, a bold frame and a compass mark
+			var faint := Color(fg, 0.45)
+			var x := inner.position.x
+			while x <= inner.end.x:
+				ci.draw_line(Vector2(x, inner.position.y), Vector2(x, inner.end.y), faint, 1.0)
+				x += cell * 0.5
+			var y := inner.position.y
+			while y <= inner.end.y:
+				ci.draw_line(Vector2(inner.position.x, y), Vector2(inner.end.x, y), faint, 1.0)
+				y += cell * 0.5
+			var wide := maxf(1.5, cell * 0.13)
+			ci.draw_rect(inner.grow(-cell * 0.4), fg, false, wide)
+			var c := inner.get_center()
+			ci.draw_arc(c, cell * 1.6, 0.0, TAU, 32, fg, wide)
+			ci.draw_line(c - Vector2(cell * 2.2, 0), c + Vector2(cell * 2.2, 0), fg, wide)
+			ci.draw_line(c - Vector2(0, cell * 2.2), c + Vector2(0, cell * 2.2), fg, wide)
+		"web":
+			# a spider web, and its spider
+			var c := inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.42)
+			var ends: Array = []
+			for i in range(10):
+				var a := i * TAU / 10.0
+				var seg := _clip_line(c, c + Vector2(cos(a), sin(a)) * 999.0, inner)
+				ends.append(seg[1] if not seg.is_empty() else c)
+			var thin := maxf(1.0, cell * 0.08)
+			for e in ends:
+				ci.draw_line(c, e, fg, thin)
+			for t in [0.18, 0.36, 0.56, 0.78]:
+				var ring := PackedVector2Array()
+				for e in ends:
+					ring.append(c + (Vector2(e) - c) * t)
+				ring.append(ring[0])
+				ci.draw_polyline(ring, fg, thin)
+			var sp := c + Vector2(cell * 1.2, cell * 2.2)
+			var leg: Color = skin["back_edge"]
+			ci.draw_line(c + (sp - c) * 0.4, sp, leg, 1.0)
+			for i in range(4):
+				var dy := (i - 1.5) * cell * 0.16 - cell * 0.1
+				ci.draw_line(sp + Vector2(-cell * 0.6, dy * 1.6), sp + Vector2(cell * 0.6, dy * 1.6), leg, maxf(1.0, cell * 0.08))
+			ci.draw_circle(sp, cell * 0.32, leg)
 		_:
 			# a little diamond lattice
 			_grid(inner, cell, func(c: Vector2, _r: int, _k: int) -> void:

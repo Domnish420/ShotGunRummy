@@ -63,6 +63,14 @@ const RULES := {
 		"noir": ["round_wins", 8],
 		"rave": ["match_wins", 4],
 		"gold": ["match_wins", 10],
+		"candy": ["round_wins", 3],
+		"wire": ["shells_hit", 15],
+		"midnight": ["matches", 10],
+		"blueprint": ["matches", 20],
+		"wanted": ["knockouts", 15],
+		"web": ["round_wins", 25],
+		"hazard": ["shells_hit", 50],
+		"gameboy": ["games_tried", 9],
 	},
 }
 

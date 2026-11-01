@@ -102,8 +102,10 @@ characters that use a locked part are locked too. The rules are plain data in
 `scripts/core/unlocks.gd`.
 
 **Card skins.** **CARDS** on the main menu picks how your cards look, front
-and back: Classic, Casino Felt, Blood Money (shotgun shells), Pumpkin, Bone
-Yard (skulls), Noir, Rave (neon) and High Roller (gold). It's just for you:
+and back. 16 skins: Classic, Casino Felt, Candy Corn, Blood Money (shotgun
+shells), Barbed Wire, Pumpkin, Midnight (stars and a moon), Bone Yard
+(skulls), Noir, Rave (neon), Blueprint, Wanted (a bullseye), Spider Web,
+Hazard, Pocket (an old handheld's green screen) and High Roller (gold). It's just for you:
 everyone at the table sees their own skin. Skins are in
 `scripts/ui/card_skins.gd`, drawn by `scripts/ui/card_art.gd`.
 
