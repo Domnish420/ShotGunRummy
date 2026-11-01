@@ -805,14 +805,18 @@ func _lesson_showing() -> bool:
 func _drive_demo(delta: float) -> void:
 	if demo_stage != "watch" or game == null or _lesson_showing():
 		return
-	if overlay_layer.get_child_count() == 0 or (_overlay_kind != "result" and _overlay_kind != "gun"):
+	if overlay_layer.get_child_count() == 0 or not _overlay_kind in ["result", "gun", "reveal"]:
 		_demo_wait = 2.5
 		return
 	_demo_wait -= delta
 	if _demo_wait > 0.0:
 		return
 	_demo_wait = 2.5
-	if game.gun != null and _overlay_kind == "result":
+	if _overlay_kind == "reveal":
+		# a card turned over (CHEAT!, an item): show it, then carry on
+		_close_overlay()
+		_after_action()
+	elif game.gun != null and _overlay_kind == "result":
 		_show_gun()
 	elif game.gun == null and (game.phase == "round_over" or game.phase == "match_over"):
 		_close_overlay()
