@@ -19,6 +19,7 @@ const CardTextures = preload("res://scripts/three/card_textures.gd")
 const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
 const Looks = preload("res://scripts/core/looks.gd")
+const GunSkins = preload("res://scripts/core/gun_skins.gd")
 const Games = preload("res://scripts/core/games.gd")
 const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
 
@@ -1396,11 +1397,30 @@ func _head_of(seat: int) -> Vector3:
 	return Vector3(0, 0.6, 0)
 
 
+## Paints the shotgun in a skin (see gun_skins.gd).
+func set_gun_skin(id: String) -> void:
+	if shotgun == null or not shotgun.has_meta("steel"):
+		return
+	var sk := GunSkins.get_skin(id)
+	var steel: StandardMaterial3D = shotgun.get_meta("steel")
+	var wood: StandardMaterial3D = shotgun.get_meta("wood")
+	steel.albedo_color = sk["metal"]
+	steel.metallic = float(sk["shine"])
+	wood.albedo_color = sk["wood"]
+	for m in [steel, wood]:
+		m.emission_enabled = sk.has("glow")
+		if sk.has("glow"):
+			m.emission = m.albedo_color # each part glows in its own colour
+			m.emission_energy_multiplier = 0.6
+
+
 func _sync_gun(game, viewer: int) -> void:
 	if _gun_pose == "fired":
 		return # the shot is still playing; _after_shot takes it from there
 	if game.phase == "shoot" and game.gun != null:
 		var holder: int = game.gun["holder"]
+		# the holder's own shotgun skin
+		set_gun_skin(str(game.players[holder].look.get("gun", "standard")) if holder < game.players.size() else "standard")
 		# aim at the middle of the table until a target is picked
 		var aim := Vector3(0, 0.45, 0) if holder == viewer else _head_of(viewer)
 		var pose := "held%d" % holder

@@ -88,18 +88,30 @@ be nudged by hand in the JSON. Whoever you play as is saved, and other players s
 table, online too. In pass & play each player picks a
 character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 
+### The gacha machine
+
+Every round you win gives you a **gacha coin**, and winning the match gives
+one more (you start with 3). **GACHA MACHINE** on the main menu spends a coin
+on a spin: the crank turns, a capsule drops, and out comes a card skin, a
+shotgun skin or a costume part you don't have yet (never a repeat). Prizes
+are Common, Rare, Epic or Legendary; rarer ones drop less often. Odds,
+coins and what's inside are in `scripts/core/gacha.gd`.
+
+**Shotgun skins** (Standard Issue, Rust Bucket, Blackout, Swamp Camo, Chrome,
+Bone Saw, Candy Stripe, Blood Orange, Neon Nights, Toxic, Solid Gold) are
+picked from **SHOTGUN** on the menu. Whoever holds the gun shows their skin,
+so everyone at the table sees it, online too (`scripts/core/gun_skins.gd`).
+
 ### Your name, unlocks and card skins
 
 The first time the game opens it asks **WHO'S PLAYING?**: sign your name
 once and it's kept (change it from the character screen's **NAME** button).
 
-**Unlocks.** Some bodies, hats, face pieces, outfit colours, the glowing eyes
-and most card skins start locked (🔒). Each says what unlocks it: play or win
-matches, win rounds, hit with shotgun shells, take players out, or play
-different cartridges. Your stats count in every match you play (not the
-demos), and anything you unlock is announced at the table. Ready-made
-characters that use a locked part are locked too. The rules are plain data in
-`scripts/core/unlocks.gd`.
+**Unlocks.** Some bodies, hats, face pieces, outfit colours, the glowing eyes,
+most card skins and the shotgun skins start locked (🔒): they come out of the
+gacha machine, and each lock says how rare it is. Ready-made characters that
+use a locked part are locked too. Anything you'd already unlocked from your
+stats before the machine arrived is yours to keep.
 
 **Card skins.** **CARDS** on the main menu picks how your cards look, front
 and back. 16 skins: Classic, Casino Felt, Candy Corn, Blood Money (shotgun

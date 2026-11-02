@@ -10,6 +10,8 @@ extends RefCounted
 ## PRESETS are ready-made characters built from the base models. The customiser
 ## starts from one and lets players change any part.
 
+const GunSkins = preload("res://scripts/core/gun_skins.gd")
+
 ## The base models (KayKit, CC0) and their names in the customiser.
 const BASES := {
 	"Barbarian": "BARBARIAN", "Knight": "KNIGHT", "Mage": "MAGE", "Rogue": "ROGUE",
@@ -92,4 +94,5 @@ static func clean(look, fallback_seat: int = 0) -> Dictionary:
 	out["face_angle"] = clampi(int(look.get("face_angle", 0)), -2, 2)
 	out["face_height"] = clampi(int(look.get("face_height", 0)), -2, 2)
 	out["name"] = str(look.get("name", "CUSTOM")).left(24)
+	out["gun"] = GunSkins.clean(look.get("gun", "standard")) # the shotgun skin they show when holding it
 	return out

@@ -20,6 +20,8 @@ const Games = preload("res://scripts/core/games.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
 const LooksT = preload("res://scripts/core/looks.gd")
+const Gacha = preload("res://scripts/core/gacha.gd")
+const GunSkinsT = preload("res://scripts/core/gun_skins.gd")
 const FaceAnchors = preload("res://scripts/three/face_anchors.gd")
 
 var _failures := 0
@@ -1546,27 +1548,82 @@ func test_every_item_everywhere() -> void:
 		check(todo.is_empty(), "%s: every item got used (never: %s)" % [kind, todo])
 
 
-## Character parts and card skins: some free, the rest unlock with stats.
+## Character parts, card skins and shotgun skins: a few free, the rest come
+## out of the gacha machine.
 func test_unlocks() -> void:
-	var none := Unlocks.clean_stats({})
-	# every rule names something real
-	for v in Unlocks.RULES["base"]:
-		check(LooksT.BASES.has(v), "unlock: body %s exists" % v)
-	for v in Unlocks.RULES["hat"]:
-		check(LooksT.HATS.has(v), "unlock: hat %s exists" % v)
-	for v in Unlocks.RULES["face"]:
-		check(LooksT.FACES.has(v), "unlock: face %s exists" % v)
-	for v in Unlocks.RULES["outfit"]:
-		check(int(v) > 0 and int(v) < LooksT.OUTFITS.size(), "unlock: outfit %s exists" % v)
-	for v in Unlocks.RULES["card"]:
-		check(CardSkins.SKINS.has(v), "unlock: card skin %s exists" % v)
-	check(CardSkins.RETRO.size() >= 15, "lots of retro decks (%d)" % CardSkins.RETRO.size())
+	var none := {}
+	var pool := Gacha.pool()
+	# every prize is something real
+	for k in pool:
+		var pv: Array = Gacha.split(k)
+		match pv[0]:
+			"base":
+				check(LooksT.BASES.has(pv[1]), "gacha: body %s exists" % pv[1])
+			"hat":
+				check(LooksT.HATS.has(pv[1]), "gacha: hat %s exists" % pv[1])
+			"face":
+				check(LooksT.FACES.has(pv[1]), "gacha: face %s exists" % pv[1])
+			"outfit":
+				check(int(pv[1]) > 0 and int(pv[1]) < LooksT.OUTFITS.size(), "gacha: outfit %s exists" % pv[1])
+			"eyes":
+				check(pv[1] == true, "gacha: glowing eyes")
+			"card":
+				check(CardSkins.SKINS.has(pv[1]), "gacha: card skin %s exists" % pv[1])
+			"gun":
+				check(GunSkinsT.SKINS.has(pv[1]), "gacha: gun skin %s exists" % pv[1])
+			_:
+				check(false, "gacha: unknown prize %s" % k)
+		check(Gacha.RARITIES.has(pool[k]), "gacha: %s has a rarity" % k)
+		check(Gacha.key(pv[0], pv[1]) == k, "gacha: %s round-trips" % k)
+	for id in CardSkins.ORDER + CardSkins.RETRO:
+		check(id == "classic" or pool.has("card:" + id), "card skin %s is in the machine" % id)
+	for id in GunSkinsT.ORDER:
+		check(GunSkinsT.SKINS.has(id), "gun skin %s is defined" % id)
+		check(id == "standard" or pool.has("gun:" + id), "gun skin %s is in the machine" % id)
+	check(Unlocks.is_unlocked("card", "classic", none) and Unlocks.is_unlocked("gun", "standard", none), "classic cards and the standard shotgun are free")
+	check(not Unlocks.is_unlocked("card", "gold", none) and not Unlocks.is_unlocked("hat", "cowboy", none), "the rest starts locked")
+	check(Unlocks.is_unlocked("hat", "bowler", none), "some hats are free")
+	check(Unlocks.need_text("hat", "cowboy", none) == "GACHA · RARE", "says where it comes from: %s" % Unlocks.need_text("hat", "cowboy", none))
+	check(Unlocks.need_text("hat", "bowler", none) == "", "free things need nothing")
+	var free_presets := 0
+	for i in range(LooksT.PRESETS.size()):
+		if Unlocks.look_unlocked(LooksT.preset(i), none):
+			free_presets += 1
+	check(free_presets >= 4 and free_presets < LooksT.PRESETS.size(), "a few characters free at the start, some locked (%d)" % free_presets)
+	# the machine: never a repeat, everything eventually, rarer things rarer
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var owned := {}
+	for i in range(pool.size()):
+		var k := Gacha.roll(owned, rng)
+		check(k != "" and not owned.has(k), "spin %d gives something new" % i)
+		owned[k] = true
+	check(owned.size() == pool.size() and Gacha.roll(owned, rng) == "", "you can win everything, then it's empty")
+	var firsts := {"common": 0, "legendary": 0}
+	for t in range(400):
+		rng.seed = t
+		var r: String = pool[Gacha.roll({}, rng)]
+		if firsts.has(r):
+			firsts[r] += 1
+	check(firsts["common"] > firsts["legendary"] * 5, "commons drop far more than legendaries: %s" % [firsts])
+	var all := {}
+	for k in pool:
+		all[k] = true
+	for i in range(LooksT.PRESETS.size()):
+		check(Unlocks.look_unlocked(LooksT.preset(i), all), "every character can be unlocked: %s" % LooksT.PRESETS[i]["name"])
+	# players from before the machine keep what they'd earned
+	var vet := Unlocks.legacy_owned({"match_wins": 3, "matches": 1})
+	check(vet.has("hat:cowboy") and vet.has("card:felt") and not vet.has("card:gold"), "old unlocks carry over: %s" % [vet.keys()])
+	# card skin data: every skin complete, retro decks with a story, sprites line up
+	for id in CardSkins.ORDER + CardSkins.RETRO:
+		check(CardSkins.SKINS.has(id), "card skin %s is defined" % id)
 	for id in CardSkins.RETRO:
 		check(CardSkins.fact(id) != "", "retro deck %s has a fact to unlock" % id)
-		check(not Unlocks.rule("card", id).is_empty(), "retro deck %s is unlocked by playing" % id)
 	for id in CardSkins.SKINS:
 		check(CardSkins.ORDER.has(id) or CardSkins.RETRO.has(id), "card skin %s shows in the picker" % id)
 		var sk: Dictionary = CardSkins.SKINS[id]
+		for k in ["name", "paper", "edge", "ink", "red", "back", "back_dark", "back_edge", "pattern"]:
+			check(sk.has(k), "card skin %s has %s" % [id, k])
 		if sk.has("sprite") or sk.has("sprites"):
 			var sprites: Array = sk["sprites"] if sk.has("sprites") else [sk["sprite"]]
 			var w := str(sprites[0][0]).length()
@@ -1576,32 +1633,8 @@ func test_unlocks() -> void:
 					check(str(row).length() == w, "%s: sprite row '%s' is %d wide" % [id, row, w])
 					for ch in str(row):
 						check(ch == "." or sk["palette"].has(ch), "%s: colour '%s' is in the palette" % [id, ch])
-	for id in CardSkins.ORDER + CardSkins.RETRO:
-		check(CardSkins.SKINS.has(id), "card skin %s is defined" % id)
-		for k in ["name", "paper", "edge", "ink", "red", "back", "back_dark", "back_edge", "pattern"]:
-			check(CardSkins.SKINS[id].has(k), "card skin %s has %s" % [id, k])
-	check(Unlocks.is_unlocked("card", "classic", none), "classic cards are free")
-	check(not Unlocks.is_unlocked("card", "gold", none), "gold cards are locked at the start")
-	check(Unlocks.is_unlocked("hat", "bowler", none) and not Unlocks.is_unlocked("hat", "cowboy", none), "some hats free, some locked")
-	check(Unlocks.need_text("hat", "cowboy", none) == "WIN 3 MATCHES (0/3)", "says what unlocks it: %s" % Unlocks.need_text("hat", "cowboy", none))
-	check(Unlocks.need_text("hat", "bowler", none) == "", "free things need nothing")
-	var free_presets := 0
-	for i in range(LooksT.PRESETS.size()):
-		if Unlocks.look_unlocked(LooksT.preset(i), none):
-			free_presets += 1
-	check(free_presets >= 4, "a few characters are free at the start (%d)" % free_presets)
-	check(free_presets < LooksT.PRESETS.size(), "and some are locked")
-	var after := none.duplicate()
-	after["match_wins"] = 3
-	var fresh := Unlocks.newly_unlocked(none, after)
-	check(fresh.has("COWBOY HAT") and fresh.has("HOODED ROGUE"), "winning 3 matches unlocks the cowboy hat and more: %s" % [fresh])
-	check(Unlocks.newly_unlocked(after, after).is_empty(), "nothing unlocks twice")
-	var all := {}
-	for k in Unlocks.STATS:
-		all[k] = 999
-	for i in range(LooksT.PRESETS.size()):
-		check(Unlocks.look_unlocked(LooksT.preset(i), all), "every character can be unlocked: %s" % LooksT.PRESETS[i]["name"])
-
+	# shotgun skins travel with your look
+	check(LooksT.clean({"gun": "neon"})["gun"] == "neon" and LooksT.clean({"gun": "nope"})["gun"] == "standard", "looks carry a shotgun skin")
 
 # ================================================================ poker
 

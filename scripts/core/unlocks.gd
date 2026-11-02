@@ -1,10 +1,10 @@
 extends RefCounted
-## What you unlock by playing. Some character parts and card skins are free;
-## the rest unlock as your stats grow. Everything here is data: change a
-## number to make something easier or harder to get.
+## What's yours. Some character parts, the classic cards and the standard
+## shotgun are free; everything else comes out of the gacha machine (see
+## gacha.gd). `owned` is the set of gacha keys you've won.
 ##
-## Stats (saved with your settings, counted for your seat only, never in a
-## demo):
+## Your stats are still counted (saved with your settings, for your seat
+## only, never in a demo):
 ##   matches      matches finished
 ##   match_wins   matches won (last one standing)
 ##   round_wins   rounds won
@@ -13,21 +13,13 @@ extends RefCounted
 ##   games_tried  different cartridges you've finished a match of
 
 const Looks = preload("res://scripts/core/looks.gd")
+const Gacha = preload("res://scripts/core/gacha.gd")
 
 const STATS := ["matches", "match_wins", "round_wins", "shells_hit", "knockouts", "games_tried"]
 
-## How each stat reads on a locked part: [one, many].
-const WORDS := {
-	"matches": ["PLAY %d MATCH", "PLAY %d MATCHES"],
-	"match_wins": ["WIN %d MATCH", "WIN %d MATCHES"],
-	"round_wins": ["WIN %d ROUND", "WIN %d ROUNDS"],
-	"shells_hit": ["HIT %d SHELL", "HIT %d SHELLS"],
-	"knockouts": ["TAKE OUT %d PLAYER", "TAKE OUT %d PLAYERS"],
-	"games_tried": ["PLAY %d CARTRIDGE", "PLAY %d DIFFERENT CARTRIDGES"],
-}
-
-## part -> value -> [stat, how many]. Anything not listed is free.
-const RULES := {
+## Before the gacha machine, parts unlocked from your stats. Anyone who had
+## earned one keeps it (see legacy_owned): part -> value -> [stat, how many].
+const LEGACY := {
 	"base": {
 		"Mage": ["matches", 3],
 		"Rogue_Hooded": ["match_wins", 1],
@@ -93,66 +85,45 @@ const RULES := {
 }
 
 
-static func rule(part: String, value) -> Array:
-	return RULES.get(part, {}).get(value, [])
+static func is_unlocked(part: String, value, owned: Dictionary) -> bool:
+	return Gacha.owns(part, value, owned)
 
 
-static func is_unlocked(part: String, value, stats: Dictionary) -> bool:
-	var r := rule(part, value)
-	return r.is_empty() or int(stats.get(r[0], 0)) >= int(r[1])
-
-
-## "WIN 3 MATCHES (1/3)", or "" if it's free or already yours.
-static func need_text(part: String, value, stats: Dictionary) -> String:
-	if is_unlocked(part, value, stats):
+## "GACHA · RARE", or "" if it's yours.
+static func need_text(part: String, value, owned: Dictionary) -> String:
+	if is_unlocked(part, value, owned):
 		return ""
-	var r := rule(part, value)
-	var n := int(r[1])
-	var words: Array = WORDS[r[0]]
-	return (words[0] if n == 1 else words[1]) % n + " (%d/%d)" % [mini(int(stats.get(r[0], 0)), n), n]
+	return "GACHA · %s" % Gacha.RARITY_NAMES[Gacha.rarity(part, value)]
 
 
-## The parts of `look` that are still locked, as [part, value] pairs.
-static func locked_parts(look: Dictionary, stats: Dictionary) -> Array:
+## The parts of `look` you don't own yet, as [part, value] pairs.
+static func locked_parts(look: Dictionary, owned: Dictionary) -> Array:
 	var out := []
 	for part in ["base", "hat", "face", "outfit"]:
-		if not is_unlocked(part, look.get(part), stats):
+		if not is_unlocked(part, look.get(part), owned):
 			out.append([part, look.get(part)])
-	if bool(look.get("eyes", false)) and not is_unlocked("eyes", true, stats):
+	if bool(look.get("eyes", false)) and not is_unlocked("eyes", true, owned):
 		out.append(["eyes", true])
 	return out
 
 
-static func look_unlocked(look: Dictionary, stats: Dictionary) -> bool:
-	return locked_parts(look, stats).is_empty()
+static func look_unlocked(look: Dictionary, owned: Dictionary) -> bool:
+	return locked_parts(look, owned).is_empty()
 
 
 ## What a part is called on screen.
 static func part_name(part: String, value) -> String:
-	match part:
-		"base":
-			return str(Looks.BASES.get(value, value))
-		"hat":
-			return str(Looks.HATS.get(value, value))
-		"face":
-			return str(Looks.FACES.get(value, value))
-		"outfit":
-			return "%s OUTFIT" % Looks.OUTFITS[int(value)]["name"]
-		"eyes":
-			return "GLOWING EYES"
-		"card":
-			var CardSkins = load("res://scripts/ui/card_skins.gd")
-			return "%s CARDS" % CardSkins.skin_name(str(value))
-	return str(value)
+	return Gacha.prize_name(Gacha.key(part, value))
 
 
-## Everything that unlocks going from `before` to `after`, as names.
-static func newly_unlocked(before: Dictionary, after: Dictionary) -> Array:
-	var out := []
-	for part in RULES:
-		for value in RULES[part]:
-			if not is_unlocked(part, value, before) and is_unlocked(part, value, after):
-				out.append(part_name(part, value))
+## The gacha keys someone's old stats had already unlocked.
+static func legacy_owned(stats: Dictionary) -> Dictionary:
+	var out := {}
+	for part in LEGACY:
+		for value in LEGACY[part]:
+			var r: Array = LEGACY[part][value]
+			if int(stats.get(r[0], 0)) >= int(r[1]):
+				out[Gacha.key(part, value)] = true
 	return out
 
 

@@ -34,6 +34,8 @@ const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
 const CardArt = preload("res://scripts/ui/card_art.gd")
+const Gacha = preload("res://scripts/core/gacha.gd")
+const GunSkins = preload("res://scripts/core/gun_skins.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const MIN_PLAYERS := 2
@@ -71,6 +73,9 @@ var played := {} # kind -> shotgun matches finished (normal mode unlocks)
 var stats := {} # your stats, for unlocks (see unlocks.gd)
 var tried_kinds := {} # kind -> true: cartridges you've finished a match of
 var card_skin := "classic" # how your cards look (see card_skins.gd)
+var gun_skin := "standard" # how the shotgun looks in your hands (see gun_skins.gd)
+var owned := {} # gacha prizes you've won (see gacha.gd)
+var coins := 0 # gacha coins: one for every round you win, a bonus for the match
 var _last_shooter := -1 # who fired the last shell, for knockouts
 var tutorial_offered := false
 var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
@@ -388,6 +393,7 @@ func _name(seat: int) -> String:
 
 func _load_settings() -> void:
 	stats = Unlocks.clean_stats({})
+	coins = Gacha.STARTING_COINS
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		# the game used to be called Shotgun Rummy: on a computer its settings
@@ -415,8 +421,19 @@ func _load_settings() -> void:
 		custom_looks.append(Looks.clean(c))
 	stats = Unlocks.clean_stats(cfg.get_value("progress", "stats", {}))
 	tried_kinds = cfg.get_value("progress", "tried", {})
+	if cfg.has_section_key("progress", "owned"):
+		owned = cfg.get_value("progress", "owned", {})
+		coins = maxi(0, int(cfg.get_value("progress", "coins", 0)))
+	else:
+		# from before the gacha machine: keep whatever your stats had unlocked
+		owned = Unlocks.legacy_owned(stats)
+		coins = Gacha.STARTING_COINS
+	gun_skin = GunSkins.clean(cfg.get_value("profile", "gun", "standard"))
+	if not Unlocks.is_unlocked("gun", gun_skin, owned):
+		gun_skin = "standard"
+	my_look["gun"] = gun_skin
 	card_skin = CardSkins.clean(cfg.get_value("profile", "cards", "classic"))
-	if not Unlocks.is_unlocked("card", card_skin, stats):
+	if not Unlocks.is_unlocked("card", card_skin, owned):
 		card_skin = "classic"
 	CardArt.skin = CardSkins.get_skin(card_skin)
 
@@ -440,6 +457,9 @@ func _save_settings() -> void:
 	cfg.set_value("progress", "stats", stats)
 	cfg.set_value("progress", "tried", tried_kinds)
 	cfg.set_value("profile", "cards", card_skin)
+	cfg.set_value("profile", "gun", gun_skin)
+	cfg.set_value("progress", "owned", owned)
+	cfg.set_value("progress", "coins", coins)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -538,7 +558,16 @@ func show_menu() -> void:
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
 		menu_message = ""
 	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
-	box.add_child(_paper_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 28))
+	var gacha := _paper_button("GACHA MACHINE · %d COIN%s" % [coins, "" if coins == 1 else "S"], show_gacha, 28)
+	Palette.accent(gacha, Palette.GOLD)
+	box.add_child(gacha)
+	var skins_row := HBoxContainer.new()
+	skins_row.add_theme_constant_override("separation", 8)
+	for b in [_paper_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 20), _paper_button("SHOTGUN: %s" % GunSkins.skin_name(gun_skin), show_gun_skins, 20)]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		skins_row.add_child(b)
+	box.add_child(skins_row)
 	if OS.has_feature("web"):
 		# browsers can't open the connections lobbies use
 		box.add_child(_label("Lobbies with friends need the download version. Here you can play on this device.", 22, Palette.CARD_INK, true))
@@ -1228,7 +1257,7 @@ func show_character_select() -> void:
 	var picked_tile: Control = null
 	for i in range(all.size()):
 		var look: Dictionary = all[i]
-		var locked := not Unlocks.look_unlocked(look, stats)
+		var locked := not Unlocks.look_unlocked(look, owned)
 		var tile := _button(("🔒 " if locked else "") + _short_name(look), _pick_character.bind(look), 20)
 		tile.custom_minimum_size = Vector2(0, 58)
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1320,18 +1349,19 @@ func _pick_character(look: Dictionary) -> void:
 
 ## "LOCKED: WIN 3 MATCHES (1/3) FOR THE COWBOY HAT", or "" if it's all yours.
 func _lock_note(look: Dictionary) -> String:
-	var parts := Unlocks.locked_parts(look, stats)
+	var parts := Unlocks.locked_parts(look, owned)
 	if parts.is_empty():
 		return ""
 	var first: Array = parts[0]
 	var more := " (+%d MORE)" % (parts.size() - 1) if parts.size() > 1 else ""
-	return "LOCKED: %s FOR THE %s%s" % [Unlocks.need_text(first[0], first[1], stats), Unlocks.part_name(first[0], first[1]), more]
+	return "LOCKED: %s FOR THE %s%s" % [Unlocks.need_text(first[0], first[1], owned), Unlocks.part_name(first[0], first[1]), more]
 
 
 func _choose_character() -> void:
-	if not Unlocks.look_unlocked(_picked, stats):
+	if not Unlocks.look_unlocked(_picked, owned):
 		return
 	my_look = Looks.clean(_picked)
+	my_look["gun"] = gun_skin
 	if not setup_looks.is_empty():
 		setup_looks[0] = my_look.duplicate()
 	_save_settings()
@@ -1402,7 +1432,7 @@ func show_creator() -> void:
 	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
 		var names: Dictionary = part[2]
 		var value = _editing[part[1]]
-		var need := Unlocks.need_text(part[1], value, stats)
+		var need := Unlocks.need_text(part[1], value, owned)
 		box.add_child(_choice_row(part[0] if need == "" else "%s · 🔒 %s" % [part[0], need], names[value] + ("" if need == "" else " 🔒"), _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
 	# where the face piece sits
 	var face: String = _editing.get("face", "none")
@@ -1414,7 +1444,7 @@ func show_creator() -> void:
 		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT"}.get(face, "ANGLE")
 		box.add_child(_choice_row("  " + angle_word, _step_word(int(_editing.get("face_angle", 0))), _nudge_face.bind("face_angle", -1), _nudge_face.bind("face_angle", 1)))
 		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
-	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), stats)
+	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), owned)
 	box.add_child(_tag("OUTFIT: %s%s" % [Looks.OUTFITS[int(_editing["outfit"])]["name"], "" if outfit_need == "" else "  🔒 " + outfit_need], 24, Palette.DIM if outfit_need == "" else Palette.PINK))
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 6)
@@ -1426,12 +1456,12 @@ func show_creator() -> void:
 		var edge := Palette.AMBER if i == int(_editing["outfit"]) else Palette.BUTTON_EDGE
 		sw.add_theme_stylebox_override("normal", Palette.box(col_c.darkened(0.35) if i > 0 else Color(0.2, 0.18, 0.16), edge, 3, 2, 4))
 		sw.add_theme_stylebox_override("hover", Palette.box(col_c.darkened(0.2) if i > 0 else Color(0.25, 0.22, 0.2), edge, 3, 2, 4))
-		sw.text = "-" if i == 0 else ("🔒" if not Unlocks.is_unlocked("outfit", i, stats) else "")
+		sw.text = "-" if i == 0 else ("🔒" if not Unlocks.is_unlocked("outfit", i, owned) else "")
 		sw.pressed.connect(_sound.bind("part"))
 		sw.pressed.connect(_set_part.bind("outfit", i))
 		swatches.add_child(sw)
 	box.add_child(swatches)
-	var eyes_need := Unlocks.need_text("eyes", true, stats)
+	var eyes_need := Unlocks.need_text("eyes", true, owned)
 	var eyes := _button("GLOWING EYES: %s" % ("ON" if _editing["eyes"] else "OFF") + ("" if eyes_need == "" else "  🔒 " + eyes_need), _set_part.bind("eyes", not _editing["eyes"]), 22 if eyes_need != "" else 24)
 	eyes.custom_minimum_size = Vector2(0, 52)
 	box.add_child(eyes)
@@ -1496,7 +1526,7 @@ func _set_part(part: String, value) -> void:
 
 
 func _save_creation() -> void:
-	if not Unlocks.look_unlocked(_editing, stats):
+	if not Unlocks.look_unlocked(_editing, owned):
 		return
 	_sound("save")
 	var char_name := str(_editing.get("name", "")).strip_edges().to_upper().left(20)
@@ -1957,7 +1987,7 @@ func show_card_skins() -> void:
 	scroll.add_child(sections)
 	var retro_open := 0
 	for id in CardSkins.RETRO:
-		if Unlocks.is_unlocked("card", id, stats):
+		if Unlocks.is_unlocked("card", id, owned):
 			retro_open += 1
 	for section in [["CLASSIC DECKS", CardSkins.ORDER, ""], ["RETRO DECKS", CardSkins.RETRO, "Each one nods to a famous game. Unlock it to learn a bit of gaming history. (%d/%d)" % [retro_open, CardSkins.RETRO.size()]]]:
 		sections.add_child(_label(section[0], 32, Color(0.36, 0.06, 0.05), true))
@@ -1977,7 +2007,7 @@ func show_card_skins() -> void:
 ## One skin in the picker: face and back, its name, its story if it's a
 ## retro deck you've unlocked, and USE (or what unlocks it).
 func _skin_cell(id: String) -> VBoxContainer:
-	var unlocked := Unlocks.is_unlocked("card", id, stats)
+	var unlocked := Unlocks.is_unlocked("card", id, owned)
 	var cell := VBoxContainer.new()
 	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cell.add_theme_constant_override("separation", 4)
@@ -1998,7 +2028,7 @@ func _skin_cell(id: String) -> VBoxContainer:
 	elif unlocked:
 		b = _paper_button("USE", _set_card_skin.bind(id), 22)
 	else:
-		b = _paper_button("🔒 " + Unlocks.need_text("card", id, stats), _noop, 16)
+		b = _paper_button("🔒 " + Unlocks.need_text("card", id, owned), _noop, 16)
 		b.disabled = true
 	b.custom_minimum_size = Vector2(0, 54)
 	b.clip_text = true
@@ -2007,7 +2037,7 @@ func _skin_cell(id: String) -> VBoxContainer:
 
 
 func _set_card_skin(id: String) -> void:
-	if not Unlocks.is_unlocked("card", id, stats):
+	if not Unlocks.is_unlocked("card", id, owned):
 		return
 	_sound("part")
 	card_skin = id
@@ -2015,6 +2045,274 @@ func _set_card_skin(id: String) -> void:
 	_save_settings()
 	world.textures.build() # redraw the 3D cards in the new skin
 	show_card_skins()
+
+
+# ================================================================ shotgun skins
+
+## A side view of the shotgun in one skin.
+class GunPreview extends Control:
+	const Skins = preload("res://scripts/core/gun_skins.gd")
+	var skin_id := "standard"
+	var dim := false
+
+	func _draw() -> void:
+		var sk := Skins.get_skin(skin_id)
+		var metal: Color = sk["metal"]
+		var wood: Color = sk["wood"]
+		var w := size.x
+		var h := size.y
+		var y := h * 0.42
+		if sk.has("glow"):
+			draw_rect(Rect2(Vector2(w * 0.02, y - h * 0.16), Vector2(w * 0.96, h * 0.42)), Color(sk["glow"], 0.18))
+		# barrels, rib and bead
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.09), Vector2(w * 0.56, h * 0.08)), metal)
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.01), Vector2(w * 0.56, h * 0.08)), metal.darkened(0.15))
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.12), Vector2(w * 0.56, h * 0.03)), metal.darkened(0.3))
+		draw_circle(Vector2(w * 0.05, y - h * 0.13), h * 0.025, Color(0.95, 0.92, 0.8))
+		# fore-end under the barrels
+		draw_rect(Rect2(Vector2(w * 0.3, y + h * 0.07), Vector2(w * 0.24, h * 0.07)), wood)
+		# receiver, trigger guard, trigger
+		draw_rect(Rect2(Vector2(w * 0.58, y - h * 0.11), Vector2(w * 0.12, h * 0.24)), metal.darkened(0.1))
+		draw_arc(Vector2(w * 0.66, y + h * 0.2), h * 0.07, 0.0, PI, 10, metal.darkened(0.2), 3.0)
+		draw_line(Vector2(w * 0.655, y + h * 0.13), Vector2(w * 0.65, y + h * 0.22), metal.darkened(0.35), 3.0)
+		# stock
+		var stock := PackedVector2Array([Vector2(w * 0.7, y - h * 0.08), Vector2(w * 0.96, y + h * 0.02), Vector2(w * 0.96, y + h * 0.3), Vector2(w * 0.7, y + h * 0.12)])
+		draw_colored_polygon(stock, wood)
+		draw_line(Vector2(w * 0.955, y + h * 0.02), Vector2(w * 0.955, y + h * 0.3), Color(0.08, 0.07, 0.06), 5.0)
+		if dim:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.55))
+
+
+## Pick your shotgun skin. Everyone sees it when the gun is in your hands.
+func show_gun_skins() -> void:
+	_keep_menu_name()
+	world.hide_carousel()
+	var box := _paper(660.0)
+	box.add_child(_label("SHOTGUN SKINS", 48, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("Everyone at the table sees yours when the gun's in your hands.", 18, Palette.CARD_INK, true))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 700)
+	box.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	for id in GunSkins.ORDER:
+		var unlocked := Unlocks.is_unlocked("gun", id, owned)
+		var cell := VBoxContainer.new()
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.add_theme_constant_override("separation", 4)
+		var preview := GunPreview.new()
+		preview.skin_id = id
+		preview.dim = not unlocked
+		preview.custom_minimum_size = Vector2(0, 120)
+		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(preview)
+		var rarity_color: Color = Gacha.RARITY_COLORS[Gacha.rarity("gun", id)] if Gacha.in_machine("gun", id) else Palette.CARD_INK
+		cell.add_child(_label(GunSkins.skin_name(id), 22, Palette.CARD_INK, true))
+		if Gacha.in_machine("gun", id):
+			cell.add_child(_label(Gacha.RARITY_NAMES[Gacha.rarity("gun", id)], 15, rarity_color.darkened(0.25), true))
+		var b: Button
+		if id == gun_skin:
+			b = _paper_button("IN USE", _noop, 20)
+			Palette.accent(b, Palette.AMBER)
+		elif unlocked:
+			b = _paper_button("USE", _set_gun_skin.bind(id), 22)
+		else:
+			b = _paper_button("🔒 GACHA", _noop, 18)
+			b.disabled = true
+		b.custom_minimum_size = Vector2(0, 54)
+		cell.add_child(b)
+		grid.add_child(cell)
+	box.add_child(_paper_button("BACK", show_menu, 26))
+
+
+func _set_gun_skin(id: String) -> void:
+	if not Unlocks.is_unlocked("gun", id, owned):
+		return
+	_sound("rack")
+	gun_skin = id
+	my_look["gun"] = id
+	if not setup_looks.is_empty():
+		setup_looks[0]["gun"] = id
+	_save_settings()
+	show_gun_skins()
+
+
+# ================================================================ gacha
+
+var _gacha_busy := false
+var _gacha_machine: Control = null
+
+
+## The machine itself: a glass globe of capsules on a red body, a coin slot,
+## a crank and a chute. spin() shakes it, turns the crank and drops a capsule.
+class GachaMachine extends Control:
+	const CAPSULE_COLORS := [Color(0.95, 0.3, 0.3), Color(0.3, 0.6, 1.0), Color(1.0, 0.8, 0.2), Color(0.4, 0.85, 0.4), Color(0.8, 0.45, 1.0), Color(1.0, 0.55, 0.2)]
+	var shake := 0.0
+	var crank := 0.0
+	var drop := -1.0 # 0..1 while a capsule falls out
+	var drop_color := Color.WHITE
+	var capsule_seed := 7
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var jig := Vector2(sin(shake * 40.0) * 6.0 * shake, 0)
+		var c := Vector2(w * 0.5, h * 0.34) + jig
+		var r := minf(w * 0.36, h * 0.3)
+		# the body
+		var body := Rect2(Vector2(w * 0.18, h * 0.58), Vector2(w * 0.64, h * 0.38))
+		draw_rect(body, Color(0.75, 0.12, 0.1))
+		draw_rect(Rect2(body.position, Vector2(body.size.x, h * 0.03)), Color(0.55, 0.06, 0.05))
+		draw_rect(Rect2(Vector2(w * 0.16, h * 0.955), Vector2(w * 0.68, h * 0.035)), Color(0.35, 0.04, 0.03))
+		# the globe and its capsules
+		draw_circle(c, r + 6.0, Color(0.85, 0.85, 0.82))
+		draw_circle(c, r, Color(0.12, 0.14, 0.18))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = capsule_seed
+		for i in range(26):
+			var a := rng.randf() * TAU
+			var d := sqrt(rng.randf()) * (r - 20.0)
+			var p := c + Vector2(cos(a), sin(a)) * d + Vector2(sin(shake * 30.0 + i) * 4.0 * shake, cos(shake * 27.0 + i) * 4.0 * shake)
+			var col: Color = CAPSULE_COLORS[i % CAPSULE_COLORS.size()]
+			_capsule(p, 17.0, col)
+		draw_arc(c + Vector2(-r * 0.35, -r * 0.35), r * 0.45, PI * 1.05, PI * 1.45, 12, Color(1, 1, 1, 0.35), 6.0) # shine
+		# coin slot and price
+		draw_rect(Rect2(Vector2(w * 0.3, h * 0.65), Vector2(w * 0.12, h * 0.07)), Color(0.9, 0.82, 0.55))
+		draw_rect(Rect2(Vector2(w * 0.355, h * 0.665), Vector2(w * 0.01, h * 0.04)), Color(0.1, 0.08, 0.05))
+		# the crank
+		var k := Vector2(w * 0.64, h * 0.7)
+		draw_circle(k, h * 0.055, Color(0.92, 0.9, 0.85))
+		var arm := Vector2(cos(crank), sin(crank)) * h * 0.05
+		draw_line(k - arm, k + arm, Color(0.25, 0.22, 0.2), 10.0)
+		draw_circle(k + arm, 7.0, Color(0.95, 0.75, 0.2))
+		# the chute
+		var chute := Rect2(Vector2(w * 0.4, h * 0.8), Vector2(w * 0.2, h * 0.12))
+		draw_rect(chute, Color(0.1, 0.08, 0.08))
+		if drop >= 0.0:
+			var y := lerpf(h * 0.62, chute.get_center().y, minf(1.0, drop * 1.4))
+			var bounce := absf(sin(drop * PI * 3.0)) * (1.0 - drop) * 12.0
+			var p := Vector2(chute.get_center().x, y - bounce)
+			_capsule(p, 22.0, drop_color)
+
+	## A capsule: a coloured bottom half, a clear-white top half, a shine.
+	func _capsule(p: Vector2, r: float, col: Color) -> void:
+		draw_circle(p, r + 1.5, Color(0, 0, 0, 0.35))
+		draw_circle(p, r, col)
+		var top := PackedVector2Array()
+		for i in range(13):
+			var a := PI + i * PI / 12.0
+			top.append(p + Vector2(cos(a), sin(a)) * r)
+		draw_colored_polygon(top, Color(0.95, 0.95, 0.97))
+		draw_line(p - Vector2(r, 0), p + Vector2(r, 0), col.darkened(0.3), 2.0)
+		draw_circle(p + Vector2(-r * 0.35, -r * 0.45), r * 0.2, Color(1, 1, 1, 0.9))
+
+
+## The gacha machine screen.
+func show_gacha() -> void:
+	_keep_menu_name()
+	world.hide_carousel()
+	_gacha_busy = false
+	var box := _paper(660.0)
+	box.add_child(_label("GACHA MACHINE", 52, Color(0.36, 0.06, 0.05), true))
+	var left := Gacha.remaining(owned).size()
+	var total := Gacha.pool().size()
+	box.add_child(_label("%d COIN%s · %d/%d COLLECTED" % [coins, "" if coins == 1 else "S", total - left, total], 26, Palette.CARD_INK, true))
+	_gacha_machine = GachaMachine.new()
+	_gacha_machine.custom_minimum_size = Vector2(0, 560)
+	_gacha_machine.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_gacha_machine.capsule_seed = randi()
+	box.add_child(_gacha_machine)
+	box.add_child(_label("Win a round: +1 coin. Win the match: +1 more. Card skins, shotgun skins and costumes inside, never a repeat.", 17, Palette.CARD_INK, true))
+	var spin: Button
+	if left == 0:
+		spin = _paper_button("YOU'VE GOT EVERYTHING!", _noop, 26)
+		spin.disabled = true
+	elif coins <= 0:
+		spin = _paper_button("WIN ROUNDS TO EARN COINS", _noop, 24)
+		spin.disabled = true
+	else:
+		spin = _paper_button("SPIN · 1 COIN", _spin_gacha, 32)
+		Palette.accent(spin, Palette.GOLD)
+	box.add_child(spin)
+	box.add_child(_paper_button("BACK", show_menu, 24))
+
+
+func _spin_gacha() -> void:
+	if _gacha_busy or coins <= 0 or _gacha_machine == null:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var prize := Gacha.roll(owned, rng)
+	if prize == "":
+		return
+	_gacha_busy = true
+	coins -= 1
+	owned[prize] = true
+	var pv := Gacha.split(prize)
+	_save_settings()
+	var m := _gacha_machine
+	var rarity := Gacha.rarity(pv[0], pv[1])
+	m.drop_color = Gacha.RARITY_COLORS[rarity]
+	_sound("chip")
+	var t := create_tween()
+	t.tween_method(func(v: float) -> void:
+		if is_instance_valid(m):
+			m.shake = v
+			m.crank = v * TAU * 1.5
+			m.queue_redraw(), 0.0, 1.0, 1.1)
+	t.tween_callback(func() -> void: _sound("spin"))
+	t.tween_method(func(v: float) -> void:
+		if is_instance_valid(m):
+			m.shake = 1.0 - v
+			m.drop = v
+			m.queue_redraw(), 0.0, 1.0, 0.9)
+	t.tween_callback(func() -> void: _sound("clunk"))
+	t.tween_interval(0.35)
+	t.tween_callback(_reveal_prize.bind(prize))
+
+
+## The capsule pops open: what you won, how rare, and a way to use it.
+func _reveal_prize(prize: String) -> void:
+	_gacha_busy = false
+	var pv := Gacha.split(prize)
+	var rarity := Gacha.rarity(pv[0], pv[1])
+	_sound("fanfare" if rarity in ["epic", "legendary"] else "ding")
+	if rarity == "legendary":
+		_flash(Palette.GOLD)
+	var box := _open_overlay(0.94, false, "reveal")
+	var banner := _label(Gacha.RARITY_NAMES[rarity] + "!", 56 if rarity == "legendary" else 44, Gacha.RARITY_COLORS[rarity], true)
+	banner.add_theme_color_override("font_outline_color", Color.BLACK)
+	banner.add_theme_constant_override("outline_size", 8)
+	box.add_child(banner)
+	box.add_child(_label(Gacha.prize_kind(prize), 22, Palette.DIM, true))
+	box.add_child(_title(Gacha.prize_name(prize), Palette.AMBER))
+	match pv[0]:
+		"card":
+			var sp := SkinPreview.new()
+			sp.skin_id = str(pv[1])
+			sp.custom_minimum_size = Vector2(320, 230)
+			var holder := CenterContainer.new()
+			holder.add_child(sp)
+			box.add_child(holder)
+			var fact := CardSkins.fact(str(pv[1]))
+			if fact != "":
+				box.add_child(_label("DID YOU KNOW? " + fact, 22, Palette.INK, true))
+				_log("DID YOU KNOW? " + fact)
+			box.add_child(_button("USE THESE CARDS", _closing(func() -> void: _set_card_skin(str(pv[1])))))
+		"gun":
+			var gp := GunPreview.new()
+			gp.skin_id = str(pv[1])
+			gp.custom_minimum_size = Vector2(0, 170)
+			box.add_child(gp)
+			box.add_child(_button("USE THIS SHOTGUN", _closing(func() -> void: _set_gun_skin(str(pv[1])))))
+		_:
+			box.add_child(_label("Find it in the character creator: CHARACTER, then +.", 22, Palette.INK, true))
+	box.add_child(_button("SPIN AGAIN · %d LEFT" % coins if coins > 0 and not Gacha.remaining(owned).is_empty() else "BACK TO THE MACHINE", _closing(show_gacha)))
 
 
 # ================================================================ unlocks
@@ -2035,6 +2333,7 @@ func _count_stats(kind: String, d: Dictionary) -> void:
 		"round_end":
 			if int(d.get("winner", -1)) == me:
 				_bump({"round_wins": 1})
+				_earn(Gacha.COIN_PER_ROUND, "for winning the round")
 		"shot":
 			_last_shooter = int(d.get("shooter", -1))
 			if _last_shooter == me and int(d.get("damage", 0)) > 0 and int(d.get("target", -1)) != me:
@@ -2050,25 +2349,25 @@ func _count_stats(kind: String, d: Dictionary) -> void:
 			var more := {"matches": 1, "games_tried": tried_kinds.size() - int(stats.get("games_tried", 0))}
 			if int(d.get("winner", -1)) == me:
 				more["match_wins"] = 1
+				_earn(Gacha.COIN_PER_MATCH, "for winning the match")
 			_bump(more)
 
 
-## Adds to your stats, saves, and shouts about anything that just unlocked.
+## Adds to your stats and saves.
 func _bump(more: Dictionary) -> void:
-	var before := stats.duplicate()
 	for k in more:
 		stats[k] = int(stats.get(k, 0)) + int(more[k])
 	_save_settings()
-	var fresh := Unlocks.newly_unlocked(before, stats)
-	if fresh.is_empty():
+
+
+## Gacha coins for a win.
+func _earn(n: int, why: String) -> void:
+	if n <= 0:
 		return
-	for n in fresh:
-		_log("UNLOCKED: %s." % n)
-	for id in CardSkins.RETRO:
-		if not Unlocks.is_unlocked("card", id, before) and Unlocks.is_unlocked("card", id, stats):
-			_log("DID YOU KNOW? " + CardSkins.fact(id))
-	_sound("fanfare")
-	world.announce("UNLOCKED\n%s" % "\n".join(fresh.slice(0, 3)))
+	coins += n
+	_save_settings()
+	_log("+%d GACHA COIN%s %s (you have %d)." % [n, "" if n == 1 else "S", why, coins])
+	_sound("chip")
 
 
 ## Every game event's sound.

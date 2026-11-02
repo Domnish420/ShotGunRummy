@@ -498,4 +498,6 @@ static func build_shotgun() -> Node3D:
 	guard.ring_segments = 4
 	mesh(g, guard, steel, Vector3(0, -0.065, 0.08), Vector3(0, 0, PI / 2.0))
 	box(g, Vector3(0.008, 0.03, 0.008), steel, Vector3(0, -0.06, 0.075)) # trigger
+	g.set_meta("steel", steel) # for shotgun skins
+	g.set_meta("wood", wood)
 	return g
