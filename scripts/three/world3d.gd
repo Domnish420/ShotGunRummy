@@ -55,7 +55,6 @@ var _outline_mats := {}
 var _back_mat: StandardMaterial3D
 var _cam_home := Transform3D()
 var _menu_mode := true
-var _menu_t := 0.0
 var _last := {} # the last sync, so we can redo it when textures arrive
 var _viewer := 0
 var _gun_pose := ""
@@ -74,13 +73,34 @@ var _console: Node3D # the cartridge slot in the middle of the table
 var _cartridge: Node3D
 var _cartridge_kind := ""
 var _chip_seat := -99 # where the dealer chip sits (relative to the viewer)
-const PREVIEW_SPOT := Vector3(-2.15, -0.78, -1.0) # by the bottle shelf
+const PREVIEW_SPOT := Vector3(2.0, -0.78, 0.9) # in front of the wardrobe
 const GACHA_SPOT := Vector3(2.35, -0.78, -1.7) # the gacha machine, back right
 
 var gacha_machine: Node3D
 var _gacha_view := false
+
+# ---- the room: you stand at the front, look round, and tap where to go
+const HUB_POS := Vector3(0.0, 0.62, 2.35)
+var _room := false # in the room (not at the table playing)
+var _focus := "" # the station you've gone to, "" while looking round
+var _yaw := 0.0
+var _pitch := -0.12
+var _view_yaw := 0.0
+var _view_pitch := -0.12
+var _room_hold := 0.0 # seconds the camera is still walking back
+var _signs := {} # station -> Label3D
+var _room_fill: OmniLight3D # a soft light over the front of the room, only while you're in it
+var _hover := ""
+## Each station: the sign's spot, and where you tap (as well as the sign).
+const STATIONS := {
+	"table": {"sign": Vector3(0, 0.55, 0), "spot": Vector3(0, 0.0, 0), "name": "PLAY"},
+	"wardrobe": {"sign": Vector3(2.75, 1.5, 0.9), "spot": Vector3(2.75, 0.3, 0.9), "name": "WARDROBE"},
+	"bar": {"sign": Vector3(-2.45, 0.75, -0.85), "spot": Vector3(-2.45, 0.25, -0.85), "name": "BAR"},
+	"gacha": {"sign": Vector3(2.35, 0.95, -1.7), "spot": Vector3(2.35, 0.1, -1.7), "name": "GACHA"},
+	"door": {"sign": Vector3(0.9, 1.75, -3.0), "spot": Vector3(0.9, 0.25, -3.05), "name": "EXIT"},
+}
 var _gacha_light: SpotLight3D
-const PREVIEW_CAM := Vector3(0.0, 1.15, 3.1) # from the spot: the gap beside the table
+const PREVIEW_CAM := Vector3(-1.75, 1.15, 2.0) # from the spot: the gap beside the table
 
 
 func _ready() -> void:
@@ -92,6 +112,7 @@ func _ready() -> void:
 	cartridge_art.built.connect(_on_cartridge_art)
 	textures.built.connect(_on_textures_built)
 	_build_room()
+	_build_signs()
 	gacha_machine = Gacha3D.new()
 	gacha_machine.position = GACHA_SPOT
 	gacha_machine.rotation.y = -0.5 # turned a little towards the room
@@ -419,6 +440,9 @@ func _fit_camera() -> void:
 	if not _preview.is_empty():
 		_aim_preview()
 		return
+	if _room:
+		camera.fov = 62.0 if not _landscape else 52.0
+		return
 	# wide screens look a little further across the table, to see faces
 	if _landscape:
 		camera.look_at_from_position(Vector3(0, 1.3, 1.8), Vector3(0, 0.18, -0.45), Vector3.UP)
@@ -450,11 +474,8 @@ func _process(delta: float) -> void:
 		_cone.set_shader_parameter("flicker", lamp.light_energy / LAMP)
 	if _gacha_view:
 		return
-	if _menu_mode:
-		# drift slowly round the table behind the menus
-		_menu_t += delta * 0.12
-		var pos := Vector3(sin(_menu_t) * 1.7, 1.25, cos(_menu_t) * 2.0)
-		camera.look_at_from_position(pos, Vector3(0, 0.1, 0), Vector3.UP)
+	if _room and _focus == "":
+		_drive_room(delta)
 
 
 ## A new match is starting: its first round gets dealt even if the last
@@ -465,6 +486,12 @@ func reset_rounds() -> void:
 
 ## The customiser: one character standing in the room, turning slowly.
 func show_preview(look: Dictionary) -> void:
+	if _focus != "wardrobe":
+		_focus = "wardrobe"
+		for k in _signs:
+			_signs[k].visible = false
+		_set_robe_doors(true)
+		sfx.emit("open")
 	var angle := 0.0
 	if not _preview.is_empty():
 		angle = _preview["node"].rotation.y
@@ -501,9 +528,176 @@ func hide_preview() -> void:
 	_fit_camera()
 
 
+# ================================================================ the room
+
+## Into the room: the camera walks back to where you stand and you can look
+## round. The signs over each station come on.
+func enter_room() -> void:
+	_room = true
+	_focus = ""
+	if _room_fill == null:
+		_room_fill = OmniLight3D.new()
+		_room_fill.position = Vector3(0.0, 1.3, 2.0)
+		_room_fill.light_color = Color(0.9, 0.78, 0.62)
+		_room_fill.light_energy = 1.1
+		_room_fill.omni_range = 3.6
+		_room_fill.omni_attenuation = 1.2
+		add_child(_room_fill)
+	_room_fill.visible = true
+	lamp.shadow_enabled = false # no big table shadow across the floor while you look round
+	_set_robe_doors(false)
+	_set_door(false)
+	camera.fov = 62.0 if not _landscape else 52.0
+	_room_hold = 0.6
+	_move_camera(_hub_transform(_view_yaw, _view_pitch), 0.6)
+	for k in _signs:
+		_signs[k].visible = true
+
+
+## At the table, playing: no room.
+func leave_room() -> void:
+	_room = false
+	_focus = ""
+	if _room_fill != null:
+		_room_fill.visible = false
+	lamp.shadow_enabled = true
+	for k in _signs:
+		_signs[k].visible = false
+
+
+func in_room() -> bool:
+	return _room
+
+
+## Drag to look round (in the 3D view's pixels).
+func room_look(rel: Vector2) -> void:
+	if not _room or _focus != "":
+		return
+	_yaw = clampf(_yaw - rel.x * 0.006, -2.3, 2.3)
+	_pitch = clampf(_pitch - rel.y * 0.004, -0.75, 0.35)
+
+
+func _hub_transform(yaw: float, pitch: float) -> Transform3D:
+	var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)
+	return Transform3D(b, HUB_POS)
+
+
+func _drive_room(delta: float) -> void:
+	# arrow keys (or A and D) turn you too
+	var turn := Input.get_axis("ui_right", "ui_left")
+	if Input.is_key_pressed(KEY_A):
+		turn += 1.0
+	if Input.is_key_pressed(KEY_D):
+		turn -= 1.0
+	_yaw = clampf(_yaw + turn * delta * 1.6, -2.3, 2.3)
+	_view_yaw = lerpf(_view_yaw, _yaw, minf(1.0, delta * 10.0))
+	_view_pitch = lerpf(_view_pitch, _pitch, minf(1.0, delta * 10.0))
+	if _room_hold > 0.0:
+		_room_hold -= delta
+		return
+	camera.global_transform = _hub_transform(_view_yaw, _view_pitch)
+	for k in _signs:
+		var sign: Label3D = _signs[k]
+		var lit: bool = k == _hover
+		sign.modulate = Color(1, 1, 1) if lit else Color(1.0, 0.82, 0.35)
+		sign.scale = Vector3.ONE * (1.2 if lit else 1.0) * (1.0 + 0.04 * sin(Time.get_ticks_msec() / 300.0 + sign.position.x))
+
+
+func _build_signs() -> void:
+	for k in STATIONS:
+		var sign := Label3D.new()
+		sign.text = STATIONS[k]["name"]
+		sign.font = load("res://fonts/VT323.woff2")
+		sign.font_size = 96
+		sign.pixel_size = 0.003
+		sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sign.no_depth_test = true
+		sign.outline_size = 18
+		sign.outline_modulate = Color(0, 0, 0, 0.9)
+		sign.position = STATIONS[k]["sign"]
+		sign.visible = false
+		add_child(sign)
+		_signs[k] = sign
+
+
+## The station under a tap (in the 3D view's pixels), or "".
+func room_pick(at: Vector2) -> String:
+	if not _room or _focus != "":
+		return ""
+	var reach := get_viewport().get_visible_rect().size.y * 0.13
+	var best := ""
+	var best_d := reach
+	for k in STATIONS:
+		for p in [STATIONS[k]["sign"], STATIONS[k]["spot"]]:
+			if camera.is_position_behind(p):
+				continue
+			var d := at.distance_to(camera.unproject_position(p))
+			if d < best_d:
+				best_d = d
+				best = k
+	return best
+
+
+## Light up the sign under the mouse.
+func room_hover(at: Vector2) -> String:
+	_hover = room_pick(at)
+	return _hover
+
+
+## Go to a station: the camera walks over; the signs go off. (The wardrobe
+## and the gacha machine bring their own views.)
+func focus_station(id: String) -> void:
+	_focus = id
+	_hover = ""
+	for k in _signs:
+		_signs[k].visible = false
+	match id:
+		"table":
+			_move_camera(Transform3D(Basis(), Vector3(0, 0.78, 1.75)).looking_at(Vector3(0, -0.05, 0), Vector3.UP), 0.7)
+		"bar":
+			camera.fov = 56.0 if not _landscape else 48.0
+			_move_camera(Transform3D(Basis(), Vector3(-0.75, 0.5, 0.35)).looking_at(Vector3(-2.6, 0.18, -0.9), Vector3.UP), 0.7)
+		"door":
+			camera.fov = 56.0 if not _landscape else 48.0
+			_move_camera(Transform3D(Basis(), Vector3(0.75, 0.45, -1.0)).looking_at(Vector3(0.9, 0.3, -3.1), Vector3.UP), 0.7)
+
+
+## The door swings open (or shut).
+func _set_door(open: bool) -> void:
+	var hinge := get_node_or_null("DoorHinge") as Node3D
+	if hinge == null:
+		return
+	var t := hinge.create_tween()
+	t.tween_property(hinge, "rotation:y", 1.35 if open else 0.0, 0.7 if open else 0.3).set_trans(Tween.TRANS_SINE)
+
+
+## Out you go: the door swings open and the camera walks through.
+func open_door() -> void:
+	sfx.emit("open")
+	_set_door(true)
+	_move_camera(Transform3D(Basis(), Vector3(0.9, 0.35, -2.2)).looking_at(Vector3(0.9, 0.35, -4.0), Vector3.UP), 1.0)
+
+
+## The wardrobe's doors, open while you're dressing.
+func _set_robe_doors(open: bool) -> void:
+	var robe := get_node_or_null("Wardrobe") as Node3D
+	if robe == null:
+		return
+	for n in ["RobeDoorL", "RobeDoorR"]:
+		var d := robe.get_node_or_null(n) as Node3D
+		if d == null:
+			continue
+		var side := -1.0 if n == "RobeDoorL" else 1.0
+		var t := d.create_tween()
+		t.tween_property(d, "rotation:y", side * -1.9 if open else 0.0, 0.5).set_trans(Tween.TRANS_SINE)
+
+
 ## Walk over to the gacha machine: the camera faces it, a spotlight on it.
 func show_gacha() -> void:
 	hide_preview()
+	_focus = "gacha"
+	for k in _signs:
+		_signs[k].visible = false
 	_gacha_view = true
 	if _gacha_light == null:
 		_gacha_light = SpotLight3D.new()
@@ -554,6 +748,10 @@ func set_menu_mode(on: bool) -> void:
 	hide_preview()
 	hide_gacha()
 	_menu_mode = on
+	if on:
+		enter_room()
+	else:
+		leave_room()
 	if on:
 		_last = {}
 		_round_seen = 0

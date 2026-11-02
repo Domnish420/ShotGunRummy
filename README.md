@@ -23,11 +23,31 @@ other games don't).
 - **Poker**: Texas Hold'em, betting shells instead of chips. Fold and
   you're safe; stay in and you might get shot.
 
+### The room
+
+There's no menu screen: the menu is the room. You stand at the front and
+**drag (or swipe) to look around** (arrow keys or A and D on a computer
+turn you too). Each station has a sign floating over it; **tap it** (or the
+thing itself) and you walk over:
+
+- **PLAY**, the table: the cartridges, then VS AI, pass the phone, host or
+  join a lobby.
+- **WARDROBE**, on the right wall: its doors swing open and your character
+  steps out in front of it to be dressed. Card skins and shotgun skins are in
+  here too.
+- **BAR**, by the bottle shelf under the pink neon: settings (your name,
+  graphics, sound).
+- **GACHA**, the machine in the back corner.
+- **EXIT**, the door: leave the game, and it swings open as you go.
+
+The room code is in `scripts/three/world3d.gd` (look for "the room"), the
+furniture in `scripts/three/props.gd`.
+
 ### Cartridges
 
 Each game is a cartridge in the style of the early-2000s handhelds: a big
-wide plastic cart with its title drawn like a handheld game logo. **CARTRIDGES**
-on the main menu brings them up in front of you: swipe (or tap the arrows) to
+wide plastic cart with its title drawn like a handheld game logo. Tapping the
+**table** in the room brings them up in front of you: swipe (or tap the arrows) to
 scroll through them. Each one ticks past and plays its own little tune (made
 in code for now, in `scripts/audio/chiptune.gd`, until the real music). The
 words float instead of sitting in boxes: **PLAY** slots the cartridge into
@@ -65,7 +85,7 @@ over when they're knocked out. They live in `models/characters/`.
 
 ### Characters
 
-**CHARACTER** on the main menu opens character select: a grid of the 19
+The **wardrobe** in the room opens character select: a grid of the 19
 ready-made characters (The Gambler, The Undertaker, The Cowpoke, The Dealer…),
 then any you've made, then a **+** box. The **+** opens the creator: name your
 character and pick from 9 bodies, 8 outfit colours, 7 hats (their own, bowler,
@@ -91,7 +111,7 @@ character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 ### The gacha machine
 
 Every round you win gives you a **gacha coin**, and winning the match gives
-one more (you start with 3). **GACHA MACHINE** on the main menu walks you over
+one more (you start with 3). The **gacha machine** in the room's corner walks you over
 to the machine in the corner of the room (`scripts/three/gacha3d.gd`). You
 do it by hand: **drag the coin** into the slot, **turn the crank** by
 dragging round in circles (twice round; every quarter turn clicks and the
@@ -105,7 +125,7 @@ coins and what's inside are in `scripts/core/gacha.gd`.
 
 **Shotgun skins** (Standard Issue, Rust Bucket, Blackout, Swamp Camo, Chrome,
 Bone Saw, Candy Stripe, Blood Orange, Neon Nights, Toxic, Solid Gold) are
-picked from **SHOTGUN** on the menu. Whoever holds the gun shows their skin,
+picked from **SHOTGUN** in the wardrobe. Whoever holds the gun shows their skin,
 so everyone at the table sees it, online too (`scripts/core/gun_skins.gd`).
 
 ### Your name, unlocks and card skins
@@ -119,7 +139,7 @@ gacha machine, and each lock says how rare it is. Ready-made characters that
 use a locked part are locked too. Anything you'd already unlocked from your
 stats before the machine arrived is yours to keep.
 
-**Card skins.** **CARDS** on the main menu picks how your cards look, front
+**Card skins.** **CARDS** in the wardrobe picks how your cards look, front
 and back. 16 skins: Classic, Casino Felt, Candy Corn, Blood Money (shotgun
 shells), Barbed Wire, Pumpkin, Midnight (stars and a moon), Bone Yard
 (skulls), Noir, Rave (neon), Blueprint, Wanted (a bullseye), Spider Web,
@@ -136,7 +156,7 @@ copy of its back's pattern, so both sides match. It's just for you:
 everyone at the table sees their own skin. Skins are in
 `scripts/ui/card_skins.gd`, drawn by `scripts/ui/card_art.gd`.
 
-Change the sharpness under **GRAPHICS** on the main menu or the in-game MENU:
+Change the sharpness under **GRAPHICS** at the bar or the in-game MENU:
 **PS2** (chunkiest), **PS3** (default) or **SHARP** (full resolution, no
 dithering).
 
@@ -177,7 +197,7 @@ https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_ios.html
 
 ## Playing together
 
-From the main menu:
+From the room (tap the table):
 
 - **HOST A LOBBY**: your phone runs the game. Others join, then you press START.
 - **JOIN A LOBBY**: lobbies on the same Wi-Fi show up automatically. If none
@@ -512,6 +532,10 @@ AIs through the real screens:
 ```
 godot --headless --path . -s tests/ui_ai_check.gd
 ```
+
+`tests/ui_room_check.gd` walks the room (looking round, tapping every station
+and coming back) and `tests/ui_gacha_check.gd` spins the gacha machine by hand
+and with AUTO.
 
 `tests/ui_smoke.gd` plays a whole 3-player match through the real screens and
 can save screenshots (needs a window, so leave off `--headless`):

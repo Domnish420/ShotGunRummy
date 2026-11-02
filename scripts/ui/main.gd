@@ -550,42 +550,179 @@ func show_menu() -> void:
 	if profile_name == "":
 		show_name_screen()
 		return
-	var box := _paper()
-	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
-	box.add_child(_paper_button("CARTRIDGES: %s  ▸" % _game_title(game_kind, normal_mode), show_cartridges, 26))
 	world.set_cartridge(game_kind)
-	if menu_message != "":
-		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
-		menu_message = ""
-	box.add_child(_paper_button("CHARACTER: %s" % str(my_look.get("name", "CUSTOM")), _open_customiser, 28))
-	var gacha := _paper_button("GACHA MACHINE · %d COIN%s" % [coins, "" if coins == 1 else "S"], show_gacha, 28)
-	Palette.accent(gacha, Palette.GOLD)
-	box.add_child(gacha)
-	var skins_row := HBoxContainer.new()
-	skins_row.add_theme_constant_override("separation", 8)
-	for b in [_paper_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 20), _paper_button("SHOTGUN: %s" % GunSkins.skin_name(gun_skin), show_gun_skins, 20)]:
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.clip_text = true
-		skins_row.add_child(b)
-	box.add_child(skins_row)
-	if OS.has_feature("web"):
-		# browsers can't open the connections lobbies use
-		box.add_child(_label("Lobbies with friends need the download version. Here you can play on this device.", 22, Palette.CARD_INK, true))
-	else:
-		box.add_child(_paper_button("HOST A LOBBY", _on_host_pressed))
-		box.add_child(_paper_button("JOIN A LOBBY", _on_join_pressed))
-	box.add_child(_paper_button("PLAY ON THIS PHONE", _on_this_phone_pressed, 28))
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 8)
-	for b in [_paper_button("GRAPHICS: %s" % graphics, _cycle_graphics, 24), _paper_button("SOUND: %s" % ("ON" if sound_on else "OFF"), _menu_sound, 24)]:
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row2.add_child(b)
-	box.add_child(row2)
-	box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 20, Palette.CARD_INK, true))
+	_room_hud()
 	if not tutorial_offered:
 		tutorial_offered = true
 		_save_settings()
 		_offer_tutorial()
+
+
+# ================================================================ the room
+
+var _room_press := Vector2.ZERO
+var _room_moved := 0.0
+var _room_down := false
+
+## The room is the menu: drag to look round, tap a station to go to it.
+## Up top, who you are and your coins; at the bottom, how it works.
+func _room_hud() -> void:
+	_close_overlay()
+	_clear(screen)
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_room_input)
+	screen.add_child(_full(touch))
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 30)
+	margin.add_theme_constant_override("margin_bottom", 28)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 6)
+	margin.add_child(col)
+	var title := _label("SHOTGUN CARDS", 44, Color(0.85, 0.15, 0.1), true)
+	var who := _label("%s · %d GACHA COIN%s" % [profile_name, coins, "" if coins == 1 else "S"], 24, Palette.INK, true)
+	var parts: Array = [title, who]
+	if menu_message != "":
+		parts.append(_label(menu_message, 24, Palette.PINK, true))
+		menu_message = ""
+	var gap := Control.new()
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parts.append(gap)
+	parts.append(_label("DRAG TO LOOK AROUND · TAP SOMETHING TO GO TO IT", 20, Palette.DIM, true))
+	for l in parts:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if l is Label:
+			l.add_theme_color_override("font_outline_color", Color.BLACK)
+			l.add_theme_constant_override("outline_size", 8)
+		col.add_child(l)
+
+
+func _on_room_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_room_down = true
+			_room_press = event.position
+			_room_moved = 0.0
+		elif _room_down:
+			_room_down = false
+			if _room_moved < 14.0:
+				_go_station(world.room_pick(_to_view(event.position)))
+	elif event is InputEventMouseMotion:
+		if _room_down:
+			_room_moved += event.relative.length()
+			world.room_look(event.relative)
+		else:
+			var over := world.room_hover(_to_view(event.position))
+			(screen.get_child(0) as Control).mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if over != "" else Control.CURSOR_ARROW
+
+
+## Off to a station.
+func _go_station(id: String) -> void:
+	if id == "":
+		return
+	_sound("select")
+	match id:
+		"table":
+			show_cartridges()
+		"wardrobe":
+			_open_customiser()
+		"bar":
+			show_bar()
+		"gacha":
+			show_gacha()
+		"door":
+			show_door()
+
+
+## A dark panel along the bottom (the room shows above it). Returns its box.
+func _station_panel(title: String) -> VBoxContainer:
+	_close_overlay()
+	_clear(screen)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 36)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(col)
+	var head := _label(title, 48, Palette.GOLD, true)
+	head.add_theme_color_override("font_outline_color", Color.BLACK)
+	head.add_theme_constant_override("outline_size", 10)
+	col.add_child(head)
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.88), Palette.BUTTON_EDGE, 2, 4, 14))
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	return box
+
+
+func _panel_button(box: Container, text: String, on_press: Callable, size: int = 26) -> Button:
+	var b := _button(text, on_press, size)
+	b.custom_minimum_size = Vector2(0, 58)
+	box.add_child(b)
+	return b
+
+
+## The bar: settings over a drink.
+func show_bar() -> void:
+	world.focus_station("bar")
+	var box := _station_panel("THE BAR")
+	box.add_child(_label("Pull up a stool. Settings are on the house.", 20, Palette.DIM, true))
+	_panel_button(box, "NAME: %s" % profile_name, _change_name)
+	_panel_button(box, "GRAPHICS: %s" % graphics, func() -> void:
+		_cycle_graphics_only()
+		show_bar())
+	_panel_button(box, "SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
+		_toggle_sound()
+		show_bar())
+	box.add_child(_label("New to a game? Every cartridge at the table has a DEMO.", 18, Palette.DIM, true))
+	if not OS.has_feature("web"):
+		box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 18, Palette.DIM, true))
+	var back := _panel_button(box, "BACK", show_menu, 24)
+	Palette.accent(back, Palette.DIM)
+
+
+## The door: leave the game.
+func show_door() -> void:
+	world.focus_station("door")
+	var box := _station_panel("THE DOOR")
+	if OS.has_feature("web"):
+		box.add_child(_label("To leave, just close the tab. See you soon.", 24, Palette.INK, true))
+	else:
+		box.add_child(_label("Calling it a night?", 26, Palette.INK, true))
+		var go := _panel_button(box, "LEAVE THE GAME", _leave_game, 28)
+		Palette.accent(go, Palette.RED)
+	_panel_button(box, "STAY", show_menu, 24)
+
+
+func _leave_game() -> void:
+	_clear(screen)
+	_save_settings()
+	world.open_door()
+	await get_tree().create_timer(1.2).timeout
+	get_tree().quit()
+
+
+## GRAPHICS without leaving the screen you're on.
+func _cycle_graphics_only() -> void:
+	var order := GRAPHICS.keys()
+	graphics = order[(order.find(graphics) + 1) % order.size()]
+	_save_settings()
+	_fit_view()
 
 
 ## "SHOTGUN GO FISH", or just "GO FISH" in normal mode.
@@ -607,6 +744,8 @@ func _normal_unlocked(kind: String) -> bool:
 ## The cartridges: swipe through them (each plays its little tune), then
 ## PLAY or DEMO. The words float; there are no boxes here.
 func show_cartridges() -> void:
+	if world.in_room():
+		world.focus_station("table")
 	if _name_edit != null and is_instance_valid(_name_edit) and _name_edit.is_inside_tree():
 		var typed := _name_edit.text.strip_edges().to_upper().left(10)
 		if typed != "":
@@ -1296,6 +1435,14 @@ func show_character_select() -> void:
 			b.custom_minimum_size = Vector2(110, 64)
 			buttons.add_child(b)
 	box.add_child(buttons)
+	var skins := HBoxContainer.new()
+	skins.add_theme_constant_override("separation", 8)
+	for b in [_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 20), _button("SHOTGUN: %s" % GunSkins.skin_name(gun_skin), show_gun_skins, 20)]:
+		b.custom_minimum_size = Vector2(0, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		skins.add_child(b)
+	box.add_child(skins)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 8)
 	var rename := _button("NAME: %s" % profile_name, _change_name, 22)
@@ -2002,7 +2149,7 @@ func show_card_skins() -> void:
 		sections.add_child(grid)
 		for id in section[1]:
 			grid.add_child(_skin_cell(id))
-	box.add_child(_paper_button("BACK", show_menu, 26))
+	box.add_child(_paper_button("BACK", _open_customiser, 26)) # back to the wardrobe
 
 
 ## One skin in the picker: face and back, its name, its story if it's a
@@ -2129,7 +2276,7 @@ func show_gun_skins() -> void:
 		b.custom_minimum_size = Vector2(0, 54)
 		cell.add_child(b)
 		grid.add_child(cell)
-	box.add_child(_paper_button("BACK", show_menu, 26))
+	box.add_child(_paper_button("BACK", _open_customiser, 26)) # back to the wardrobe
 
 
 func _set_gun_skin(id: String) -> void:

@@ -129,12 +129,19 @@ static func build_room(parent: Node3D, table_top: float, table_rx: float, table_
 
 	# a door in the back wall, with an EXIT sign over it
 	var door_wood := tex_mat("wood", Color(0.55, 0.42, 0.32), 1.2, 0.85, 0.0, false)
-	box(parent, Vector3(1.0, 2.05, 0.06), door_wood, Vector3(0.9, floor_y + 1.03, -3.13))
+	# hung on a hinge at its left edge, so it can swing open
+	var hinge := Node3D.new()
+	hinge.name = "DoorHinge"
+	hinge.position = Vector3(0.4, floor_y + 1.03, -3.11)
+	parent.add_child(hinge)
+	box(hinge, Vector3(1.0, 2.05, 0.06), door_wood, Vector3(0.5, 0, -0.02))
 	var frame := tex_mat("wood", Color(0.3, 0.25, 0.2), 1.5)
 	box(parent, Vector3(1.16, 0.08, 0.1), frame, Vector3(0.9, floor_y + 2.1, -3.12))
 	for x in [0.36, 1.44]:
 		box(parent, Vector3(0.08, 2.1, 0.1), frame, Vector3(x, floor_y + 1.05, -3.12))
-	ball(parent, 0.035, 6, tex_mat("metal", Color(0.9, 0.85, 0.6), 4.0, 0.4, 0.8), Vector3(0.52, floor_y + 1.0, -3.08))
+	ball(hinge, 0.035, 6, tex_mat("metal", Color(0.9, 0.85, 0.6), 4.0, 0.4, 0.8), Vector3(0.88, -0.03, 0.03))
+	# behind it, the night outside
+	box(parent, Vector3(1.0, 2.05, 0.02), glow(Color(0.05, 0.07, 0.14), 1.0), Vector3(0.9, floor_y + 1.03, -3.17))
 	var sign_y := floor_y + 2.32
 	box(parent, Vector3(0.42, 0.16, 0.05), glow(Color(0.85, 0.12, 0.08), 1.6), Vector3(0.9, sign_y, -3.11))
 	var exit := Label3D.new()
@@ -165,6 +172,81 @@ static func build_room(parent: Node3D, table_top: float, table_rx: float, table_
 		var tall := 0.22 + (i % 3) * 0.05
 		cyl(parent, 0.035, 0.04, tall, 7, gm, Vector3(-2.98, floor_y + h + 0.02 + tall * 0.5, z))
 		cyl(parent, 0.012, 0.03, 0.08, 6, gm, Vector3(-2.98, floor_y + h + 0.06 + tall, z))
+
+	# the bar, in front of the bottle shelf: a counter, a brass foot rail,
+	# two stools and a neon sign
+	var bar_wood := tex_mat("wood", Color(0.42, 0.28, 0.2), 1.6)
+	var bar_top := tex_mat("wood", Color(0.3, 0.18, 0.12), 2.0, 0.45)
+	box(parent, Vector3(0.5, 1.0, 2.1), bar_wood, Vector3(-2.5, floor_y + 0.5, -0.85))
+	box(parent, Vector3(0.62, 0.06, 2.2), bar_top, Vector3(-2.47, floor_y + 1.03, -0.85))
+	var brass := tex_mat("metal", Color(0.95, 0.75, 0.35), 4.0, 0.35, 0.85)
+	cyl(parent, 0.018, 0.018, 2.1, 6, brass, Vector3(-2.18, floor_y + 0.18, -0.85), Vector3(PI / 2.0, 0, 0))
+	for z in [-1.45, -0.35]:
+		cyl(parent, 0.17, 0.17, 0.05, 10, plain(Color(0.55, 0.08, 0.06), 0.6), Vector3(-1.95, floor_y + 0.72, z))
+		cyl(parent, 0.025, 0.025, 0.7, 6, brass, Vector3(-1.95, floor_y + 0.36, z))
+		cyl(parent, 0.14, 0.16, 0.03, 10, brass, Vector3(-1.95, floor_y + 0.02, z))
+	# a glass and a bottle on the counter
+	var bar_glass := plain(Color(0.75, 0.8, 0.8, 0.35), 0.05, 0.1)
+	bar_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cyl(parent, 0.035, 0.03, 0.09, 8, bar_glass, Vector3(-2.4, floor_y + 1.1, -0.6))
+	var whisky := plain(Color(0.45, 0.22, 0.05, 0.85), 0.1, 0.2)
+	whisky.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cyl(parent, 0.045, 0.05, 0.24, 8, whisky, Vector3(-2.55, floor_y + 1.18, -1.2))
+	var neon := Label3D.new()
+	neon.text = "BAR"
+	neon.font = load("res://fonts/VT323.woff2")
+	neon.font_size = 128
+	neon.pixel_size = 0.0035
+	neon.modulate = Color(1.0, 0.35, 0.75)
+	neon.outline_size = 0
+	neon.position = Vector3(-3.13, floor_y + 1.95, -0.9)
+	neon.rotation.y = PI / 2.0
+	parent.add_child(neon)
+	var pink := OmniLight3D.new()
+	pink.light_color = Color(1.0, 0.35, 0.75)
+	pink.light_energy = 0.7
+	pink.omni_range = 1.8
+	pink.position = Vector3(-2.9, floor_y + 1.9, -0.9)
+	parent.add_child(pink)
+
+	# lamps so you can see each corner of the room
+	for spot in [[Vector3(-2.2, floor_y + 2.3, -0.85), Color(1.0, 0.78, 0.5), 1.6, 3.0], [Vector3(2.2, floor_y + 2.4, 0.9), Color(1.0, 0.85, 0.65), 1.4, 3.0], [Vector3(1.9, floor_y + 1.6, -1.3), Color(1.0, 0.6, 0.45), 0.8, 2.0]]:
+		var lamp_light := OmniLight3D.new()
+		lamp_light.position = spot[0]
+		lamp_light.light_color = spot[1]
+		lamp_light.light_energy = spot[2]
+		lamp_light.omni_range = spot[3]
+		lamp_light.omni_attenuation = 1.3
+		parent.add_child(lamp_light)
+	# a bare bulb hanging over the bar
+	cyl(parent, 0.004, 0.004, 0.9, 4, plain(Color(0.1, 0.1, 0.1)), Vector3(-2.3, floor_y + 2.85, -0.85))
+	ball(parent, 0.05, 8, glow(Color(1.0, 0.85, 0.55), 2.0), Vector3(-2.3, floor_y + 2.38, -0.85))
+
+	# the wardrobe on the right wall, its doors on hinges
+	var robe_wood := tex_mat("wood", Color(0.5, 0.36, 0.26), 1.4)
+	var robe_dark := tex_mat("wood", Color(0.32, 0.22, 0.16), 1.6)
+	var robe := Node3D.new()
+	robe.name = "Wardrobe"
+	robe.position = Vector3(2.88, floor_y, 0.9)
+	robe.rotation.y = -PI / 2.0 # its front faces into the room
+	parent.add_child(robe)
+	box(robe, Vector3(1.0, 1.95, 0.5), robe_dark, Vector3(0, 0.975 + 0.06, 0))
+	box(robe, Vector3(1.08, 0.08, 0.56), robe_wood, Vector3(0, 2.05, 0))
+	for x in [-0.42, 0.42]:
+		box(robe, Vector3(0.08, 0.06, 0.4), robe_wood, Vector3(x, 0.03, 0))
+	# clothes inside: a rail and a few hanging coats
+	cyl(robe, 0.012, 0.012, 0.9, 6, brass, Vector3(0, 1.7, 0.02), Vector3(0, 0, PI / 2.0))
+	var coat_cols := [Color(0.55, 0.12, 0.1), Color(0.2, 0.25, 0.35), Color(0.35, 0.3, 0.2), Color(0.15, 0.15, 0.15)]
+	for i in range(4):
+		box(robe, Vector3(0.16, 0.75, 0.3), plain(coat_cols[i]), Vector3(-0.3 + i * 0.2, 1.3, 0.02), Vector3(0, 0, 0.04 * (i - 1.5)))
+	for side in [-1, 1]:
+		var door := Node3D.new()
+		door.name = "RobeDoorL" if side < 0 else "RobeDoorR"
+		door.position = Vector3(side * 0.49, 1.03, 0.26)
+		robe.add_child(door)
+		box(door, Vector3(0.48, 1.85, 0.03), robe_wood, Vector3(-side * 0.245, 0, 0))
+		box(door, Vector3(0.36, 1.5, 0.01), robe_dark, Vector3(-side * 0.245, 0, 0.018))
+		ball(door, 0.02, 6, brass, Vector3(-side * 0.44, 0, 0.03))
 
 	# crates in the back corner, pipes along the right wall
 	var crate := tex_mat("wood", Color(0.6, 0.5, 0.36), 2.0)
