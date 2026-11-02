@@ -32,6 +32,42 @@ func _initialize() -> void:
 	main.show_gacha()
 	await _frames(4)
 	check(main.world._gacha_view, "the camera goes to the machine")
+	# the first spin by hand: drag the coin in, turn the crank, tap it open
+	var m = main.world.gacha_machine
+	check(main._gacha_step == "coin" and m.coin_waiting, "a coin is waiting to go in")
+	var first_owned: int = main.owned.size()
+	m.hold_coin(m.coin_point() + Vector3(0.05, 0, 0)) # dragged, but let go away from the slot
+	m.drop_coin()
+	check(main.coins == 2 and main._gacha_step == "coin", "letting go away from the slot keeps the coin")
+	main._gacha_coin_in()
+	check(main.coins == 1, "in the slot: the coin's spent")
+	var w := 0
+	while main._gacha_step != "crank" and w < 600:
+		await process_frame
+		w += 1
+	check(main._gacha_step == "crank", "then you turn the crank")
+	for i in range(24): # a turn and a half (16 eighths a turn)
+		main._gacha_crank(PI / 8.0)
+	check(main._gacha_step == "crank" and not m.crank_done(), "not round enough yet")
+	for i in range(8):
+		main._gacha_crank(-PI / 8.0) # backwards counts too
+	check(main._gacha_step == "drop", "twice round: a capsule drops")
+	w = 0
+	while main._gacha_step != "tap" and w < 600:
+		await process_frame
+		w += 1
+	check(main._gacha_step == "tap", "then you tap it")
+	w = 0
+	while main._overlay_kind != "reveal" and w < 3000:
+		if main._gacha_step == "tap":
+			main._gacha_tap()
+		await process_frame
+		w += 1
+	check(main._overlay_kind == "reveal" and main.owned.size() == first_owned + 1, "tapped open: a prize")
+	main._close_overlay()
+	main.show_gacha()
+	await _frames(4)
+	main.coins = 2
 	for spin in range(2):
 		var before: int = main.owned.size()
 		main._spin_gacha()
@@ -50,7 +86,7 @@ func _initialize() -> void:
 		await _frames(4)
 	check(main.coins == 0, "both coins spent")
 	main._spin_gacha()
-	check(not main._gacha_busy and main.owned.size() == 2, "no coins, no spin")
+	check(not main._gacha_auto and main.owned.size() == 3, "no coins, no spin (%d prizes)" % main.owned.size())
 	main.show_menu()
 	await _frames(4)
 	check(not main.world._gacha_view, "back at the menu, away from the machine")

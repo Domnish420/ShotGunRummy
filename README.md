@@ -92,11 +92,13 @@ character on the setup screen. Presets and parts are in `scripts/core/looks.gd`.
 
 Every round you win gives you a **gacha coin**, and winning the match gives
 one more (you start with 3). **GACHA MACHINE** on the main menu walks you over
-to the machine in the corner of the room (`scripts/three/gacha3d.gd`). A
-spin flips a coin into the slot, turns the crank (the capsules tumble in the
-globe), drops a capsule down the chute into the tray, and the camera closes
-in: it wobbles (more for rarer prizes), then pops open in a flash of its
-rarity's colour. Inside is a card skin, a shotgun skin or a costume part you
+to the machine in the corner of the room (`scripts/three/gacha3d.gd`). You
+do it by hand: **drag the coin** into the slot, **turn the crank** by
+dragging round in circles (twice round; every quarter turn clicks and the
+capsules tumble in the globe), and a capsule drops down the chute into the
+tray as the camera closes in. **Tap it** to crack it open: rarer prizes take
+more taps, and it wobbles harder each time before it pops in a flash of its
+rarity's colour. **AUTO** does the lot for you. Inside is a card skin, a shotgun skin or a costume part you
 don't have yet (never a repeat). Every step has its own sound. Prizes
 are Common, Rare, Epic or Legendary; rarer ones drop less often. Odds,
 coins and what's inside are in `scripts/core/gacha.gd`.

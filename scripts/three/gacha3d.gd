@@ -169,16 +169,46 @@ func _build() -> void:
 	_coin.visible = false
 
 
-## Where the prize capsule sits once it's out, in world space (for the camera).
+## Where things are, in world space, so the screen can find them under a
+## finger: the coin, the slot, the crank and the tray.
+func coin_point() -> Vector3:
+	return _coin.global_position
+
+
+func slot_point() -> Vector3:
+	return to_global(SLOT)
+
+
+func crank_point() -> Vector3:
+	return _crank.global_position
+
+
 func tray_point() -> Vector3:
 	return to_global(TRAY)
 
 
-## Idle: the bulbs chase round slowly.
-func _process(_delta: float) -> void:
-	if not is_visible_in_tree() or busy:
+const COIN_HOME := Vector3(-0.2, 0.36, 0.5) # floating in front, waiting for you
+const CRANK_TURNS := 2.0
+
+var coin_waiting := false # the coin is out, bobbing, waiting to be dragged
+var coin_held := false
+var _turned := 0.0 # how far the crank has gone this spin (radians)
+var _clicks := 0
+var _taps := 0
+var _wobbles := 1
+var _color := Color.WHITE
+
+
+## Idle: the bulbs chase round slowly, and a waiting coin bobs and turns.
+func _process(delta: float) -> void:
+	if not is_visible_in_tree():
 		return
 	var t := Time.get_ticks_msec() / 1000.0
+	if coin_waiting and not coin_held:
+		_coin.position = COIN_HOME + Vector3(0, sin(t * 2.5) * 0.015, 0)
+		_coin.rotation = Vector3(PI / 2.0, t * 1.6, 0)
+	if busy:
+		return
 	for i in range(_bulbs.size()):
 		var lit := int(t * 3.0) % _bulbs.size() == i
 		_bulbs[i][0].albedo_color = _bulbs[i][1] if lit else _bulbs[i][1].darkened(0.45)
@@ -188,43 +218,82 @@ func _wait(seconds: float) -> void:
 	await get_tree().create_timer(seconds).timeout
 
 
-## The whole spin. `color` is the prize capsule's colour (its rarity) and
-## `wobbles` how many times it shakes before opening (rarer: more).
-## Returns when the capsule has popped open.
-func spin(color: Color, wobbles: int) -> void:
-	busy = true
+## A new spin: the coin comes out, floating in front of the machine.
+func offer_coin() -> void:
+	busy = false
 	_reset_prize()
-	# 1. the coin flips up and drops into the slot
+	_turned = 0.0
+	_clicks = 0
+	_taps = 0
 	_coin.visible = true
-	_coin.position = Vector3(-0.12, 0.72, 0.62)
-	_coin.rotation = Vector3(PI / 2.0, 0, 0)
-	sfx.emit("coin_flip")
+	_coin.position = COIN_HOME
+	coin_waiting = true
+	coin_held = false
+
+
+## Nothing to spin with: no coin out.
+func put_coin_away() -> void:
+	coin_waiting = false
+	coin_held = false
+	_coin.visible = false
+
+
+## The coin follows your finger while you drag it.
+func hold_coin(at: Vector3) -> void:
+	coin_held = true
+	_coin.global_position = at
+	_coin.rotation = Vector3(PI / 2.0, 0, PI / 2.0) # edge on, ready for the slot
+
+
+## Let go away from the slot: it floats back.
+func drop_coin() -> void:
+	coin_held = false
 	var t := create_tween()
-	t.tween_property(_coin, "position", SLOT + Vector3(0, 0.1, 0.06), 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(_coin, "rotation:y", TAU * 3.0, 0.35)
-	t.tween_property(_coin, "rotation", Vector3(PI / 2.0, 0, PI / 2.0), 0.08)
-	t.tween_property(_coin, "position", SLOT + Vector3(0, 0, 0.02), 0.12)
+	t.tween_property(_coin, "position", COIN_HOME, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Into the slot it goes.
+func insert_coin() -> void:
+	busy = true
+	coin_waiting = false
+	coin_held = false
+	var t := create_tween()
+	t.tween_property(_coin, "rotation", Vector3(PI / 2.0, 0, PI / 2.0), 0.06)
+	t.tween_property(_coin, "position", SLOT + Vector3(0, 0, 0.03), 0.12)
 	t.tween_property(_coin, "position", SLOT + Vector3(0, 0, -0.04), 0.1)
 	if t.is_running():
 		await t.finished
 	_coin.visible = false
 	sfx.emit("coin_in")
 	_flash_bulbs(Color(1.0, 0.85, 0.3), 2)
-	await _wait(0.25)
-	# 2. the crank turns twice, clicking; the capsules tumble
-	var turns := 2.0
-	var tc := create_tween()
-	tc.tween_property(_crank, "rotation:z", _crank.rotation.z - TAU * turns, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_tumble(1.5)
-	sfx.emit("rattle")
-	for i in range(int(turns * 4)):
+	await _wait(0.2)
+
+
+## Turn the crank by `delta` radians (either way counts). Clicks every
+## quarter turn and the capsules tumble. Returns how far round it is, 0..1.
+func turn_crank(delta: float) -> float:
+	_crank.rotation.z -= delta
+	_turned += absf(delta)
+	var clicks := int(_turned / (PI / 2.0))
+	while _clicks < clicks:
+		_clicks += 1
 		sfx.emit("crank")
-		if i == 4:
+		_jostle()
+		if _clicks % 2 == 1:
 			sfx.emit("rattle")
-		await _wait(1.5 / (turns * 4))
-	if tc.is_running():
-		await tc.finished
-	# 3. a capsule drops down the chute and bounces into the tray
+	return minf(1.0, _turned / (TAU * CRANK_TURNS))
+
+
+func crank_done() -> bool:
+	return _turned >= TAU * CRANK_TURNS
+
+
+## Down the chute and into the tray. `color` is the prize's rarity colour,
+## `wobbles` how many taps it takes to open (rarer: more).
+func drop(color: Color, wobbles: int) -> void:
+	_color = color
+	_wobbles = wobbles
+	_taps = 0
 	for c in _prize.get_children():
 		if c.name == "Bottom":
 			(c as MeshInstance3D).material_override = Props.plain(color, 0.3)
@@ -242,21 +311,34 @@ func spin(color: Color, wobbles: int) -> void:
 		await td.finished
 	_prize.rotation = Vector3.ZERO
 	dropped.emit()
-	await _wait(0.7)
-	# 4. it wobbles: once for a common prize, up to four times for a legendary
-	for i in range(wobbles):
-		sfx.emit("capsule_wobble")
-		var tw := create_tween()
-		var lean := 0.25 + i * 0.08
-		tw.tween_property(_prize, "rotation:z", lean, 0.07)
-		tw.tween_property(_prize, "rotation:z", -lean, 0.12)
-		tw.tween_property(_prize, "rotation:z", 0.0, 0.07)
-		if i >= 2:
-			_flash_bulbs(color, 1)
-		if tw.is_running():
-			await tw.finished
-		await _wait(0.28 - i * 0.04)
-	# 5. pop! the halves fly apart, light and sparks in the prize's colour
+
+
+## A tap on the capsule: it wobbles, harder each time. The last tap pops it
+## open (returns true once it's open).
+func tap_capsule() -> bool:
+	if not _prize.visible or _taps >= _wobbles:
+		return false
+	_taps += 1
+	if _taps >= _wobbles:
+		await _pop()
+		return true
+	sfx.emit("capsule_wobble")
+	var tw := create_tween()
+	var lean := 0.25 + _taps * 0.08
+	tw.tween_property(_prize, "rotation:z", lean, 0.07)
+	tw.tween_property(_prize, "rotation:z", -lean, 0.12)
+	tw.tween_property(_prize, "rotation:z", 0.0, 0.07)
+	if _taps >= 2:
+		_flash_bulbs(_color, 1) # a tease: something good?
+	return false
+
+
+func taps_left() -> int:
+	return maxi(0, _wobbles - _taps)
+
+
+## Pop! The halves fly apart, light and sparks in the prize's colour.
+func _pop() -> void:
 	sfx.emit("capsule_pop")
 	var top: Node3D = _prize.get_node("Top")
 	var bottom: Node3D = _prize.get_node("Bottom")
@@ -264,21 +346,38 @@ func spin(color: Color, wobbles: int) -> void:
 	tp.tween_property(top, "position", Vector3(0.02, 0.14, -0.03), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tp.parallel().tween_property(top, "rotation", Vector3(-1.2, 0.4, 0.3), 0.3)
 	tp.parallel().tween_property(bottom, "position", Vector3(0, -0.01, 0.02), 0.2)
-	burst.emit(to_global(TRAY + Vector3(0, 0.04, 0)), color, 6 + wobbles * 4)
-	_flash_bulbs(color, 3 + wobbles)
+	burst.emit(to_global(TRAY + Vector3(0, 0.04, 0)), _color, 6 + _wobbles * 4)
+	_flash_bulbs(_color, 3 + _wobbles)
 	var light := OmniLight3D.new()
-	light.light_color = color
+	light.light_color = _color
 	light.omni_range = 1.4
 	light.position = TRAY + Vector3(0, 0.08, 0.05)
 	add_child(light)
 	var tl := light.create_tween()
-	tl.tween_property(light, "light_energy", 4.0 + wobbles, 0.08)
+	tl.tween_property(light, "light_energy", 4.0 + _wobbles, 0.08)
 	tl.tween_property(light, "light_energy", 0.0, 0.9)
 	tl.tween_callback(light.queue_free)
 	if tp.is_running():
 		await tp.finished
 	await _wait(0.25)
 	busy = false
+
+
+## The capsules hop about inside the globe (one crank click's worth).
+func _jostle() -> void:
+	var gt := create_tween()
+	gt.tween_property(_globe, "position", Vector3(randf_range(-0.01, 0.01), GLOBE_Y + 0.006, 0), 0.06)
+	gt.tween_property(_globe, "position", Vector3(0, GLOBE_Y, 0), 0.08)
+	for entry in _capsules:
+		if randf() < 0.5:
+			continue
+		var c: Node3D = entry[0]
+		var home: Vector3 = entry[1]
+		var ct := c.create_tween()
+		var lift := Vector3(randf_range(-0.04, 0.04), randf_range(0.03, 0.1), randf_range(-0.04, 0.04))
+		ct.tween_property(c, "position", (home + lift).limit_length(0.22), 0.12).set_trans(Tween.TRANS_SINE)
+		ct.parallel().tween_property(c, "rotation", c.rotation + Vector3(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5), 0), 0.12)
+		ct.tween_property(c, "position", home, 0.2).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 
 
 ## Put the last prize capsule away.
@@ -291,24 +390,6 @@ func _reset_prize() -> void:
 	top.rotation = Vector3.ZERO
 	bottom.position = Vector3.ZERO
 	bottom.rotation = Vector3(PI, 0, 0)
-
-
-## The capsules jostle about inside the globe for `seconds`.
-func _tumble(seconds: float) -> void:
-	var gt := create_tween()
-	for i in range(6):
-		gt.tween_property(_globe, "position", Vector3(randf_range(-0.012, 0.012), GLOBE_Y + randf_range(0, 0.008), 0), seconds / 6.0)
-	gt.tween_property(_globe, "position", Vector3(0, GLOBE_Y, 0), 0.1)
-	for entry in _capsules:
-		var c: Node3D = entry[0]
-		var home: Vector3 = entry[1]
-		var ct := c.create_tween()
-		var hops := 3
-		for k in range(hops):
-			var lift := Vector3(randf_range(-0.05, 0.05), randf_range(0.03, 0.12), randf_range(-0.05, 0.05))
-			ct.tween_property(c, "position", (home + lift).limit_length(0.22), seconds / (hops * 2.0)).set_trans(Tween.TRANS_SINE)
-			ct.parallel().tween_property(c, "rotation", c.rotation + Vector3(randf_range(-2, 2), randf_range(-2, 2), randf_range(-2, 2)), seconds / (hops * 2.0))
-			ct.tween_property(c, "position", home, seconds / (hops * 2.0)).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 
 
 ## The bulbs blink in `color`, `times` times.

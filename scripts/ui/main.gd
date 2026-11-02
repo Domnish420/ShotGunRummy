@@ -2149,12 +2149,26 @@ func _set_gun_skin(id: String) -> void:
 var _gacha_busy := false
 var _gacha_buttons: Array = []
 var _gacha_count: Label
+var _gacha_hint: Label
+var _gacha_step := "" # "coin", "crank", "drop", "tap", "open" or ""
+var _gacha_prize := ""
+var _gacha_drag := "" # what your finger is on: "coin" or "crank"
+var _gacha_angle := 0.0 # last finger angle round the crank
+var _gacha_auto := false # AUTO is doing the spin
 
 const GACHA_WOBBLES := {"common": 1, "rare": 2, "epic": 3, "legendary": 4}
+const GACHA_HINTS := {
+	"coin": "DRAG THE COIN INTO THE SLOT",
+	"crank": "TURN THE CRANK: DRAG ROUND IN CIRCLES",
+	"drop": "HERE IT COMES...",
+	"tap": "TAP THE CAPSULE TO CRACK IT OPEN",
+	"open": "",
+}
 
 
 ## The gacha machine: the camera walks over to it in the corner of the room.
-## Coins and the collection up top, SPIN and BACK at the bottom.
+## You do it all by hand: drag the coin into the slot, turn the crank round,
+## tap the capsule open. (AUTO does it for you.)
 func show_gacha() -> void:
 	_keep_menu_name()
 	_close_overlay()
@@ -2162,6 +2176,13 @@ func show_gacha() -> void:
 	world.hide_carousel()
 	world.show_gacha()
 	_gacha_busy = false
+	_gacha_auto = false
+	_gacha_drag = ""
+	# the whole screen is the machine: drags and taps land here
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_gacha_input)
+	screen.add_child(_full(touch))
 	var margin := MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right"]:
@@ -2181,6 +2202,12 @@ func show_gacha() -> void:
 	_gacha_count.add_theme_color_override("font_outline_color", Color.BLACK)
 	_gacha_count.add_theme_constant_override("outline_size", 8)
 	col.add_child(_gacha_count)
+	_gacha_hint = _label("", 30, Palette.AMBER, true)
+	_gacha_hint.add_theme_color_override("font_outline_color", Color.BLACK)
+	_gacha_hint.add_theme_constant_override("outline_size", 8)
+	col.add_child(_gacha_hint)
+	for l in [title, _gacha_count, _gacha_hint]:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var gap := Control.new()
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2192,24 +2219,36 @@ func show_gacha() -> void:
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
 	box.add_child(_label("Win a round: +1 coin. Win the match: +1 more. Card skins, shotgun skins and costumes inside, never a repeat.", 18, Palette.DIM, true))
-	var spin: Button
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var auto := _button("AUTO", _spin_gacha, 26)
+	var back := _button("BACK", show_menu, 26)
+	for b in [auto, back]:
+		b.custom_minimum_size = Vector2(0, 60)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(b)
+	_gacha_buttons = [auto, back]
 	var left := Gacha.remaining(owned).size()
-	if left == 0:
-		spin = _button("YOU'VE GOT EVERYTHING!", _noop, 28)
-		spin.disabled = true
-	elif coins <= 0:
-		spin = _button("WIN ROUNDS TO EARN COINS", _noop, 26)
-		spin.disabled = true
+	if left == 0 or coins <= 0:
+		world.gacha_machine.put_coin_away()
+		_set_gacha_step("")
+		_gacha_hint.text = "YOU'VE GOT EVERYTHING!" if left == 0 else "WIN ROUNDS TO EARN COINS"
+		auto.disabled = true
 	else:
-		spin = _button("SPIN · 1 COIN", _spin_gacha, 34)
-		Palette.accent(spin, Palette.GOLD)
-	spin.custom_minimum_size = Vector2(0, 72)
-	box.add_child(spin)
-	var back := _button("BACK", show_menu, 24)
-	back.custom_minimum_size = Vector2(0, 52)
-	box.add_child(back)
-	_gacha_buttons = [spin, back]
+		world.gacha_machine.offer_coin()
+		_set_gacha_step("coin")
 	_update_gacha_count()
+
+
+func _set_gacha_step(step: String) -> void:
+	_gacha_step = step
+	if _gacha_hint != null and is_instance_valid(_gacha_hint):
+		_gacha_hint.text = GACHA_HINTS.get(step, "")
+		if step == "tap":
+			var left: int = world.gacha_machine.taps_left()
+			if left > 1:
+				_gacha_hint.text += " (%d TAPS)" % left
 
 
 func _update_gacha_count() -> void:
@@ -2219,30 +2258,142 @@ func _update_gacha_count() -> void:
 	_gacha_count.text = "%d COIN%s · %d/%d COLLECTED" % [coins, "" if coins == 1 else "S", total - Gacha.remaining(owned).size(), total]
 
 
-func _spin_gacha() -> void:
-	if _gacha_busy or coins <= 0:
+## Where something in the room is on screen (in the 3D view's pixels).
+func _gacha_screen(at: Vector3) -> Vector2:
+	return world.camera.unproject_position(at)
+
+
+## How close a finger has to be, in the 3D view's pixels.
+func _gacha_reach(fraction: float) -> float:
+	return float(view3d.size.y) * fraction
+
+
+## Your finger on the machine.
+func _on_gacha_input(event: InputEvent) -> void:
+	var m = world.gacha_machine
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var at := _to_view(event.position)
+		if event.pressed:
+			match _gacha_step:
+				"coin":
+					if at.distance_to(_gacha_screen(m.coin_point())) < _gacha_reach(0.09):
+						_gacha_drag = "coin"
+						_sound("tap")
+				"crank":
+					var c := _gacha_screen(m.crank_point())
+					if at.distance_to(c) < _gacha_reach(0.16):
+						_gacha_drag = "crank"
+						_gacha_angle = (at - c).angle()
+				"tap":
+					_gacha_tap()
+		else:
+			if _gacha_drag == "coin":
+				if at.distance_to(_gacha_screen(m.slot_point())) < _gacha_reach(0.08):
+					_gacha_coin_in()
+				else:
+					m.drop_coin()
+			_gacha_drag = ""
+	elif event is InputEventMouseMotion and _gacha_drag != "":
+		var at := _to_view(event.position)
+		match _gacha_drag:
+			"coin":
+				# the coin stays at its distance from the camera, under your finger
+				var cam: Camera3D = world.camera
+				var depth: float = (m.slot_point() - cam.global_position).dot(-cam.global_transform.basis.z)
+				m.hold_coin(cam.project_position(at, depth * 0.85))
+			"crank":
+				var c := _gacha_screen(m.crank_point())
+				if at.distance_to(c) < 4.0:
+					return
+				var angle := (at - c).angle()
+				_gacha_crank(wrapf(angle - _gacha_angle, -PI, PI))
+				_gacha_angle = angle
+
+
+## The coin's in: spend it, pick the prize, and on to the crank.
+func _gacha_coin_in() -> void:
+	if _gacha_step != "coin" or coins <= 0:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	var prize := Gacha.roll(owned, rng)
-	if prize == "":
+	_gacha_prize = Gacha.roll(owned, rng)
+	if _gacha_prize == "":
 		return
-	_gacha_busy = true
 	coins -= 1
-	owned[prize] = true
+	owned[_gacha_prize] = true
 	_save_settings()
 	_update_gacha_count()
-	for b in _gacha_buttons:
-		if is_instance_valid(b):
-			b.disabled = true
-	var pv := Gacha.split(prize)
+	_set_gacha_step("drop") # nothing to do while it goes in
+	_gacha_busy = true
+	await world.gacha_machine.insert_coin()
+	if _gacha_step == "drop" and world._gacha_view:
+		_set_gacha_step("crank")
+
+
+## The crank turned by your finger (radians). Twice round drops a capsule.
+func _gacha_crank(delta: float) -> void:
+	if _gacha_step != "crank":
+		return
+	var m = world.gacha_machine
+	m.turn_crank(delta)
+	if m.crank_done():
+		_gacha_drag = ""
+		_gacha_drop()
+
+
+func _gacha_drop() -> void:
+	_set_gacha_step("drop")
+	var pv := Gacha.split(_gacha_prize)
 	var rarity := Gacha.rarity(pv[0], pv[1])
-	await world.gacha_machine.spin(Gacha.RARITY_COLORS[rarity], int(GACHA_WOBBLES[rarity]))
-	_gacha_busy = false
-	await get_tree().create_timer(0.5).timeout # a moment to see it open
+	await world.gacha_machine.drop(Gacha.RARITY_COLORS[rarity], int(GACHA_WOBBLES[rarity]))
+	if _gacha_step == "drop" and world._gacha_view:
+		_set_gacha_step("tap")
+
+
+## Tap, tap... pop.
+func _gacha_tap() -> void:
+	if _gacha_step != "tap":
+		return
+	_set_gacha_step("open")
+	var opened: bool = await world.gacha_machine.tap_capsule()
 	if not world._gacha_view:
-		return # left the machine mid-spin
-	_reveal_prize(prize)
+		return
+	if not opened:
+		_set_gacha_step("tap")
+		return
+	await get_tree().create_timer(0.5).timeout # a moment to see it open
+	_gacha_busy = false
+	if world._gacha_view:
+		_reveal_prize(_gacha_prize)
+
+
+## AUTO: does whatever's left of the spin by itself.
+func _spin_gacha() -> void:
+	if _gacha_auto or _gacha_step == "":
+		return
+	if _gacha_step == "coin" and (coins <= 0 or Gacha.remaining(owned).is_empty()):
+		return
+	_gacha_auto = true
+	for b in _gacha_buttons:
+		if is_instance_valid(b) and b.text == "AUTO":
+			b.disabled = true
+	if _gacha_step == "coin":
+		world.gacha_machine.hold_coin(world.gacha_machine.slot_point() + Vector3(0, 0.08, 0.08))
+		_gacha_coin_in()
+	while _gacha_step == "drop": # the coin going in
+		await get_tree().process_frame
+	while _gacha_step == "crank":
+		_gacha_crank(TAU / 16.0)
+		await get_tree().create_timer(0.05).timeout
+	while _gacha_step == "drop": # the capsule coming down
+		await get_tree().process_frame
+	while _gacha_step in ["tap", "open"]:
+		if _gacha_step == "tap":
+			await _gacha_tap()
+			await get_tree().create_timer(0.3).timeout
+		else:
+			await get_tree().process_frame
+	_gacha_auto = false
 
 
 ## The capsule pops open: what you won, how rare, and a way to use it.
