@@ -125,9 +125,14 @@ func _play(kind: String, what: String) -> void:
 			_ready_seen += 1
 			_ready_since = Time.get_ticks_msec()
 		# you react like a person: about 0.6 seconds after the match shows
-		var reacted: bool = (Time.get_ticks_msec() - _ready_since) * Engine.time_scale >= 600.0
+		# (1.2 in the practice, like a beginner against easy AIs)
+		var waited: float = (Time.get_ticks_msec() - _ready_since) * Engine.time_scale
+		var reacted: bool = waited >= (1200.0 if what == "tutorial" else 600.0)
 		if kind == "snap" and g.phase == "play" and g.snap_ready() and not main.world.dealing and reacted and g.flips % 2 == 0:
 			main.mode_ui._snap_pressed() # race the AIs
+			continue
+		# and you don't flip straight over a live match: people stop and look
+		if kind == "snap" and g.phase == "play" and g.snap_ready() and waited < 1600.0:
 			continue
 		if not g.is_turn_of(0) or main.world.dealing or main.world.fx_busy or step % 3 != 0:
 			continue
@@ -194,8 +199,5 @@ func _play(kind: String, what: String) -> void:
 				if line.contains("snap") or line.contains("SNAP"):
 					print("   LOG: ", line)
 			print("   ready chances seen: ", _ready_seen)
-		# the practice is short and against easy (slow) AIs, so only insist
-		# when they had plenty of chances
-		if what != "tutorial" or _ready_seen >= 8:
-			check(ai_snaps > 0, "snap %s: the AIs snap out of turn (%d chances)" % [what, _ready_seen])
+		check(ai_snaps > 0, "snap %s: the AIs snap out of turn (%d chances)" % [what, _ready_seen])
 	print("%s %s: %d rounds, winner %s" % [kind, what, g.round_num, g.players[g.winner].name if g.winner >= 0 else "-"])
