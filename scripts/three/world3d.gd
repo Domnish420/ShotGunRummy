@@ -28,7 +28,7 @@ const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
 const TABLE_RX := 0.95 # the table is an oval
 const TABLE_RZ := 1.25
-const TABLE_CARD := Vector2(0.15, 0.215)
+const TABLE_CARD := Vector2(0.17, 0.244)
 const HAND_CARD := Vector2(0.105, 0.152)
 const ITEM_CARD := Vector2(0.075, 0.1)
 const OPP_CARD := Vector2(0.09, 0.13)
@@ -884,9 +884,18 @@ func _card(id: String, card_size: Vector2, spawn: Transform3D) -> Card3D:
 	return c
 
 
+## Face-up cards on the table lean back towards you a little, so you read
+## them instead of squinting at them edge-on; face-down ones lie flat.
+const FACE_LEAN := 0.42
+
+
 func _flat(pos: Vector3, yaw: float, face_up: bool) -> Transform3D:
-	var tilt := Basis(Vector3.RIGHT, -PI / 2.0 if face_up else PI / 2.0)
-	return Transform3D(Basis(Vector3.UP, yaw) * tilt, pos)
+	if not face_up:
+		return Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI / 2.0), pos)
+	var tilt := Basis(Vector3.RIGHT, -PI / 2.0 + FACE_LEAN)
+	# lift it so its near edge still rests on the table
+	var lift := Vector3(0, sin(FACE_LEAN) * TABLE_CARD.y * 0.5, 0)
+	return Transform3D(Basis(Vector3.UP, yaw) * tilt, pos + lift)
 
 
 func _tween(node: Node3D, prop: String, value, delay: float = 0.0, time: float = MOVE_TIME) -> void:
@@ -915,7 +924,7 @@ func _place(seen: Dictionary, id: String, card: Dictionary, card_size: Vector2, 
 	var c := _card(id, card_size, spawn)
 	if face_up and not card.get("hidden", false) and not card.is_empty():
 		var k := CardTextures.key_for(card, trump)
-		c.set_face(k, textures.material(k, lit))
+		c.set_face(k, textures.material(k, false)) # faces never wash out under the lamp
 	else:
 		c.set_face("__back", _back_mat)
 	c.set_outline(_outline_mats.get(outline, null))
@@ -990,7 +999,7 @@ func sync(s: Dictionary) -> void:
 		var m: Dictionary = game.melds[mi]
 		var base: Vector3 = slots[mi] if mi < slots.size() else Vector3(-0.42 + 0.84 * (mi % 2), 0, -0.9 - 0.22 * ((mi - slots.size()) / 2))
 		var cards: Array = m["cards"]
-		var step := minf(0.05, 0.6 / maxf(1.0, cards.size()))
+		var step := minf(0.058, 0.66 / maxf(1.0, cards.size()))
 		var start := base.x - step * (cards.size() - 1) * 0.5
 		var is_target: bool = s["targets"].has(m["id"])
 		for ci in range(cards.size()):

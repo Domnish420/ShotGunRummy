@@ -30,14 +30,14 @@ static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary,
 		ci.draw_style_box(Palette.box(skin["paper"], Palette.GOLD, 3, radius), rect)
 	else:
 		ci.draw_style_box(Palette.box(skin["paper"], skin["edge"], 2, radius), rect)
-	_draw_face_wash(ci, rect, font)
+	_draw_face_wash(ci, rect, font, radius)
 	var color: Color = skin["red"] if Cards.is_red(card) else skin["ink"]
 	var label := Cards.rank_label(card["rank"])
-	var fs := int(rect.size.x * (0.36 if compact else 0.3))
+	var fs := int(rect.size.x * (0.36 if compact else 0.38))
 	var pad := rect.size.x * 0.08
 	var ascent := font.get_ascent(fs)
 	ci.draw_string(font, rect.position + Vector2(pad, pad + ascent * 0.85), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
-	var small := rect.size.x * (0.14 if compact else 0.11)
+	var small := rect.size.x * (0.14 if compact else 0.13)
 	var corner := rect.position + Vector2(pad + small, pad + ascent + small * 1.2)
 	draw_suit(ci, card["suit"], corner, small, color)
 	if trump:
@@ -58,7 +58,7 @@ static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int, font: Font = nu
 
 ## The face shows the back's pattern too, washed out towards the paper so the
 ## rank and suit stay easy to read.
-static func _draw_face_wash(ci: CanvasItem, rect: Rect2, font: Font) -> void:
+static func _draw_face_wash(ci: CanvasItem, rect: Rect2, font: Font, radius: int = 6) -> void:
 	var wash := float(skin.get("face_wash", 0.24))
 	if wash <= 0.0:
 		return
@@ -76,6 +76,8 @@ static func _draw_face_wash(ci: CanvasItem, rect: Rect2, font: Font) -> void:
 	skin = washed
 	_pattern(ci, rect.grow(-maxf(4.0, rect.size.x * 0.06)), maxf(6.0, rect.size.x / 8.0), font, true)
 	skin = keep
+	# just a frame of it: the middle stays clean so the rank and suit read
+	ci.draw_style_box(Palette.box(paper, Color(0, 0, 0, 0), 0, maxi(2, radius - 2)), rect.grow(-rect.size.x * 0.1))
 
 
 ## A colour as this pattern draws it: washed out on a card's face.
