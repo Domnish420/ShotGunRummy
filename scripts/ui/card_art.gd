@@ -16,7 +16,7 @@ static var skin: Dictionary = CardSkins.get_skin("classic")
 static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary, face_down: bool = false, compact: bool = false, trump: bool = false) -> void:
 	var radius := int(rect.size.x * 0.09)
 	if face_down:
-		_draw_back(ci, rect, radius)
+		_draw_back(ci, rect, radius, font)
 		return
 	if card.is_empty():
 		var slot := Palette.box(Color(0, 0, 0, 0.15), Color(1, 1, 1, 0.15), 2, radius)
@@ -30,6 +30,7 @@ static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary,
 		ci.draw_style_box(Palette.box(skin["paper"], Palette.GOLD, 3, radius), rect)
 	else:
 		ci.draw_style_box(Palette.box(skin["paper"], skin["edge"], 2, radius), rect)
+	_draw_face_wash(ci, rect, font)
 	var color: Color = skin["red"] if Cards.is_red(card) else skin["ink"]
 	var label := Cards.rank_label(card["rank"])
 	var fs := int(rect.size.x * (0.36 if compact else 0.3))
@@ -50,11 +51,43 @@ static func draw_card(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary,
 	ci.draw_string(font, rect.end - Vector2(pad + w, pad), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 
 
-static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int) -> void:
-	var fg: Color = skin["back"]
+static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int, font: Font = null) -> void:
 	ci.draw_style_box(Palette.box(skin["back_dark"], skin["back_edge"], 3, radius), rect)
-	var inner := rect.grow(-7)
-	var cell := maxf(6.0, rect.size.x / 8.0)
+	_pattern(ci, rect.grow(-7), maxf(6.0, rect.size.x / 8.0), font)
+
+
+## The face shows the back's pattern too, washed out towards the paper so the
+## rank and suit stay easy to read.
+static func _draw_face_wash(ci: CanvasItem, rect: Rect2, font: Font) -> void:
+	var wash := float(skin.get("face_wash", 0.24))
+	if wash <= 0.0:
+		return
+	var keep := skin
+	var paper: Color = skin["paper"]
+	var washed := skin.duplicate()
+	washed["_wash"] = wash
+	for k in ["back", "back_dark", "back_edge"]:
+		washed[k] = paper.lerp(skin[k], wash)
+	if skin.has("palette"):
+		var pal := {}
+		for ch in skin["palette"]:
+			pal[ch] = paper.lerp(skin["palette"][ch], wash)
+		washed["palette"] = pal
+	skin = washed
+	_pattern(ci, rect.grow(-maxf(4.0, rect.size.x * 0.06)), maxf(6.0, rect.size.x / 8.0), font, true)
+	skin = keep
+
+
+## A colour as this pattern draws it: washed out on a card's face.
+static func _tint(c: Color) -> Color:
+	var wash := float(skin.get("_wash", 0.0))
+	return skin["paper"].lerp(c, wash) if wash > 0.0 else c
+
+
+## The skin's pattern, filling `inner`. `face` is true on the front of a card
+## (no background fill there: the paper shows through).
+static func _pattern(ci: CanvasItem, inner: Rect2, cell: float, font: Font = null, face: bool = false) -> void:
+	var fg: Color = skin["back"]
 	match str(skin["pattern"]):
 		"stripes":
 			# thin diagonal stripes, clipped to the inside of the card
@@ -79,7 +112,7 @@ static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int) -> void:
 				var w := cell * 0.42
 				var h := cell * 1.05
 				var top := c - Vector2(w * 0.5, h * 0.5)
-				ci.draw_rect(Rect2(top, Vector2(w, h * 0.68)), Color(0.72, 0.1, 0.08) if r % 2 == 0 else Color(0.55, 0.06, 0.05))
+				ci.draw_rect(Rect2(top, Vector2(w, h * 0.68)), _tint(Color(0.72, 0.1, 0.08) if r % 2 == 0 else Color(0.55, 0.06, 0.05)))
 				ci.draw_rect(Rect2(top + Vector2(-w * 0.1, h * 0.68), Vector2(w * 1.2, h * 0.32)), fg), true)
 		"skulls":
 			_grid(inner, cell * 1.7, func(c: Vector2, _r: int, _k: int) -> void:
@@ -210,11 +243,116 @@ static func _draw_back(ci: CanvasItem, rect: Rect2, radius: int) -> void:
 				var dy := (i - 1.5) * cell * 0.16 - cell * 0.1
 				ci.draw_line(sp + Vector2(-cell * 0.6, dy * 1.6), sp + Vector2(cell * 0.6, dy * 1.6), leg, maxf(1.0, cell * 0.08))
 			ci.draw_circle(sp, cell * 0.32, leg)
+		"sprite":
+			_sprite_tiles(ci, inner, face)
+		"portals":
+			# white test-chamber panels with an orange and a blue portal
+			if not face:
+				ci.draw_rect(inner, skin["back_dark"])
+			var faint := Color(skin["back_edge"].lerp(skin["back_dark"], 0.85), 1.0) if not face else _tint(Color(0.6, 0.62, 0.64))
+			var x := inner.position.x
+			while x <= inner.end.x:
+				ci.draw_line(Vector2(x, inner.position.y), Vector2(x, inner.end.y), faint, 1.0)
+				x += cell * 1.5
+			var y := inner.position.y
+			while y <= inner.end.y:
+				ci.draw_line(Vector2(inner.position.x, y), Vector2(inner.end.x, y), faint, 1.0)
+				y += cell * 1.5
+			_portal(ci, inner.position + Vector2(inner.size.x * 0.3, inner.size.y * 0.3), cell, fg)
+			_portal(ci, inner.position + Vector2(inner.size.x * 0.7, inner.size.y * 0.7), cell, skin["back_edge"])
+		"teams":
+			# split down the middle: one team's colour each side, hats on top
+			ci.draw_colored_polygon(PackedVector2Array([inner.position, Vector2(inner.end.x, inner.position.y), Vector2(inner.position.x, inner.end.y)]), fg)
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(inner.end.x, inner.position.y), inner.end, Vector2(inner.position.x, inner.end.y)]), skin["back_dark"])
+			_sprite_tiles(ci, inner, true)
+		"cheat":
+			# the most famous button combo in gaming
+			var arrows := [0, 0, 2, 2, 3, 1, 3, 1] # up up down down left right left right
+			var size := inner.size.x / 9.0
+			var row_y := inner.position.y + inner.size.y * 0.32
+			for i in range(8):
+				var col := i % 4
+				var line := i / 4
+				var c := Vector2(inner.position.x + size * (1.2 + col * 2.2), row_y + line * size * 2.4)
+				_arrow(ci, c, size * 0.8, arrows[i], fg)
+			if font != null:
+				var fs := int(size * 2.2)
+				var text := "B  A"
+				var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				ci.draw_string(font, Vector2(inner.get_center().x - w * 0.5, inner.position.y + inner.size.y * 0.86), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, skin["back_edge"])
+		"maze":
+			# maze walls and a trail of dots
+			var walls := [[0, 0, 6, 0], [0, 0, 0, 8], [6, 0, 6, 8], [0, 8, 6, 8], [1, 1, 2, 1], [4, 1, 5, 1], [1, 2, 1, 3], [3, 1, 3, 3], [5, 2, 5, 3], [2, 4, 4, 4], [0, 5, 1, 5], [5, 5, 6, 5], [1, 6, 2, 6], [4, 6, 5, 6], [3, 5, 3, 7]]
+			var gx := inner.size.x / 6.0
+			var gy := inner.size.y / 8.0
+			var wide := maxf(2.0, cell * 0.22)
+			for w in walls:
+				ci.draw_line(inner.position + Vector2(w[0] * gx, w[1] * gy), inner.position + Vector2(w[2] * gx, w[3] * gy), fg, wide)
+			for yy in range(8):
+				for xx in range(6):
+					var dot := inner.position + Vector2((xx + 0.5) * gx, (yy + 0.5) * gy)
+					ci.draw_circle(dot, cell * (0.28 if (xx == 0 and yy == 0) or (xx == 5 and yy == 7) else 0.1), skin["back_edge"])
+		"paddle":
+			# two paddles, a dotted net and the ball
+			var y := inner.position.y
+			while y < inner.end.y:
+				ci.draw_rect(Rect2(Vector2(inner.get_center().x - cell * 0.08, y), Vector2(cell * 0.16, cell * 0.35)), fg)
+				y += cell * 0.7
+			ci.draw_rect(Rect2(inner.position + Vector2(cell * 0.4, inner.size.y * 0.25), Vector2(cell * 0.3, cell * 2.0)), fg)
+			ci.draw_rect(Rect2(Vector2(inner.end.x - cell * 0.7, inner.position.y + inner.size.y * 0.55), Vector2(cell * 0.3, cell * 2.0)), fg)
+			ci.draw_rect(Rect2(inner.position + Vector2(inner.size.x * 0.66, inner.size.y * 0.36), Vector2(cell * 0.35, cell * 0.35)), fg)
 		_:
 			# a little diamond lattice
 			_grid(inner, cell, func(c: Vector2, _r: int, _k: int) -> void:
 				var h := cell * 0.42
 				ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -h), c + Vector2(h, 0), c + Vector2(0, h), c + Vector2(-h, 0)]), fg), true)
+
+
+## Tiles the skin's pixel sprite(s) across `inner`: "sprite" (rows of
+## palette letters, "." see-through) or "sprites" (several, taken in turn),
+## "repeat" tiles across.
+static func _sprite_tiles(ci: CanvasItem, inner: Rect2, face: bool) -> void:
+	var sprites: Array = skin["sprites"] if skin.has("sprites") else [skin["sprite"]]
+	var pal: Dictionary = skin["palette"]
+	var cols: int = str(sprites[0][0]).length()
+	var rows: int = sprites[0].size()
+	var across := int(skin.get("repeat", 3))
+	var px := inner.size.x / float(across * cols)
+	var tile := Vector2(cols, rows) * px
+	var down := int(floor(inner.size.y / tile.y))
+	var top := inner.position.y + (inner.size.y - down * tile.y) * 0.5
+	for ty in range(down):
+		for tx in range(across):
+			var spr: Array = sprites[(tx + ty) % sprites.size()]
+			var origin := Vector2(inner.position.x + tx * tile.x, top + ty * tile.y)
+			for r in range(rows):
+				var line: String = spr[r]
+				for k in range(cols):
+					var ch := line[k]
+					if ch == "." or not pal.has(ch):
+						continue
+					ci.draw_rect(Rect2(origin + Vector2(k, r) * px, Vector2(px, px) + Vector2(0.6, 0.6)), pal[ch])
+
+
+## An oval portal: a bright ring round a darker middle.
+static func _portal(ci: CanvasItem, c: Vector2, cell: float, color: Color) -> void:
+	var outer := PackedVector2Array()
+	var inner := PackedVector2Array()
+	for i in range(24):
+		var a := i * TAU / 24.0
+		outer.append(c + Vector2(cos(a) * cell * 1.1, sin(a) * cell * 1.9))
+		inner.append(c + Vector2(cos(a) * cell * 0.75, sin(a) * cell * 1.45))
+	ci.draw_colored_polygon(outer, color)
+	ci.draw_colored_polygon(inner, color.darkened(0.08 if skin.has("_wash") else 0.45))
+
+
+## An arrow pointing up (0), right (1), down (2) or left (3).
+static func _arrow(ci: CanvasItem, c: Vector2, s: float, dir: int, color: Color) -> void:
+	var pts := [Vector2(0, -1), Vector2(0.9, 0.2), Vector2(0.35, 0.2), Vector2(0.35, 1), Vector2(-0.35, 1), Vector2(-0.35, 0.2), Vector2(-0.9, 0.2)]
+	var poly := PackedVector2Array()
+	for p in pts:
+		poly.append(c + Vector2(p).rotated(dir * PI / 2.0) * s)
+	ci.draw_colored_polygon(poly, color)
 
 
 ## Calls draw(centre, row, column) for every cell of a grid filling `inner`.

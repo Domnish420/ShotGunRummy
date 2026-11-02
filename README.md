@@ -105,7 +105,16 @@ characters that use a locked part are locked too. The rules are plain data in
 and back. 16 skins: Classic, Casino Felt, Candy Corn, Blood Money (shotgun
 shells), Barbed Wire, Pumpkin, Midnight (stars and a moon), Bone Yard
 (skulls), Noir, Rave (neon), Blueprint, Wanted (a bullseye), Spider Web,
-Hazard, Pocket (an old handheld's green screen) and High Roller (gold). It's just for you:
+Hazard, Pocket (an old handheld's green screen) and High Roller (gold).
+
+**Retro decks.** 18 more skins nod to famous games without using their
+names, logos or characters: Overworld (grass blocks), Diamond Ore, Lava
+Depths, Test Chamber (orange and blue portals), Crowbar, Missing Texture,
+Dust Crates, Team Colours, Shareware (floppy disks), Cheat Code (↑↑↓↓←→←→BA),
+Gold Rings, Brick and Coin, Maze Dots, Alien Wave, Line Clear, Gold
+Cartridge, Dungeon Crawl and Paddle Ball. Unlocking one shows a bit of real
+gaming history about the game it nods to. Every card's face carries a faint
+copy of its back's pattern, so both sides match. It's just for you:
 everyone at the table sees their own skin. Skins are in
 `scripts/ui/card_skins.gd`, drawn by `scripts/ui/card_art.gd`.
 

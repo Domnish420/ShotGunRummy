@@ -1951,38 +1951,59 @@ func show_card_skins() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.custom_minimum_size = Vector2(0, 720)
 	box.add_child(scroll)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 14)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(grid)
-	for id in CardSkins.ORDER:
-		var unlocked := Unlocks.is_unlocked("card", id, stats)
-		var cell := VBoxContainer.new()
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cell.add_theme_constant_override("separation", 4)
-		var preview := SkinPreview.new()
-		preview.skin_id = id
-		preview.dim = not unlocked
-		preview.custom_minimum_size = Vector2(0, 190)
-		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cell.add_child(preview)
-		cell.add_child(_label(CardSkins.skin_name(id), 24, Palette.CARD_INK, true))
-		var b: Button
-		if id == card_skin:
-			b = _paper_button("IN USE", _noop, 20)
-			Palette.accent(b, Palette.AMBER)
-		elif unlocked:
-			b = _paper_button("USE", _set_card_skin.bind(id), 22)
-		else:
-			b = _paper_button("🔒 " + Unlocks.need_text("card", id, stats), _noop, 16)
-			b.disabled = true
-		b.custom_minimum_size = Vector2(0, 54)
-		b.clip_text = true
-		cell.add_child(b)
-		grid.add_child(cell)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	var retro_open := 0
+	for id in CardSkins.RETRO:
+		if Unlocks.is_unlocked("card", id, stats):
+			retro_open += 1
+	for section in [["CLASSIC DECKS", CardSkins.ORDER, ""], ["RETRO DECKS", CardSkins.RETRO, "Each one nods to a famous game. Unlock it to learn a bit of gaming history. (%d/%d)" % [retro_open, CardSkins.RETRO.size()]]]:
+		sections.add_child(_label(section[0], 32, Color(0.36, 0.06, 0.05), true))
+		if section[2] != "":
+			sections.add_child(_label(section[2], 18, Palette.CARD_INK, true))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 14)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sections.add_child(grid)
+		for id in section[1]:
+			grid.add_child(_skin_cell(id))
 	box.add_child(_paper_button("BACK", show_menu, 26))
+
+
+## One skin in the picker: face and back, its name, its story if it's a
+## retro deck you've unlocked, and USE (or what unlocks it).
+func _skin_cell(id: String) -> VBoxContainer:
+	var unlocked := Unlocks.is_unlocked("card", id, stats)
+	var cell := VBoxContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.add_theme_constant_override("separation", 4)
+	var preview := SkinPreview.new()
+	preview.skin_id = id
+	preview.dim = not unlocked
+	preview.custom_minimum_size = Vector2(0, 190)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(preview)
+	cell.add_child(_label(CardSkins.skin_name(id), 24, Palette.CARD_INK, true))
+	var fact := CardSkins.fact(id)
+	if fact != "":
+		cell.add_child(_label(fact if unlocked else "???", 15, Color(0.3, 0.25, 0.2), true))
+	var b: Button
+	if id == card_skin:
+		b = _paper_button("IN USE", _noop, 20)
+		Palette.accent(b, Palette.AMBER)
+	elif unlocked:
+		b = _paper_button("USE", _set_card_skin.bind(id), 22)
+	else:
+		b = _paper_button("🔒 " + Unlocks.need_text("card", id, stats), _noop, 16)
+		b.disabled = true
+	b.custom_minimum_size = Vector2(0, 54)
+	b.clip_text = true
+	cell.add_child(b)
+	return cell
 
 
 func _set_card_skin(id: String) -> void:
@@ -2043,6 +2064,9 @@ func _bump(more: Dictionary) -> void:
 		return
 	for n in fresh:
 		_log("UNLOCKED: %s." % n)
+	for id in CardSkins.RETRO:
+		if not Unlocks.is_unlocked("card", id, before) and Unlocks.is_unlocked("card", id, stats):
+			_log("DID YOU KNOW? " + CardSkins.fact(id))
 	_sound("fanfare")
 	world.announce("UNLOCKED\n%s" % "\n".join(fresh.slice(0, 3)))
 

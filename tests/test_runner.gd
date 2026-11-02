@@ -1560,7 +1560,23 @@ func test_unlocks() -> void:
 		check(int(v) > 0 and int(v) < LooksT.OUTFITS.size(), "unlock: outfit %s exists" % v)
 	for v in Unlocks.RULES["card"]:
 		check(CardSkins.SKINS.has(v), "unlock: card skin %s exists" % v)
-	for id in CardSkins.ORDER:
+	check(CardSkins.RETRO.size() >= 15, "lots of retro decks (%d)" % CardSkins.RETRO.size())
+	for id in CardSkins.RETRO:
+		check(CardSkins.fact(id) != "", "retro deck %s has a fact to unlock" % id)
+		check(not Unlocks.rule("card", id).is_empty(), "retro deck %s is unlocked by playing" % id)
+	for id in CardSkins.SKINS:
+		check(CardSkins.ORDER.has(id) or CardSkins.RETRO.has(id), "card skin %s shows in the picker" % id)
+		var sk: Dictionary = CardSkins.SKINS[id]
+		if sk.has("sprite") or sk.has("sprites"):
+			var sprites: Array = sk["sprites"] if sk.has("sprites") else [sk["sprite"]]
+			var w := str(sprites[0][0]).length()
+			for spr in sprites:
+				check(spr.size() == sprites[0].size(), "%s: sprites are the same height" % id)
+				for row in spr:
+					check(str(row).length() == w, "%s: sprite row '%s' is %d wide" % [id, row, w])
+					for ch in str(row):
+						check(ch == "." or sk["palette"].has(ch), "%s: colour '%s' is in the palette" % [id, ch])
+	for id in CardSkins.ORDER + CardSkins.RETRO:
 		check(CardSkins.SKINS.has(id), "card skin %s is defined" % id)
 		for k in ["name", "paper", "edge", "ink", "red", "back", "back_dark", "back_edge", "pattern"]:
 			check(CardSkins.SKINS[id].has(k), "card skin %s has %s" % [id, k])
