@@ -20,6 +20,7 @@ const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const GunSkins = preload("res://scripts/core/gun_skins.gd")
+const Gacha3D = preload("res://scripts/three/gacha3d.gd")
 const Games = preload("res://scripts/core/games.gd")
 const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
 
@@ -74,6 +75,11 @@ var _cartridge: Node3D
 var _cartridge_kind := ""
 var _chip_seat := -99 # where the dealer chip sits (relative to the viewer)
 const PREVIEW_SPOT := Vector3(-2.15, -0.78, -1.0) # by the bottle shelf
+const GACHA_SPOT := Vector3(2.35, -0.78, -1.7) # the gacha machine, back right
+
+var gacha_machine: Node3D
+var _gacha_view := false
+var _gacha_light: SpotLight3D
 const PREVIEW_CAM := Vector3(0.0, 1.15, 3.1) # from the spot: the gap beside the table
 
 
@@ -86,6 +92,15 @@ func _ready() -> void:
 	cartridge_art.built.connect(_on_cartridge_art)
 	textures.built.connect(_on_textures_built)
 	_build_room()
+	gacha_machine = Gacha3D.new()
+	gacha_machine.position = GACHA_SPOT
+	gacha_machine.rotation.y = -0.5 # turned a little towards the room
+	add_child(gacha_machine)
+	gacha_machine.sfx.connect(func(n: String) -> void: sfx.emit(n))
+	gacha_machine.dropped.connect(gacha_closeup)
+	gacha_machine.burst.connect(func(at: Vector3, color: Color, count: int) -> void:
+		_puffs(at, color, count, 0.018, 0.3)
+		_pulse(at, color, 2.5))
 	_cards_root = Node3D.new()
 	add_child(_cards_root)
 	_labels_root = Node3D.new()
@@ -433,6 +448,8 @@ func _process(delta: float) -> void:
 		return
 	if _cone != null:
 		_cone.set_shader_parameter("flicker", lamp.light_energy / LAMP)
+	if _gacha_view:
+		return
 	if _menu_mode:
 		# drift slowly round the table behind the menus
 		_menu_t += delta * 0.12
@@ -484,9 +501,58 @@ func hide_preview() -> void:
 	_fit_camera()
 
 
+## Walk over to the gacha machine: the camera faces it, a spotlight on it.
+func show_gacha() -> void:
+	hide_preview()
+	_gacha_view = true
+	if _gacha_light == null:
+		_gacha_light = SpotLight3D.new()
+		_gacha_light.light_color = Color(1.0, 0.9, 0.75)
+		_gacha_light.light_energy = 4.0
+		_gacha_light.spot_range = 4.0
+		_gacha_light.spot_angle = 28.0
+		_gacha_light.shadow_enabled = true
+		add_child(_gacha_light)
+	var m := gacha_machine
+	_gacha_light.look_at_from_position(m.to_global(Vector3(0.3, 2.6, 1.3)), m.to_global(Vector3(0, 0.6, 0)), Vector3.UP)
+	_gacha_light.visible = true
+	camera.fov = 44.0 if not _landscape else 40.0
+	_move_camera(_gacha_wide(), 0.8)
+
+
+## Close in on the tray as the capsule opens.
+func gacha_closeup() -> void:
+	var m := gacha_machine
+	var from := m.to_global(Vector3(0.04, 0.5, 0.95))
+	_move_camera(Transform3D(Basis(), from).looking_at(m.to_global(Vector3(0, 0.2, 0.33)), Vector3.UP), 0.6)
+
+
+## Back to the whole machine.
+func gacha_wide() -> void:
+	_move_camera(_gacha_wide(), 0.5)
+
+
+func _gacha_wide() -> Transform3D:
+	var m := gacha_machine
+	var from := m.to_global(Vector3(0.0, 0.95 if not _landscape else 0.8, 1.9 if not _landscape else 1.6))
+	return Transform3D(Basis(), from).looking_at(m.to_global(Vector3(0, 0.62 if not _landscape else 0.7, 0)), Vector3.UP)
+
+
+func _move_camera(to: Transform3D, time: float) -> void:
+	var t := camera.create_tween()
+	t.tween_property(camera, "global_transform", to, time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func hide_gacha() -> void:
+	_gacha_view = false
+	if _gacha_light != null:
+		_gacha_light.visible = false
+
+
 ## Menu mode: an empty table and a slowly moving camera.
 func set_menu_mode(on: bool) -> void:
 	hide_preview()
+	hide_gacha()
 	_menu_mode = on
 	if on:
 		_last = {}

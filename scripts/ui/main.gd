@@ -1974,6 +1974,7 @@ class SkinPreview extends Control:
 ## Pick how your cards look. Locked skins say what unlocks them.
 func show_card_skins() -> void:
 	_keep_menu_name()
+	world.hide_gacha()
 	world.hide_carousel()
 	var box := _paper(660.0)
 	box.add_child(_label("CARD SKINS", 52, Color(0.36, 0.06, 0.05), true))
@@ -2086,6 +2087,7 @@ class GunPreview extends Control:
 ## Pick your shotgun skin. Everyone sees it when the gun is in your hands.
 func show_gun_skins() -> void:
 	_keep_menu_name()
+	world.hide_gacha()
 	world.hide_carousel()
 	var box := _paper(660.0)
 	box.add_child(_label("SHOTGUN SKINS", 48, Color(0.36, 0.06, 0.05), true))
@@ -2145,105 +2147,80 @@ func _set_gun_skin(id: String) -> void:
 # ================================================================ gacha
 
 var _gacha_busy := false
-var _gacha_machine: Control = null
+var _gacha_buttons: Array = []
+var _gacha_count: Label
+
+const GACHA_WOBBLES := {"common": 1, "rare": 2, "epic": 3, "legendary": 4}
 
 
-## The machine itself: a glass globe of capsules on a red body, a coin slot,
-## a crank and a chute. spin() shakes it, turns the crank and drops a capsule.
-class GachaMachine extends Control:
-	const CAPSULE_COLORS := [Color(0.95, 0.3, 0.3), Color(0.3, 0.6, 1.0), Color(1.0, 0.8, 0.2), Color(0.4, 0.85, 0.4), Color(0.8, 0.45, 1.0), Color(1.0, 0.55, 0.2)]
-	var shake := 0.0
-	var crank := 0.0
-	var drop := -1.0 # 0..1 while a capsule falls out
-	var drop_color := Color.WHITE
-	var capsule_seed := 7
-
-	func _draw() -> void:
-		var w := size.x
-		var h := size.y
-		var jig := Vector2(sin(shake * 40.0) * 6.0 * shake, 0)
-		var c := Vector2(w * 0.5, h * 0.34) + jig
-		var r := minf(w * 0.36, h * 0.3)
-		# the body
-		var body := Rect2(Vector2(w * 0.18, h * 0.58), Vector2(w * 0.64, h * 0.38))
-		draw_rect(body, Color(0.75, 0.12, 0.1))
-		draw_rect(Rect2(body.position, Vector2(body.size.x, h * 0.03)), Color(0.55, 0.06, 0.05))
-		draw_rect(Rect2(Vector2(w * 0.16, h * 0.955), Vector2(w * 0.68, h * 0.035)), Color(0.35, 0.04, 0.03))
-		# the globe and its capsules
-		draw_circle(c, r + 6.0, Color(0.85, 0.85, 0.82))
-		draw_circle(c, r, Color(0.12, 0.14, 0.18))
-		var rng := RandomNumberGenerator.new()
-		rng.seed = capsule_seed
-		for i in range(26):
-			var a := rng.randf() * TAU
-			var d := sqrt(rng.randf()) * (r - 20.0)
-			var p := c + Vector2(cos(a), sin(a)) * d + Vector2(sin(shake * 30.0 + i) * 4.0 * shake, cos(shake * 27.0 + i) * 4.0 * shake)
-			var col: Color = CAPSULE_COLORS[i % CAPSULE_COLORS.size()]
-			_capsule(p, 17.0, col)
-		draw_arc(c + Vector2(-r * 0.35, -r * 0.35), r * 0.45, PI * 1.05, PI * 1.45, 12, Color(1, 1, 1, 0.35), 6.0) # shine
-		# coin slot and price
-		draw_rect(Rect2(Vector2(w * 0.3, h * 0.65), Vector2(w * 0.12, h * 0.07)), Color(0.9, 0.82, 0.55))
-		draw_rect(Rect2(Vector2(w * 0.355, h * 0.665), Vector2(w * 0.01, h * 0.04)), Color(0.1, 0.08, 0.05))
-		# the crank
-		var k := Vector2(w * 0.64, h * 0.7)
-		draw_circle(k, h * 0.055, Color(0.92, 0.9, 0.85))
-		var arm := Vector2(cos(crank), sin(crank)) * h * 0.05
-		draw_line(k - arm, k + arm, Color(0.25, 0.22, 0.2), 10.0)
-		draw_circle(k + arm, 7.0, Color(0.95, 0.75, 0.2))
-		# the chute
-		var chute := Rect2(Vector2(w * 0.4, h * 0.8), Vector2(w * 0.2, h * 0.12))
-		draw_rect(chute, Color(0.1, 0.08, 0.08))
-		if drop >= 0.0:
-			var y := lerpf(h * 0.62, chute.get_center().y, minf(1.0, drop * 1.4))
-			var bounce := absf(sin(drop * PI * 3.0)) * (1.0 - drop) * 12.0
-			var p := Vector2(chute.get_center().x, y - bounce)
-			_capsule(p, 22.0, drop_color)
-
-	## A capsule: a coloured bottom half, a clear-white top half, a shine.
-	func _capsule(p: Vector2, r: float, col: Color) -> void:
-		draw_circle(p, r + 1.5, Color(0, 0, 0, 0.35))
-		draw_circle(p, r, col)
-		var top := PackedVector2Array()
-		for i in range(13):
-			var a := PI + i * PI / 12.0
-			top.append(p + Vector2(cos(a), sin(a)) * r)
-		draw_colored_polygon(top, Color(0.95, 0.95, 0.97))
-		draw_line(p - Vector2(r, 0), p + Vector2(r, 0), col.darkened(0.3), 2.0)
-		draw_circle(p + Vector2(-r * 0.35, -r * 0.45), r * 0.2, Color(1, 1, 1, 0.9))
-
-
-## The gacha machine screen.
+## The gacha machine: the camera walks over to it in the corner of the room.
+## Coins and the collection up top, SPIN and BACK at the bottom.
 func show_gacha() -> void:
 	_keep_menu_name()
+	_close_overlay()
+	_clear(screen)
 	world.hide_carousel()
+	world.show_gacha()
 	_gacha_busy = false
-	var box := _paper(660.0)
-	box.add_child(_label("GACHA MACHINE", 52, Color(0.36, 0.06, 0.05), true))
-	var left := Gacha.remaining(owned).size()
-	var total := Gacha.pool().size()
-	box.add_child(_label("%d COIN%s · %d/%d COLLECTED" % [coins, "" if coins == 1 else "S", total - left, total], 26, Palette.CARD_INK, true))
-	_gacha_machine = GachaMachine.new()
-	_gacha_machine.custom_minimum_size = Vector2(0, 560)
-	_gacha_machine.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_gacha_machine.capsule_seed = randi()
-	box.add_child(_gacha_machine)
-	box.add_child(_label("Win a round: +1 coin. Win the match: +1 more. Card skins, shotgun skins and costumes inside, never a repeat.", 17, Palette.CARD_INK, true))
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 36)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+	var title := _label("GACHA MACHINE", 48, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	_gacha_count = _label("", 26, Palette.INK, true)
+	_gacha_count.add_theme_color_override("font_outline_color", Color.BLACK)
+	_gacha_count.add_theme_constant_override("outline_size", 8)
+	col.add_child(_gacha_count)
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.85), Palette.BUTTON_EDGE, 2, 4, 14))
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	box.add_child(_label("Win a round: +1 coin. Win the match: +1 more. Card skins, shotgun skins and costumes inside, never a repeat.", 18, Palette.DIM, true))
 	var spin: Button
+	var left := Gacha.remaining(owned).size()
 	if left == 0:
-		spin = _paper_button("YOU'VE GOT EVERYTHING!", _noop, 26)
+		spin = _button("YOU'VE GOT EVERYTHING!", _noop, 28)
 		spin.disabled = true
 	elif coins <= 0:
-		spin = _paper_button("WIN ROUNDS TO EARN COINS", _noop, 24)
+		spin = _button("WIN ROUNDS TO EARN COINS", _noop, 26)
 		spin.disabled = true
 	else:
-		spin = _paper_button("SPIN · 1 COIN", _spin_gacha, 32)
+		spin = _button("SPIN · 1 COIN", _spin_gacha, 34)
 		Palette.accent(spin, Palette.GOLD)
+	spin.custom_minimum_size = Vector2(0, 72)
 	box.add_child(spin)
-	box.add_child(_paper_button("BACK", show_menu, 24))
+	var back := _button("BACK", show_menu, 24)
+	back.custom_minimum_size = Vector2(0, 52)
+	box.add_child(back)
+	_gacha_buttons = [spin, back]
+	_update_gacha_count()
+
+
+func _update_gacha_count() -> void:
+	if _gacha_count == null or not is_instance_valid(_gacha_count):
+		return
+	var total := Gacha.pool().size()
+	_gacha_count.text = "%d COIN%s · %d/%d COLLECTED" % [coins, "" if coins == 1 else "S", total - Gacha.remaining(owned).size(), total]
 
 
 func _spin_gacha() -> void:
-	if _gacha_busy or coins <= 0 or _gacha_machine == null:
+	if _gacha_busy or coins <= 0:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -2253,27 +2230,19 @@ func _spin_gacha() -> void:
 	_gacha_busy = true
 	coins -= 1
 	owned[prize] = true
-	var pv := Gacha.split(prize)
 	_save_settings()
-	var m := _gacha_machine
+	_update_gacha_count()
+	for b in _gacha_buttons:
+		if is_instance_valid(b):
+			b.disabled = true
+	var pv := Gacha.split(prize)
 	var rarity := Gacha.rarity(pv[0], pv[1])
-	m.drop_color = Gacha.RARITY_COLORS[rarity]
-	_sound("chip")
-	var t := create_tween()
-	t.tween_method(func(v: float) -> void:
-		if is_instance_valid(m):
-			m.shake = v
-			m.crank = v * TAU * 1.5
-			m.queue_redraw(), 0.0, 1.0, 1.1)
-	t.tween_callback(func() -> void: _sound("spin"))
-	t.tween_method(func(v: float) -> void:
-		if is_instance_valid(m):
-			m.shake = 1.0 - v
-			m.drop = v
-			m.queue_redraw(), 0.0, 1.0, 0.9)
-	t.tween_callback(func() -> void: _sound("clunk"))
-	t.tween_interval(0.35)
-	t.tween_callback(_reveal_prize.bind(prize))
+	await world.gacha_machine.spin(Gacha.RARITY_COLORS[rarity], int(GACHA_WOBBLES[rarity]))
+	_gacha_busy = false
+	await get_tree().create_timer(0.5).timeout # a moment to see it open
+	if not world._gacha_view:
+		return # left the machine mid-spin
+	_reveal_prize(prize)
 
 
 ## The capsule pops open: what you won, how rare, and a way to use it.
@@ -2281,10 +2250,10 @@ func _reveal_prize(prize: String) -> void:
 	_gacha_busy = false
 	var pv := Gacha.split(prize)
 	var rarity := Gacha.rarity(pv[0], pv[1])
-	_sound("fanfare" if rarity in ["epic", "legendary"] else "ding")
+	_sound("prize_" + rarity)
 	if rarity == "legendary":
 		_flash(Palette.GOLD)
-	var box := _open_overlay(0.94, false, "reveal")
+	var box := _open_overlay(0.6, false, "reveal", true)
 	var banner := _label(Gacha.RARITY_NAMES[rarity] + "!", 56 if rarity == "legendary" else 44, Gacha.RARITY_COLORS[rarity], true)
 	banner.add_theme_color_override("font_outline_color", Color.BLACK)
 	banner.add_theme_constant_override("outline_size", 8)

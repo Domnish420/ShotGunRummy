@@ -296,6 +296,55 @@ static func make(name_: String) -> AudioStreamWAV:
 			_note(out, 1200.0, 0.025, "pulse", 0.14)
 		"type": # a key pressed
 			_note(out, 1600.0 + randf() * 400.0, 0.018, "pulse", 0.1)
+		# --- the gacha machine
+		"coin_flip": # the coin spins up off your thumb
+			for i in range(6):
+				_note(out, 2600.0 + i * 180.0, 0.02, "pulse", 0.14)
+				_rest(out, 0.025)
+		"coin_in": # it rolls down into the slot and lands
+			_note(out, 3200.0, 0.03, "pulse", 0.2)
+			_note(out, 2400.0, 0.04, "pulse", 0.18, -0.3)
+			_rest(out, 0.04)
+			_note(out, 1800.0, 0.05, "square", 0.22, -0.5)
+			_note(out, 600.0, 0.06, "noise", 0.2, -0.8)
+		"crank": # one ratchet click of the handle
+			_note(out, 1400.0 + randf() * 200.0, 0.018, "noise", 0.32)
+			_note(out, 260.0, 0.03, "square", 0.16, -0.4)
+		"rattle": # the capsules tumbling in the globe
+			for i in range(14):
+				_note(out, 900.0 + randf() * 1800.0, 0.012 + randf() * 0.01, "tri", 0.16 + randf() * 0.08)
+				_rest(out, 0.01 + randf() * 0.025)
+		"capsule_drop": # down the chute: clatter, then a thunk in the tray
+			for i in range(3):
+				_note(out, 700.0 - i * 120.0, 0.03, "noise", 0.22, -0.5)
+				_rest(out, 0.035)
+			_note(out, 140.0, 0.14, "square", 0.32, -0.6)
+		"capsule_wobble":
+			_note(out, 520.0, 0.05, "tri", 0.2, 0.25)
+			_note(out, 600.0, 0.05, "tri", 0.2, -0.25)
+		"capsule_pop": # it pops open
+			_note(out, 300.0, 0.04, "square", 0.3, 2.5)
+			_note(out, 5000.0, 0.09, "noise", 0.3, -0.7)
+		"prize_common":
+			for st in [0, 4, 7]:
+				_note(out, _hz(st + 3), 0.07, "square", 0.22)
+			_note(out, _hz(15), 0.2, "pulse", 0.22)
+		"prize_rare":
+			for st in [0, 4, 7, 12, 7]:
+				_note(out, _hz(st + 5), 0.07, "square", 0.22)
+			_note(out, _hz(21), 0.3, "pulse", 0.22)
+		"prize_epic":
+			for st in [0, 3, 7, 10, 14, 15]:
+				_note(out, _hz(st + 2), 0.07, "square", 0.24)
+			_note(out, _hz(19), 0.12, "tri", 0.3)
+			_note(out, _hz(26), 0.4, "pulse", 0.24)
+		"prize_legendary":
+			for st in [0, 4, 7, 12, 16, 19, 24]:
+				_note(out, _hz(st - 2), 0.06, "square", 0.24)
+			_rest(out, 0.05)
+			for st in [22, 22, 26]:
+				_note(out, _hz(st), 0.1, "pulse", 0.26)
+			_note(out, _hz(29), 0.6, "square", 0.26)
 		"pick_item":
 			_note(out, _hz(7), 0.04, "tri", 0.25)
 			_note(out, _hz(14), 0.05, "tri", 0.2)
