@@ -53,6 +53,20 @@ static func color(kind: String) -> Color:
 	return LIST.get(kind, {"color": Color.GRAY})["color"]
 
 
+## The button colours for a game, from its cartridge: its plastic made
+## bright, a pale shade and a deeper neighbour of it, and the label's gold.
+## Different enough to tell the buttons apart, all clearly that cartridge's.
+static func scheme(kind: String) -> Array:
+	var c := color(kind)
+	var s := clampf(c.s, 0.2, 0.9)
+	var out := []
+	for v in [[0.0, 0.9, 1.0], [0.09, 0.5, 1.0], [-0.09, 0.75, 0.95]]:
+		var sat: float = s * v[1] if s > 0.3 else s * v[1] * 1.6
+		out.append(Color.from_hsv(fposmod(c.h + v[0], 1.0), sat, v[2]))
+	out.append(Color(1.0, 0.86, 0.2)) # the title's gold
+	return out
+
+
 static func kinds() -> Array:
 	return LIST.keys()
 
