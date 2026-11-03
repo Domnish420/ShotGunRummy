@@ -54,6 +54,14 @@ the deck in Snap, going out first in President without passing once, or a
 straight flush in Poker. AI players with the gun take turns: each shoots
 whoever's been shot the least so far.
 
+### At the table
+
+**SETTINGS** on the top bar changes graphics, sound, music and hints without
+leaving the game; **MENU** pauses (restart, new players, back to the room).
+Playing against AIs on one phone, once every person at the table is out the
+match ends for you there and then (**YOU'RE OUT**), so there's no watching the
+AIs finish it.
+
 ### Music
 
 Slow swing jazz plays in the background: the room has its own song, and each

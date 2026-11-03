@@ -625,6 +625,7 @@ func _change_name() -> void:
 
 
 func show_menu() -> void:
+	_humans_out = false
 	session.leave()
 	session.stop_scan()
 	game = null
@@ -1964,6 +1965,7 @@ func _start_from_setup() -> void:
 
 ## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
+	_humans_out = false
 	session.leave()
 	world.hide_carousel()
 	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
@@ -2141,6 +2143,7 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_log("%s is down to %d health." % [_name(d["seat"]), d["hp"]])
 		"eliminated":
 			_log("%s IS OUT." % _name(d["seat"]))
+			_check_humans_out()
 		"blackjack_shot":
 			_log("BLACKJACK! %s shoots the dealer, %s." % [_name(d["shooter"]), _name(d["target"])])
 			_blackjack_shot_fx(int(d["shooter"]), int(d["target"]))
@@ -3187,7 +3190,7 @@ func _ai_seat() -> int:
 ## Plays the AIs, one move at a time. In pass-and-play this phone runs them;
 ## online the host does, and everyone sees the moves like anyone else's.
 func _drive_ai(delta: float) -> void:
-	if game == null or round_label == null or (_online() and not session.is_host()):
+	if game == null or round_label == null or (_online() and not session.is_host()) or _humans_out:
 		return
 	if game.kind == "snap":
 		_drive_snaps(delta)
@@ -3312,7 +3315,7 @@ func _build_table() -> void:
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	round_label.clip_text = true
 	top.add_child(round_label)
-	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("MENU", _show_menu, 22)]:
+	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("SETTINGS", _show_settings, 22), _button("MENU", _show_menu, 22)]:
 		b.custom_minimum_size = Vector2(0, 46)
 		top.add_child(b)
 	col.add_child(top)
@@ -4114,6 +4117,45 @@ func _after_fire(res: Dictionary, shooter: int, target: int) -> void:
 	_show_gun(text)
 
 
+var _humans_out := false # playing AIs and every person here is out: the match is over for you
+
+
+## Against AIs (on this phone), once every person at the table is out there's
+## nothing left to watch: the match ends for you there and then.
+func _check_humans_out() -> void:
+	if game == null or _online() or tutorial or demo_stage != "" or _humans_out:
+		return
+	var people := 0
+	var people_alive := 0
+	for p in game.players:
+		if p.bot == "":
+			people += 1
+			if p.alive:
+				people_alive += 1
+	if people == 0 or people_alive > 0 or game.phase == "match_over":
+		return
+	_humans_out = true
+	# the match counts (as a loss) for your stats
+	tried_kinds[game.kind] = true
+	_bump({"matches": 1, "games_tried": tried_kinds.size() - int(stats.get("games_tried", 0))})
+	await get_tree().create_timer(2.2).timeout # let the shot land
+	if game == null or not _humans_out:
+		return
+	_show_out_screen()
+
+
+func _show_out_screen() -> void:
+	var box := _open_overlay(0.97, true, "match")
+	box.add_child(_title("YOU'RE OUT", Palette.RED))
+	box.add_child(_label("The AIs can finish it without you.", 26, Palette.INK, true))
+	box.add_child(_label("Rounds played: %d" % game.round_num, 24, Palette.DIM, true))
+	for p in game.players:
+		box.add_child(_label("%s: %d rounds won, %d points%s" % [p.name, p.rounds_won, p.score, "" if p.alive else " (out)"], 24, Palette.INK, true))
+	box.add_child(_button("PLAY AGAIN", _closing(start_match)))
+	box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
+	box.add_child(_button("BACK TO THE ROOM", show_menu))
+
+
 func _show_match_end() -> void:
 	if demo_stage == "practice":
 		_finish_demo()
@@ -4193,15 +4235,30 @@ func _show_log() -> void:
 	box.add_child(_button("BACK", _closing(_after_action)))
 
 
+## Settings without leaving the table: graphics, sound, music, hints.
+func _show_settings() -> void:
+	var box := _open_overlay(0.94, false, "menu")
+	box.add_child(_title("SETTINGS"))
+	box.add_child(_button("GRAPHICS: %s" % graphics, func() -> void:
+		_cycle_graphics_only()
+		_show_settings()))
+	box.add_child(_button("SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
+		_toggle_sound()
+		_show_settings()))
+	box.add_child(_button("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
+		_toggle_music()
+		_show_settings()))
+	box.add_child(_button("HINTS: %s" % ("ON" if hints else "OFF"), func() -> void:
+		_toggle_hints()
+		_show_settings()))
+	box.add_child(_button("BACK TO THE GAME", _closing(_after_action)))
+
+
 func _show_menu() -> void:
 	var box := _open_overlay(0.94, false, "menu")
 	box.add_child(_title("PAUSED"))
 	box.add_child(_button("RESUME", _closing(_after_action)))
-	box.add_child(_button("GRAPHICS: %s" % graphics, _cycle_graphics))
-	box.add_child(_button("SOUND: %s" % ("ON" if sound_on else "OFF"), _pause_sound))
-	box.add_child(_button("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
-		_toggle_music()
-		_show_menu()))
+	box.add_child(_button("SETTINGS", _show_settings))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
 		box.add_child(_button("LEAVE THE GAME", show_menu))
