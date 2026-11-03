@@ -53,8 +53,8 @@ the in-game MENU (**SOUND** turns everything off).
 
 The songs are in `music/`, named for where they play: `room`, and the game's
 name for its table (`rummy`, `blackjack`, `gofish`, `cheat`, `hearts`,
-`spades` so far; `snap`, `president` and `poker` play the room's song until
-they get their own). Drop in `.ogg`, `.mp3` or `.wav` files with those names
+`spades`, `snap`, `president`, `poker`; a game without its own plays the
+room's). Drop in `.ogg`, `.mp3` or `.wav` files with those names
 and open the project in Godot once to import them.
 
 If there are no recordings at all, a made-in-code stand-in plays instead:
