@@ -1584,11 +1584,11 @@ func show_creator() -> void:
 	# where the face piece sits
 	var face: String = _editing.get("face", "none")
 	if face != "none":
-		if face != "shades":
+		if face in ["cigarette", "cigar", "eyepatch"]:
 			var side_word := "THEIR LEFT" if _editing.get("face_side", "left") == "left" else "THEIR RIGHT"
 			var which := "EYE" if face == "eyepatch" else "MOUTH"
 			box.add_child(_choice_row("  " + which, side_word, _flip_face_side, _flip_face_side))
-		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT"}.get(face, "ANGLE")
+		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT", "tash": "CURL", "visor": "TILT"}.get(face, "ANGLE")
 		box.add_child(_choice_row("  " + angle_word, _step_word(int(_editing.get("face_angle", 0))), _nudge_face.bind("face_angle", -1), _nudge_face.bind("face_angle", 1)))
 		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
 	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), owned)
@@ -2243,40 +2243,53 @@ func show_gun_skins() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.custom_minimum_size = Vector2(0, 700)
 	box.add_child(scroll)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 14)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(grid)
-	for id in GunSkins.ORDER:
-		var unlocked := Unlocks.is_unlocked("gun", id, owned)
-		var cell := VBoxContainer.new()
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cell.add_theme_constant_override("separation", 4)
-		var preview := GunPreview.new()
-		preview.skin_id = id
-		preview.dim = not unlocked
-		preview.custom_minimum_size = Vector2(0, 120)
-		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cell.add_child(preview)
-		var rarity_color: Color = Gacha.RARITY_COLORS[Gacha.rarity("gun", id)] if Gacha.in_machine("gun", id) else Palette.CARD_INK
-		cell.add_child(_label(GunSkins.skin_name(id), 22, Palette.CARD_INK, true))
-		if Gacha.in_machine("gun", id):
-			cell.add_child(_label(Gacha.RARITY_NAMES[Gacha.rarity("gun", id)], 15, rarity_color.darkened(0.25), true))
-		var b: Button
-		if id == gun_skin:
-			b = _paper_button("IN USE", _noop, 20)
-			Palette.accent(b, Palette.AMBER)
-		elif unlocked:
-			b = _paper_button("USE", _set_gun_skin.bind(id), 22)
-		else:
-			b = _paper_button("🔒 GACHA", _noop, 18)
-			b.disabled = true
-		b.custom_minimum_size = Vector2(0, 54)
-		cell.add_child(b)
-		grid.add_child(cell)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	for section in [["CLASSIC", GunSkins.ORDER], ["RETRO", GunSkins.RETRO]]:
+		sections.add_child(_label(section[0], 30, Color(0.36, 0.06, 0.05), true))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 14)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sections.add_child(grid)
+		for id in section[1]:
+			grid.add_child(_gun_cell(id))
 	box.add_child(_paper_button("BACK", _open_customiser, 26)) # back to the wardrobe
+
+
+func _gun_cell(id: String) -> VBoxContainer:
+	var unlocked := Unlocks.is_unlocked("gun", id, owned)
+	var cell := VBoxContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.add_theme_constant_override("separation", 4)
+	var preview := GunPreview.new()
+	preview.skin_id = id
+	preview.dim = not unlocked
+	preview.custom_minimum_size = Vector2(0, 120)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(preview)
+	cell.add_child(_label(GunSkins.skin_name(id), 22, Palette.CARD_INK, true))
+	if Gacha.in_machine("gun", id):
+		var rarity_color: Color = Gacha.RARITY_COLORS[Gacha.rarity("gun", id)]
+		cell.add_child(_label(Gacha.RARITY_NAMES[Gacha.rarity("gun", id)], 15, rarity_color.darkened(0.25), true))
+	var fact := GunSkins.fact(id)
+	if fact != "":
+		cell.add_child(_label(fact if unlocked else "???", 15, Color(0.3, 0.25, 0.2), true))
+	var b: Button
+	if id == gun_skin:
+		b = _paper_button("IN USE", _noop, 20)
+		Palette.accent(b, Palette.AMBER)
+	elif unlocked:
+		b = _paper_button("USE", _set_gun_skin.bind(id), 22)
+	else:
+		b = _paper_button("🔒 GACHA", _noop, 18)
+		b.disabled = true
+	b.custom_minimum_size = Vector2(0, 54)
+	cell.add_child(b)
+	return cell
 
 
 func _set_gun_skin(id: String) -> void:
@@ -2558,6 +2571,10 @@ func _reveal_prize(prize: String) -> void:
 	box.add_child(banner)
 	box.add_child(_label(Gacha.prize_kind(prize), 22, Palette.DIM, true))
 	box.add_child(_title(Gacha.prize_name(prize), Palette.AMBER))
+	var prize_fact := Gacha.prize_fact(prize)
+	if prize_fact != "":
+		box.add_child(_label("DID YOU KNOW? " + prize_fact, 21, Palette.INK, true))
+		_log("DID YOU KNOW? " + prize_fact)
 	match pv[0]:
 		"card":
 			var sp := SkinPreview.new()
@@ -2566,10 +2583,6 @@ func _reveal_prize(prize: String) -> void:
 			var holder := CenterContainer.new()
 			holder.add_child(sp)
 			box.add_child(holder)
-			var fact := CardSkins.fact(str(pv[1]))
-			if fact != "":
-				box.add_child(_label("DID YOU KNOW? " + fact, 22, Palette.INK, true))
-				_log("DID YOU KNOW? " + fact)
 			box.add_child(_button("USE THESE CARDS", _closing(func() -> void: _set_card_skin(str(pv[1])))))
 		"gun":
 			var gp := GunPreview.new()

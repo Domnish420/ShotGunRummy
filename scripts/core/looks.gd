@@ -29,15 +29,20 @@ const OUTFITS := [
 	{"name": "PLUM", "color": Color(0.6, 0.38, 0.65)},
 	{"name": "COAL", "color": Color(0.32, 0.3, 0.3)},
 	{"name": "BONE", "color": Color(0.95, 0.9, 0.78)},
+	{"name": "HAZARD ORANGE", "color": Color(1.0, 0.52, 0.12)},
+	{"name": "OVERALL BLUE", "color": Color(0.22, 0.38, 0.9)},
+	{"name": "CREEP GREEN", "color": Color(0.38, 0.78, 0.32)},
+	{"name": "GHOST PINK", "color": Color(1.0, 0.62, 0.8)},
 ]
 
 ## "own" = the model's own hat, helmet or hood (if it has one).
 const HATS := {
 	"own": "THEIR OWN", "none": "NONE", "bowler": "BOWLER", "top_hat": "TOP HAT",
 	"cowboy": "COWBOY HAT", "flat_cap": "FLAT CAP", "beanie": "BEANIE",
+	"pumpkin": "PUMPKIN HEAD", "miner": "MINER'S HELMET", "gnome": "GNOME CAP", "crown": "ROYALE CROWN", "headset": "PARTY CHAT",
 }
 
-const FACES := {"none": "NONE", "cigarette": "CIGARETTE", "cigar": "CIGAR", "eyepatch": "EYEPATCH", "shades": "SHADES"}
+const FACES := {"none": "NONE", "cigarette": "CIGARETTE", "cigar": "CIGAR", "eyepatch": "EYEPATCH", "shades": "SHADES", "tash": "PLUMBER'S TASH", "visor": "HUD VISOR"}
 
 const PRESETS := [
 	{"name": "THE BRUTE", "base": "Barbarian", "outfit": 0, "hat": "own", "face": "none", "eyes": false},

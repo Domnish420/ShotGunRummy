@@ -12,7 +12,7 @@ const ORDER := ["classic", "felt", "candy", "blood", "wire", "pumpkin", "midnigh
 ## The retro decks: each one nods to a famous game with its own original art
 ## (no names, logos or characters), and unlocking it teaches you a bit of
 ## gaming history ("fact").
-const RETRO := ["overworld", "paddle", "missing", "diamond", "lava", "dust", "teams", "bricks", "test", "cheat", "crowbar", "rings", "maze", "lineclear", "goldcart", "shareware", "dungeon", "invaders"]
+const RETRO := ["overworld", "paddle", "missing", "diamond", "lava", "dust", "teams", "bricks", "test", "cheat", "crowbar", "rings", "maze", "lineclear", "goldcart", "shareware", "dungeon", "invaders", "kart", "hearts3", "harvest", "firstaid", "fireball", "bhop"]
 
 const SKINS := {
 	"classic": {
@@ -230,6 +230,52 @@ const SKINS := {
 		"paper": Color(0.92, 0.92, 0.92), "edge": Color(0.2, 0.2, 0.2), "ink": Color(0.05, 0.05, 0.05), "red": Color(0.55, 0.1, 0.1),
 		"back": Color(0.95, 0.95, 0.95), "back_dark": Color(0.04, 0.04, 0.04), "back_edge": Color(0.95, 0.95, 0.95), "pattern": "paddle",
 		"fact": "Pong (1972) was Atari's first hit. The first machine was tested in a bar called Andy Capp's Tavern.",
+	},
+	"kart": {
+		"name": "CHECKERED FLAG", "set": "retro",
+		"paper": Color(0.97, 0.97, 0.97), "edge": Color(0.1, 0.1, 0.1), "ink": Color(0.06, 0.06, 0.06), "red": Color(0.85, 0.1, 0.12),
+		"back": Color(0.95, 0.95, 0.95), "back_dark": Color(0.06, 0.06, 0.06), "back_edge": Color(0.85, 0.1, 0.12), "pattern": "checks",
+		"fact": "Super Mario Kart (1992) on the SNES made kart racing a genre of its own.",
+	},
+	"hearts3": {
+		"name": "THREE HEARTS", "set": "retro",
+		"paper": Color(0.97, 0.94, 0.88), "edge": Color(0.6, 0.15, 0.15), "ink": Color(0.1, 0.08, 0.06), "red": Color(0.8, 0.1, 0.12),
+		"back": Color(0.9, 0.12, 0.15), "back_dark": Color(0.1, 0.1, 0.12), "back_edge": Color(0.9, 0.12, 0.15), "pattern": "sprite",
+		"sprite": ["..........", ".RR...RR..", "RRWR.RRRR.", "RWRRRRRRR.", "RRRRRRRRR.", ".RRRRRRR..", "..RRRRR...", "...RRR....", "....R.....", ".........."],
+		"palette": {"R": Color(0.9, 0.12, 0.15), "W": Color(1.0, 0.85, 0.85)}, "repeat": 3,
+		"fact": "In The Legend of Zelda (1986) you set out with just three hearts.",
+	},
+	"harvest": {
+		"name": "HARVEST", "set": "retro",
+		"paper": Color(0.97, 0.95, 0.86), "edge": Color(0.45, 0.32, 0.18), "ink": Color(0.15, 0.1, 0.05), "red": Color(0.75, 0.2, 0.1),
+		"back": Color(0.4, 0.75, 0.25), "back_dark": Color(0.45, 0.3, 0.16), "back_edge": Color(0.6, 0.45, 0.25), "pattern": "sprite",
+		"sprite": ["...GG...", "..GgG...", "...G.G..", "...PP...", "..PPPP..", "..PwPP..", "...PP...", "dDddDddD"],
+		"palette": {"G": Color(0.35, 0.75, 0.25), "g": Color(0.25, 0.55, 0.18), "P": Color(0.75, 0.4, 0.85), "w": Color(0.95, 0.85, 1.0), "d": Color(0.38, 0.25, 0.13), "D": Color(0.3, 0.19, 0.1)}, "repeat": 3,
+		"fact": "Stardew Valley (2016) was made almost entirely by one person, Eric Barone, over about four years.",
+	},
+	"firstaid": {
+		"name": "FIRST AID", "set": "retro",
+		"paper": Color(0.96, 0.95, 0.92), "edge": Color(0.7, 0.12, 0.12), "ink": Color(0.1, 0.1, 0.1), "red": Color(0.75, 0.1, 0.1),
+		"back": Color(0.8, 0.1, 0.1), "back_dark": Color(0.18, 0.2, 0.18), "back_edge": Color(0.8, 0.1, 0.1), "pattern": "sprite",
+		"sprites": [["RRRRRRRR", "RRRWWRRR", "RRRWWRRR", "RWWWWWWR", "RWWWWWWR", "RRRWWRRR", "RRRWWRRR", "RRRRRRRR"], ["........", "........", "........", "........", "........", "........", "........", "........"]],
+		"palette": {"R": Color(0.8, 0.1, 0.1), "W": Color(0.97, 0.97, 0.97)}, "repeat": 3,
+		"fact": "Left 4 Dead (2008) has an AI Director that changes the zombies and the supplies every time you play.",
+	},
+	"fireball": {
+		"name": "FIREBALL", "set": "retro",
+		"paper": Color(0.95, 0.95, 1.0), "edge": Color(0.25, 0.35, 0.85), "ink": Color(0.06, 0.08, 0.2), "red": Color(0.85, 0.15, 0.2),
+		"back": Color(0.35, 0.6, 1.0), "back_dark": Color(0.08, 0.08, 0.2), "back_edge": Color(0.9, 0.95, 1.0), "pattern": "sprite",
+		"sprite": ["..........", "...bbB....", ".bbBBWB...", "bBBWWWWB..", "bBWWWWWWB.", "bBBWWWWB..", ".bbBBWB...", "...bbB....", "..........", ".........."],
+		"palette": {"b": Color(0.2, 0.35, 0.9), "B": Color(0.35, 0.6, 1.0), "W": Color(0.9, 0.95, 1.0)}, "repeat": 3,
+		"fact": "Combos in Street Fighter II (1991) began as a bug the developers liked so much they kept it.",
+	},
+	"bhop": {
+		"name": "BUNNY HOP", "set": "retro",
+		"paper": Color(0.95, 0.93, 0.9), "edge": Color(0.4, 0.35, 0.3), "ink": Color(0.1, 0.08, 0.06), "red": Color(0.7, 0.15, 0.12),
+		"back": Color(0.92, 0.9, 0.86), "back_dark": Color(0.32, 0.26, 0.2), "back_edge": Color(0.92, 0.9, 0.86), "pattern": "sprite",
+		"sprite": ["..W.W...", "..W.W...", "..WWW...", ".WWkWW..", ".WWWWW..", "..WWWW..", ".WWWWWW.", "..W..W.."],
+		"palette": {"W": Color(0.92, 0.9, 0.86), "k": Color(0.1, 0.08, 0.06)}, "repeat": 3,
+		"fact": "Bunny hopping began as a quirk of Quake's movement code that let good players build up speed by jumping.",
 	},
 }
 

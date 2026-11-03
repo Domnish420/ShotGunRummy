@@ -1577,9 +1577,17 @@ func test_unlocks() -> void:
 		check(Gacha.key(pv[0], pv[1]) == k, "gacha: %s round-trips" % k)
 	for id in CardSkins.ORDER + CardSkins.RETRO:
 		check(id == "classic" or pool.has("card:" + id), "card skin %s is in the machine" % id)
-	for id in GunSkinsT.ORDER:
+	for id in GunSkinsT.ORDER + GunSkinsT.RETRO:
 		check(GunSkinsT.SKINS.has(id), "gun skin %s is defined" % id)
 		check(id == "standard" or pool.has("gun:" + id), "gun skin %s is in the machine" % id)
+	for id in GunSkinsT.SKINS:
+		check(GunSkinsT.ORDER.has(id) or GunSkinsT.RETRO.has(id), "gun skin %s shows in the picker" % id)
+	for id in GunSkinsT.RETRO:
+		check(GunSkinsT.fact(id) != "", "retro shotgun %s has a fact" % id)
+	for k in Gacha.COSTUME_FACTS:
+		check(pool.has(k), "costume fact %s is for a prize in the machine" % k)
+	for k in ["hat:pumpkin", "hat:miner", "hat:gnome", "hat:crown", "hat:headset", "face:tash", "face:visor", "outfit:8", "outfit:11"]:
+		check(Gacha.prize_fact(k) != "", "retro costume %s has a fact" % k)
 	check(Unlocks.is_unlocked("card", "classic", none) and Unlocks.is_unlocked("gun", "standard", none), "classic cards and the standard shotgun are free")
 	check(not Unlocks.is_unlocked("card", "gold", none) and not Unlocks.is_unlocked("hat", "cowboy", none), "the rest starts locked")
 	check(Unlocks.is_unlocked("hat", "bowler", none), "some hats are free")

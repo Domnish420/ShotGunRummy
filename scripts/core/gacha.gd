@@ -34,6 +34,25 @@ const COSTUMES := {
 	"face:shades": "common", "face:cigar": "rare", "face:eyepatch": "rare",
 	"outfit:4": "common", "outfit:5": "common", "outfit:6": "rare", "outfit:7": "rare",
 	"eyes:true": "epic",
+	# the retro ones: each nods to a famous game
+	"hat:pumpkin": "rare", "hat:miner": "rare", "hat:gnome": "epic", "hat:crown": "legendary", "hat:headset": "rare",
+	"face:tash": "rare", "face:visor": "epic",
+	"outfit:8": "rare", "outfit:9": "rare", "outfit:10": "rare", "outfit:11": "rare",
+}
+
+## The bit of gaming history each retro costume piece teaches you.
+const COSTUME_FACTS := {
+	"hat:pumpkin": "In Minecraft, wearing a carved pumpkin on your head stops Endermen getting angry when you look at them.",
+	"hat:miner": "Spelunky started out in 2008 as a free PC game made by Derek Yu.",
+	"hat:gnome": "In Half-Life 2: Episode Two you can carry a garden gnome the whole way to a rocket and send it into space, for an achievement.",
+	"hat:crown": "Battle royale games take their name from Battle Royale, a Japanese film from 2000.",
+	"hat:headset": "Xbox Live launched in 2002 and put voice-chat headsets on console players.",
+	"face:tash": "Mario got his moustache because, in 1981's tiny sprites, a mouth was too hard to draw.",
+	"face:visor": "Metroid (1986) saved a surprise for the end: the hero inside the armour, Samus, is a woman.",
+	"outfit:8": "Gordon Freeman, the hero of Half-Life, never says a single word.",
+	"outfit:9": "Mario wears overalls so that you can see his arms swing in tiny sprites.",
+	"outfit:10": "Minecraft's creeper came from a coding slip: a pig model built tall instead of long.",
+	"outfit:11": "Pac-Man's shape was inspired by a pizza with a slice taken out.",
 }
 
 const GUNS := {
@@ -41,6 +60,8 @@ const GUNS := {
 	"gun:chrome": "rare", "gun:bone": "rare", "gun:candy": "rare",
 	"gun:blood": "epic", "gun:neon": "epic", "gun:toxic": "epic",
 	"gun:gold": "legendary",
+	"gun:subject": "epic", "gun:gravity": "epic", "gun:physbeam": "epic", "gun:blockblaster": "rare",
+	"gun:boomstick": "legendary", "gun:plumber": "rare", "gun:speedblue": "rare", "gun:lightgun": "rare",
 }
 
 ## Card skins not listed here are common (retro decks default to rare).
@@ -158,6 +179,18 @@ static func prize_name(k: String) -> String:
 		"eyes":
 			return "GLOWING EYES"
 	return k
+
+
+## The bit of gaming history a prize teaches you, or "".
+static func prize_fact(k: String) -> String:
+	var pv := split(k)
+	match pv[0]:
+		"card":
+			var CardSkins = load("res://scripts/ui/card_skins.gd")
+			return CardSkins.fact(str(pv[1]))
+		"gun":
+			return GunSkins.fact(str(pv[1]))
+	return str(COSTUME_FACTS.get(k, ""))
 
 
 ## What kind of prize, for the reveal: "CARD SKIN", "SHOTGUN SKIN", "COSTUME".

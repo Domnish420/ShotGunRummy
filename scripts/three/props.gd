@@ -477,6 +477,53 @@ static func _dress_head(head: Node3D, look: Dictionary) -> Array:
 			var beanie := ball(head, 0.6, 10, tex_mat("felt", Color(0.7, 0.3, 0.25), 4.0), Vector3(0, 0.72, -0.02))
 			beanie.scale = Vector3(1, 0.62, 1)
 			ball(head, 0.12, 6, tex_mat("felt", Color(0.8, 0.75, 0.6), 4.0), Vector3(0, 1.1, -0.02))
+		"pumpkin":
+			# a carved pumpkin over the whole head, lit from inside
+			var gourd := ball(head, 0.7, 12, plain(Color(0.95, 0.5, 0.08), 0.7), Vector3(0, 0.45, 0))
+			gourd.scale = Vector3(1.06, 0.9, 1.0)
+			# its ridges: slimmer, darker lobes round the middle
+			for k in range(6):
+				var a := k * TAU / 6.0 + TAU / 12.0
+				var lobe := ball(head, 0.42, 8, plain(Color(0.85, 0.42, 0.06), 0.7), Vector3(sin(a) * 0.36, 0.45, cos(a) * 0.34))
+				lobe.scale = Vector3(0.7, 1.45, 0.7)
+			var candle := glow(Color(1.0, 0.75, 0.2), 2.5)
+			for x in [-0.22, 0.22]:
+				box(head, Vector3(0.18, 0.14, 0.06), candle, Vector3(x, 0.58, 0.64), Vector3(0, x * 0.6, 0.6 if x < 0 else -0.6))
+			box(head, Vector3(0.42, 0.09, 0.06), candle, Vector3(0, 0.26, 0.64))
+			cyl(head, 0.05, 0.07, 0.2, 6, plain(Color(0.3, 0.45, 0.15)), Vector3(0, 1.1, 0), Vector3(0.2, 0, 0.1))
+		"miner":
+			# a yellow hard hat with a lamp on the front
+			var shell := ball(head, 0.6, 10, plain(Color(0.98, 0.78, 0.12), 0.4), Vector3(0, 0.74, -0.02))
+			shell.scale = Vector3(1, 0.62, 1.05)
+			cyl(head, 0.68, 0.68, 0.04, 14, plain(Color(0.9, 0.7, 0.1), 0.4), Vector3(0, 0.8, 0.02))
+			cyl(head, 0.11, 0.11, 0.1, 10, plain(Color(0.25, 0.25, 0.27), 0.4, 0.6), Vector3(0, 0.98, 0.56), Vector3(PI / 2.0, 0, 0))
+			cyl(head, 0.08, 0.08, 0.02, 10, glow(Color(1.0, 0.97, 0.8), 3.5), Vector3(0, 0.98, 0.62), Vector3(PI / 2.0, 0, 0))
+		"gnome":
+			# a tall red pointed cap, flopping a little
+			cyl(head, 0.6, 0.6, 0.06, 14, plain(Color(0.92, 0.92, 0.88)), Vector3(0, 0.84, 0))
+			cyl(head, 0.02, 0.56, 1.05, 12, plain(Color(0.92, 0.14, 0.1), 0.8), Vector3(0.05, 1.38, -0.05), Vector3(-0.12, 0, -0.1))
+		"crown":
+			# a gold crown with points and jewels
+			var gold := plain(Color(1.0, 0.78, 0.25), 0.25, 0.9)
+			cyl(head, 0.44, 0.42, 0.22, 14, gold, Vector3(0, 0.95, 0))
+			for k in range(6):
+				var a := k * TAU / 6.0
+				cyl(head, 0.0, 0.08, 0.2, 6, gold, Vector3(sin(a) * 0.4, 1.15, cos(a) * 0.4))
+				ball(head, 0.045, 6, plain([Color(0.9, 0.1, 0.15), Color(0.2, 0.4, 0.95), Color(0.2, 0.8, 0.3)][k % 3], 0.2, 0.3), Vector3(sin(a + 0.5) * 0.43, 0.95, cos(a + 0.5) * 0.43))
+		"headset":
+			# a gaming headset: band over the top, ear cups, a mic by the mouth
+			var plastic := plain(Color(0.08, 0.08, 0.09), 0.5)
+			var prev := Vector3(-0.6, 0.35, 0)
+			for k in range(1, 9):
+				var a := PI - k * PI / 8.0
+				var next := Vector3(cos(a) * 0.6, 0.35 + sin(a) * 0.68, 0)
+				_rod(head, prev, next, 0.035, plastic)
+				prev = next
+			for x in [-0.62, 0.62]:
+				cyl(head, 0.19, 0.19, 0.12, 12, plastic, Vector3(x, 0.32, 0), Vector3(0, 0, PI / 2.0))
+				cyl(head, 0.12, 0.12, 0.02, 10, glow(Color(0.3, 1.0, 0.45), 2.0), Vector3(x * 1.1, 0.32, 0), Vector3(0, 0, PI / 2.0))
+			_rod(head, Vector3(0.62, 0.25, 0.08), Vector3(0.25, 0.0, 0.55), 0.02, plastic)
+			ball(head, 0.05, 6, plastic, Vector3(0.22, -0.01, 0.57))
 	# face pieces sit on the head's anchors (face_anchors.gd), measured off
 	# each model, so they rest on the surface: no floating, no sinking in.
 	# The player picks the side, the angle and the height.
@@ -549,6 +596,28 @@ static func _dress_head(head: Node3D, look: Dictionary) -> Array:
 			var bridge: Vector3 = nose["pos"] + nose["normal"] * 0.012 + Vector3(0, 0.03 + lift, 0)
 			_rod(head, inner["left"], bridge, 0.016, lens)
 			_rod(head, bridge, inner["right"], 0.016, lens)
+	match look["face"]:
+		"tash":
+			# a big bushy moustache under the nose
+			var nose := FaceAnchors.anchor(base, "nose")
+			var brown := plain(Color(0.25, 0.14, 0.08), 0.9)
+			for sd in [-1.0, 1.0]:
+				var half := ball(head, 0.12, 8, brown, nose["pos"] + nose["normal"] * 0.03 + Vector3(sd * 0.12, -0.11 + lift, 0))
+				half.scale = Vector3(1.4, 0.55, 0.7)
+				half.rotation.z = sd * (-0.25 - angle * 0.08)
+		"visor":
+			# a glowing visor right across both eyes
+			var l := FaceAnchors.anchor(base, "cover_left")
+			var r := FaceAnchors.anchor(base, "cover_right")
+			var n: Vector3 = (l["normal"] + r["normal"]).normalized()
+			var mid: Vector3 = (l["pos"] + r["pos"]) * 0.5 + n * 0.05 + Vector3(0, lift, 0)
+			var width: float = (l["pos"] - r["pos"]).length() + 0.36
+			var vm := glow(Color(0.3, 0.95, 1.0, 0.75), 1.6)
+			vm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			var bar := box(head, Vector3(width, 0.16, 0.03), vm, mid)
+			bar.basis = FaceAnchors.facing(n).rotated(Vector3.RIGHT, angle * 0.05)
+			for sd in [-1.0, 1.0]:
+				_rod(head, mid + bar.basis.x * sd * width * 0.5, mid + bar.basis.x * sd * width * 0.5 - n * 0.3, 0.018, plain(Color(0.2, 0.22, 0.25), 0.4, 0.6))
 	var eyes := []
 	if look["eyes"]:
 		for sd in ["left", "right"]:
