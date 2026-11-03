@@ -69,7 +69,7 @@ static func next_action(game, seat: int, level: String = "normal", memory: Dicti
 		var meld := _choose_meld(game, seat, level, memory)
 		if not meld.is_empty():
 			return ["meld", [meld]]
-		var lay := _choose_lay_off(game, seat, level, memory)
+		var lay := _choose_lay_off(game, seat, level, memory) if game.can_lay_off(seat) else []
 		if not lay.is_empty():
 			return ["lay_off", lay]
 	var discard := choose_discard(game, seat, level)

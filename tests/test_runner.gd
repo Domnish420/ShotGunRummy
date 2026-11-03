@@ -36,7 +36,7 @@ func _init() -> void:
 		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
 		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day",
 		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down",
-		"test_looks", "test_face_anchors", "test_sets", "test_runs", "test_lay_off", "test_best_partition",
+		"test_looks", "test_face_anchors", "test_sets", "test_runs", "test_lay_off", "test_lay_off_needs_meld", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -164,6 +164,43 @@ func test_trump_sets() -> void:
 	check(not Cards.is_set(cards("7S 7S 2D"), 2), "no duplicate suits")
 	check(not Cards.is_set(cards("7S 7H 7D 7C 2D"), 2), "a set is still at most 4")
 	check(Cards.meld_type(cards("7S 2H 2D"), 2) == "any", "7 + two trumps could be a set or a run")
+
+
+## Rummy: you can only add to the melds on the table once you've put down
+## one of your own this round.
+func test_lay_off_needs_meld() -> void:
+	var g := new_game(2)
+	for p in g.players:
+		p.turns_taken = 3
+	g.turn = 0
+	g.phase = "play"
+	g.melds = [{"id": "mx", "type": "run", "cards": cards("4D 5D 6D"), "owner": 1}]
+	g.players[0].hand = cards("7D 2C 2H 2S 9H")
+	g.players[0].has_melded = false
+	check(not g.can_lay_off(0), "no meld of your own yet: can't lay off")
+	var r := g.lay_off(0, ["7D"], "mx")
+	check(not r["ok"] and str(r["error"]).contains("meld of your own"), "laying off first is refused: %s" % r["error"])
+	check(g.find_meld("mx")["cards"].size() == 3, "and nothing moved")
+	check(g.meld(0, ["2C", "2H", "2S"])["ok"], "put down your own meld")
+	check(g.can_lay_off(0), "now you can")
+	check(g.lay_off(0, ["7D"], "mx")["ok"], "and lay off onto theirs")
+	# going out in one go still counts the table's melds when your hand has a meld
+	var g2 := new_game(2)
+	for p in g2.players:
+		p.turns_taken = 3
+	g2.turn = 0
+	g2.phase = "play"
+	g2.melds = [{"id": "my", "type": "run", "cards": cards("4D 5D 6D"), "owner": 1}]
+	g2.players[0].has_melded = false
+	g2.players[0].hand = cards("7D 9H")
+	check(not g2.go_out_check(0)["can"], "no meld in hand: the 7 can't go on their run, so no way out")
+	g2.players[0].hand = cards("2C 2H 2S 7D 9H")
+	check(g2.go_out_check(0)["can"], "meld 2 2 2, lay the 7 off, discard the 9: out")
+	# a new round wipes it
+	g.players[0].has_melded = true
+	g.phase = "round_over"
+	g.start_round()
+	check(not g.players[0].has_melded, "every round starts with no meld down")
 
 
 func test_trump_lay_off() -> void:

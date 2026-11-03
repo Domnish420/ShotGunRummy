@@ -155,7 +155,7 @@ func _run() -> void:
 				main._meld_selected()
 				continue
 			var laid := false
-			for c in (me.hand if game.can_place(seat) else []):
+			for c in (me.hand if game.can_place(seat) and game.can_lay_off(seat) else []):
 				for m in game.melds:
 					if Cards.can_lay_off(m, [c], game.trump_rank):
 						main.selected = [c["id"]]

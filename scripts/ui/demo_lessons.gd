@@ -22,7 +22,7 @@ const GAMES := {
 		["draw:source=discard", "Taking the top of the discard pile: you can't throw that same card straight back."],
 		["discard", "End your turn by DISCARDING 1 card. Trumps can't be discarded."],
 		["meld", "A MELD: 3 or 4 of the same rank (a set), or 3+ in a row of one suit (a run). Aces are low."],
-		["layoff", "LAYING OFF: add cards to any meld on the table, yours or anyone's."],
+		["layoff", "LAYING OFF: once you've put down a meld of your own, add cards to any meld on the table, yours or anyone's."],
 		["swap", "SWAPPING A TRUMP: hold the real card a trump stands for? Swap it in and take the trump, if you meld it straight away."],
 		["round_end", "GOING OUT: empty your hand and you win the round. Everyone else's cards count against them."],
 		["round_end:rummy=true", "RUMMY! Going out in one turn, without having melded before, doubles the points."],

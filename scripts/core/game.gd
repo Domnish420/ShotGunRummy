@@ -13,7 +13,8 @@ extends RefCounted
 ##    are shuffled into the stock each round, so a draw can give you one.
 ##  - Your turn: draw 1 card (stock or top of the discard pile), meld sets
 ##    (3-4 of a kind) and runs (3+ in a row, same suit), lay off onto any meld on
-##    the table, then discard 1 card. You can't discard the card you just took
+##    the table (once you've put down a meld of your own this round), then
+##    discard 1 card. You can't discard the card you just took
 ##    from the discard pile.
 ##  - Drawing an item from the stock: keep it and draw again (stock or discard
 ##    pile, your choice) until you get a playing card.
@@ -234,8 +235,11 @@ func go_out_check(seat: int) -> Dictionary:
 		return {"can": false, "rummy": false}
 	var best: Dictionary = Cards.best_partition(players[seat].hand, trump_rank)
 	var table := []
-	for m in melds:
-		table.append({"type": m["type"], "cards": m["cards"].duplicate()})
+	# the melds already down are only yours to add to once you've melded
+	# (or will have, with the melds in your hand)
+	if players[seat].has_melded or not best["melds"].is_empty():
+		for m in melds:
+			table.append({"type": m["type"], "cards": m["cards"].duplicate()})
 	for meld_cards in best["melds"]:
 		table.append({"type": Cards.meld_type(meld_cards, trump_rank), "cards": meld_cards.duplicate()})
 	# lay off whatever's left, as long as something still fits
@@ -386,6 +390,12 @@ func _clear_temp_wild() -> void:
 	_temp_wild = []
 
 
+## May `seat` add cards to melds on the table? Only once they've put down a
+## meld of their own this round.
+func can_lay_off(seat: int) -> bool:
+	return players[seat].has_melded
+
+
 ## May `seat` put cards on the table this turn? Not on their first turn.
 func can_place(seat: int) -> bool:
 	return not (options["no_placing_first_turn"] and players[seat].turns_taken <= 1)
@@ -515,6 +525,8 @@ func lay_off(seat: int, card_ids: Array, meld_id: String) -> Dictionary:
 	var m := find_meld(meld_id)
 	if m.is_empty():
 		return _fail("That meld doesn't exist.")
+	if not can_lay_off(seat):
+		return _fail("Put down a meld of your own first: then you can add cards to the melds on the table.")
 	var kind: String = Cards.lay_off_type(m, cards, trump_rank)
 	if kind == "":
 		return _fail("Those cards don't fit on that meld.")

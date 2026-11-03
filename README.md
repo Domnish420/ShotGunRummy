@@ -276,8 +276,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   If the stock gives you an item, keep it and draw again until you get a
   playing card. You can't discard the card you just took from the discard pile.
 - **Melds.** A set is 3–4 cards of the same rank. A run is 3+ cards in a row of
-  one suit. Aces are low (A-2-3 counts, Q-K-A doesn't). You can lay off onto
-  anyone's meld.
+  one suit. Aces are low (A-2-3 counts, Q-K-A doesn't). Once you've put down a
+  meld of your own this round, you can lay off onto anyone's meld.
 - **Going out.** Empty your hand of playing cards to win the round (items don't count). You score the cards everyone
   else is still holding (A = 1, 2–10 = face value, J/Q/K = 10). Going out in one
   turn without having melded before is **Rummy** and doubles it.

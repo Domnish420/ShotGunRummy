@@ -3497,14 +3497,15 @@ func _refresh() -> void:
 		for meld_cards in best["melds"]:
 			for c in meld_cards:
 				meld_ids[c["id"]] = true
-		for c in best["deadwood"]:
-			for m in game.melds:
-				if Cards.can_lay_off(m, [c], game.trump_rank):
-					lay_ids[c["id"]] = true
+		if game.can_lay_off(seat):
+			for c in best["deadwood"]:
+				for m in game.melds:
+					if Cards.can_lay_off(m, [c], game.trump_rank):
+						lay_ids[c["id"]] = true
 	var targets := {}
 	if can_play and game.can_place(seat) and not sel_cards.is_empty():
 		for m in game.melds:
-			if Cards.can_lay_off(m, sel_cards, game.trump_rank) or not game.find_swap(seat, m["id"], selected).is_empty():
+			if (game.can_lay_off(seat) and Cards.can_lay_off(m, sel_cards, game.trump_rank)) or not game.find_swap(seat, m["id"], selected).is_empty():
 				targets[m["id"]] = true
 	world.sync({
 		"game": game, "viewer": seat, "hand": hand, "selected": selected, "selected_item": selected_item,
@@ -3580,6 +3581,8 @@ func _status_text(sel_cards: Array, valid_meld: bool) -> String:
 		return "VALID MELD. PRESS MELD"
 	for m in game.melds:
 		if Cards.can_lay_off(m, sel_cards, game.trump_rank):
+			if not game.can_lay_off(seat):
+				return "PUT DOWN A MELD OF YOUR OWN FIRST, THEN YOU CAN ADD TO THE TABLE'S"
 			return "TAP A GLOWING MELD TO LAY OFF"
 	for m in game.melds:
 		if not game.find_swap(seat, m["id"], selected).is_empty():
@@ -4149,7 +4152,7 @@ func _show_rules() -> void:
 		"THE DEAL. Everyone gets 7 playing cards. Nobody starts with items: a random few item cards are shuffled into the stock each round (sometimes none, sometimes lots), so a draw from it can now and then give you an item instead of a playing card.",
 		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
 		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
-		"LAYING OFF. Add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
+		"LAYING OFF. Once you've put down a meld of your own this round, add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
 		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
 		"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for every 10 points scored (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
 		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
