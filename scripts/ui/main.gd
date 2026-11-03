@@ -3169,6 +3169,41 @@ func _show_blackjack_result() -> void:
 const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 1.5, "finish": 1.5}
 
 
+# ---------------------------------------------------------------- pinch to zoom
+
+var _touches := {} # finger -> where it is on screen
+var _pinch_gap := 0.0
+var _pinching := false
+var _pinch_ended := 0
+
+
+## Two fingers on the table: spread them to zoom in there, pinch to zoom out.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+	else:
+		_touches[event.index] = event.position
+	if _touches.size() == 2:
+		var pts: Array = _touches.values()
+		var gap: float = (pts[0] as Vector2).distance_to(pts[1])
+		if not _pinching:
+			_pinching = true
+			_pinch_gap = gap
+			return
+		if game != null and round_label != null and overlay_layer.get_child_count() == 0 and _pinch_gap > 1.0:
+			var mid: Vector2 = ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
+			world.zoom_at(_to_view(mid), (gap / _pinch_gap - 1.0) * 5.0)
+		_pinch_gap = gap
+	elif _pinching:
+		_pinching = false
+		_pinch_ended = Time.get_ticks_msec()
+
+
 func _process(delta: float) -> void:
 	_drive_lessons(delta)
 	_drive_demo(delta)
@@ -3426,10 +3461,21 @@ func _make_mode_ui():
 	return null
 
 
-## A tap on the table: find the card under it in 3D.
+## A tap on the table: find the card under it in 3D. The scroll wheel (and a
+## trackpad pinch) zooms in and out where the mouse is.
 func _on_table_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		if game != null and overlay_layer.get_child_count() == 0:
+			world.zoom_at(_to_view(event.position), 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
+		return
+	if event is InputEventMagnifyGesture:
+		if game != null and overlay_layer.get_child_count() == 0:
+			world.zoom_at(_to_view(event.position), (event.factor - 1.0) * 6.0)
+		return
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
+	if _pinching or Time.get_ticks_msec() - _pinch_ended < 250:
+		return # the first finger of a pinch isn't a tap
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))

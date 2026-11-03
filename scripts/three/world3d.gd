@@ -54,6 +54,8 @@ var _cards := {} # id -> Card3D
 var _outline_mats := {}
 var _back_mat: StandardMaterial3D
 var _cam_home := Transform3D()
+var _cam_view := Transform3D() # where the camera is now: home, or zoomed in on the table
+var _syncing := false
 var _menu_mode := true
 var _last := {} # the last sync, so we can redo it when textures arrive
 var _viewer := 0
@@ -449,6 +451,7 @@ func _fit_camera() -> void:
 	else:
 		camera.look_at_from_position(Vector3(0, 1.12, 1.55), Vector3(0, 0, -0.12), Vector3.UP)
 	_cam_home = camera.transform
+	_cam_view = _cam_home
 	if _menu_mode:
 		return
 	if not _last.is_empty():
@@ -984,7 +987,16 @@ func sync(s: Dictionary) -> void:
 
 	var stock_xf := _flat(Vector3(-0.2, TABLE_TOP + 0.002, -0.02), 0.08, false)
 	var discard_base := Vector3(0.2, TABLE_TOP + 0.002, -0.02)
-	var cam: Transform3D = _cam_home
+	# zoomed in, but play's stopped (the round's over, the gun's out): back to your seat
+	if _cam_view != _cam_home and not (game.phase in ["play", "draw"]):
+		_syncing = true
+		zoom_reset()
+		_syncing = false
+	var cam: Transform3D = _cam_view # your hand stays in front of you as you zoom
+	# zoomed down near the cloth, your hand would dip through the table: pull it in
+	# toward the lens and shrink it to match, so it looks the same but clears the top
+	var hk := clampf((_cam_view.origin.y - TABLE_TOP) / maxf(0.01, _cam_home.origin.y - TABLE_TOP), 0.3, 1.0)
+	cam = cam * Transform3D(Basis().scaled(Vector3.ONE * hk), Vector3.ZERO)
 
 	# the stock: a little stack; only the top one is tappable
 	var stock_n: int = mini(game.stock.size(), 14)
@@ -1279,6 +1291,70 @@ const ITEM_COLORS := {
 	"flashbang": Color(1, 1, 1), "revolver": Color(1.0, 0.25, 0.2), "double_down": Color(1.0, 0.85, 0.5),
 }
 const SPINNERS := ["tarot", "joker_paint", "chaos"]
+
+
+# ================================================================ zoom
+
+## How close you can get: the camera never comes nearer than this to the felt.
+const ZOOM_CLOSEST := 0.42
+
+
+func zoomed() -> bool:
+	return _cam_view != _cam_home
+
+
+## Zoom in (steps > 0) towards the spot on the table under `at` (in the 3D
+## view's pixels), or back out (steps < 0) towards your seat. The camera moves
+## along the line through that spot, so it stays under your finger or the
+## mouse; your hand stays where it is on screen.
+func zoom_at(at: Vector2, steps: float) -> void:
+	if _room or _menu_mode or not _preview.is_empty() or _last.is_empty() or dealing or _gun_pose != "rest":
+		return
+	var old := _cam_view
+	if steps > 0.0:
+		var from := camera.project_ray_origin(at)
+		var dir := camera.project_ray_normal(at)
+		if dir.y > -0.05:
+			return # pointing over the table, not at it
+		var t := (TABLE_TOP - from.y) / dir.y
+		var spot := from + dir * t
+		var d := old.origin.distance_to(spot)
+		var move := minf(d * 0.16 * steps, d - ZOOM_CLOSEST)
+		if move <= 0.0:
+			return
+		_cam_view = Transform3D(old.basis, old.origin + (spot - old.origin).normalized() * move)
+	else:
+		var back := clampf(0.3 * -steps, 0.0, 1.0)
+		_cam_view = Transform3D(old.basis, old.origin.lerp(_cam_home.origin, back))
+		if _cam_view.origin.distance_to(_cam_home.origin) < 0.1:
+			_cam_view = _cam_home
+	_set_view(old)
+
+
+## Back to the normal view from your seat.
+func zoom_reset() -> void:
+	if _cam_view == _cam_home:
+		return
+	var old := _cam_view
+	_cam_view = _cam_home
+	_set_view(old)
+
+
+## Moves the camera to _cam_view and carries your hand along with it.
+func _set_view(old: Transform3D) -> void:
+	if _cam_tween != null and _cam_tween.is_valid():
+		_cam_tween.kill()
+	camera.transform = _cam_view
+	var carry := _cam_view * old.affine_inverse()
+	for id in _cards:
+		var c: Card3D = _cards[id]
+		if c.pick_kind == "hand" or c.pick_kind == "item":
+			var tw = c.get_meta("tween") if c.has_meta("tween") else null
+			if tw is Tween and tw.is_valid():
+				tw.kill()
+			c.transform = carry * c.transform
+	if not _last.is_empty() and not _syncing:
+		sync(_last) # the hints by your hand follow it
 
 
 ## Where a player's things are: your item row, or in front of their seat.
@@ -1793,8 +1869,8 @@ func shake(amount: float = 0.03) -> void:
 	var t := create_tween()
 	for i in range(6):
 		var off := Vector3(randf_range(-amount, amount), randf_range(-amount, amount), 0)
-		t.tween_property(camera, "transform", _cam_home.translated_local(off), 0.035)
-	t.tween_property(camera, "transform", _cam_home, 0.06)
+		t.tween_property(camera, "transform", _cam_view.translated_local(off), 0.035)
+	t.tween_property(camera, "transform", _cam_view, 0.06)
 
 
 # ================================================================ the cartridge carousel
