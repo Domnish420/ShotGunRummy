@@ -136,7 +136,6 @@ var meld_btn: Button
 var use_btn: Button
 var discard_btn: Button
 var sort_btn: Button
-var hint_btn: Button
 
 
 ## Plays a little sound: "tick", "swish", "clunk", "select" or
@@ -211,6 +210,11 @@ func _ready() -> void:
 	overlay_layer = _full(Control.new())
 	overlay_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay_layer)
+
+	# the in-game settings float over everything and never stop the game
+	settings_layer = _full(Control.new())
+	settings_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(settings_layer)
 
 	_build_lesson_panel()
 
@@ -625,6 +629,7 @@ func _change_name() -> void:
 
 
 func show_menu() -> void:
+	_hide_settings()
 	_humans_out = false
 	session.leave()
 	session.stop_scan()
@@ -1966,6 +1971,7 @@ func _start_from_setup() -> void:
 ## Starts (or restarts) a game on this phone with the players in `_table`.
 func start_match() -> void:
 	_humans_out = false
+	_hide_settings()
 	session.leave()
 	world.hide_carousel()
 	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
@@ -3350,7 +3356,11 @@ func _build_table() -> void:
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	round_label.clip_text = true
 	top.add_child(round_label)
-	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("SETTINGS", _show_settings, 22), _button("MENU", _show_menu, 22)]:
+	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("SETTINGS", func() -> void:
+		if _settings_open():
+			_hide_settings()
+		else:
+			_show_settings(), 22), _button("MENU", _show_menu, 22)]:
 		b.custom_minimum_size = Vector2(0, 46)
 		top.add_child(b)
 	col.add_child(top)
@@ -3413,8 +3423,7 @@ func _build_table() -> void:
 	minor.alignment = BoxContainer.ALIGNMENT_CENTER
 	minor.add_theme_constant_override("separation", 16)
 	sort_btn = _button("SORT: SUIT", _toggle_sort, 22)
-	hint_btn = _button("HINTS: ON", _toggle_hints, 22)
-	for b in [sort_btn, hint_btn]:
+	for b in [sort_btn]: # hints live in SETTINGS
 		b.custom_minimum_size = Vector2(200, 46)
 		minor.add_child(b)
 	col.add_child(minor)
@@ -3568,7 +3577,6 @@ func _refresh() -> void:
 	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
 	discard_btn.disabled = not (can_play and sel_cards.size() == 1 and game.can_discard(seat, sel_cards[0]["id"]))
 	sort_btn.text = "SORT: RANK" if sort_by_rank else "SORT: SUIT"
-	hint_btn.text = "HINTS: ON" if hints else "HINTS: OFF"
 
 	status_label.add_theme_color_override("font_color", Palette.PINK if message != "" else Palette.AMBER)
 	status_label.text = _status_text(sel_cards, valid_meld)
@@ -4281,23 +4289,70 @@ func _show_log() -> void:
 	box.add_child(_button("BACK", _closing(_after_action)))
 
 
-## Settings without leaving the table: graphics, sound, music, hints.
+var settings_layer: Control
+
+
+## Settings without leaving the table: graphics, sound, music, hints. They
+## float over the table in bubble letters and the game carries on underneath:
+## the AIs keep playing, the round goes on.
 func _show_settings() -> void:
-	var box := _open_overlay(0.94, false, "menu")
-	box.add_child(_title("SETTINGS"))
-	box.add_child(_button("GRAPHICS: %s" % graphics, func() -> void:
+	_sound("open")
+	_build_settings()
+
+
+func _build_settings() -> void:
+	_clear(settings_layer)
+	var vs := get_viewport_rect().size
+	var panel := PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.03, 0.02, 0.02, 0.55)
+	st.set_corner_radius_all(28)
+	st.content_margin_left = 24
+	st.content_margin_right = 24
+	st.content_margin_top = 14
+	st.content_margin_bottom = 14
+	panel.add_theme_stylebox_override("panel", st)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	settings_layer.add_child(panel)
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	panel.add_child(col)
+	var big := 40 if vs.x < 700.0 else 46
+	var title := Label.new()
+	title.text = "SETTINGS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", big + 6)
+	title.add_theme_color_override("font_color", Palette.GOLD)
+	title.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.02))
+	title.add_theme_constant_override("outline_size", 14)
+	col.add_child(title)
+	col.add_child(_bubble("GRAPHICS: %s" % graphics, func() -> void:
 		_cycle_graphics_only()
-		_show_settings()))
-	box.add_child(_button("SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
+		_build_settings(), Palette.INK, big))
+	col.add_child(_bubble("SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
 		_toggle_sound()
-		_show_settings()))
-	box.add_child(_button("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
+		_build_settings(), Palette.AMBER if sound_on else Palette.DIM, big))
+	col.add_child(_bubble("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
 		_toggle_music()
-		_show_settings()))
-	box.add_child(_button("HINTS: %s" % ("ON" if hints else "OFF"), func() -> void:
+		_build_settings(), Palette.AMBER if music_on else Palette.DIM, big))
+	col.add_child(_bubble("HINTS: %s" % ("ON" if hints else "OFF"), func() -> void:
 		_toggle_hints()
-		_show_settings()))
-	box.add_child(_button("BACK TO THE GAME", _closing(_after_action)))
+		_build_settings(), Color(0.55, 0.85, 1.0) if hints else Palette.DIM, big))
+	col.add_child(_bubble("BACK", _hide_settings, Palette.RED, big))
+	# centred, a little above the middle so your hand stays in view
+	var sz := panel.get_combined_minimum_size()
+	panel.size = sz
+	panel.position = Vector2((vs.x - sz.x) * 0.5, maxf(70.0, vs.y * 0.4 - sz.y * 0.5))
+
+
+func _hide_settings() -> void:
+	if settings_layer != null:
+		_clear(settings_layer)
+
+
+func _settings_open() -> bool:
+	return settings_layer != null and settings_layer.get_child_count() > 0
 
 
 func _show_menu() -> void:
