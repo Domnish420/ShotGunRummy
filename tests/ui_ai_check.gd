@@ -89,7 +89,7 @@ func _initialize() -> void:
 			var pick = null
 			for b in _buttons(main.overlay_layer):
 				var t: String = b.text
-				if t in ["MAIN MENU", "NEW PLAYERS", "PLAY AGAIN", "RESTART MATCH"]:
+				if t in ["MAIN MENU", "BACK TO THE ROOM", "NEW PLAYERS", "PLAY AGAIN", "RESTART MATCH"]:
 					continue
 				if pick == null or t.begins_with("SHOOT") or t.begins_with("WATCH") or t.ends_with("SHOTGUN"):
 					pick = b

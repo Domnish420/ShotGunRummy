@@ -1,6 +1,6 @@
-# Shotgun Cards
+# Shotgun Party
 
-Card games for 2–6 players at a 3D table under a hanging lamp, on one phone or
+Party games, starting with a shelf of card games, for 2–6 players at a 3D table under a hanging lamp, on one phone or
 over the same Wi-Fi, with AI players to fill the seats. Every game plays by the
 same house rules: a dealer that moves round the table, item cards shuffled into
 the deck that bend the rules, health, and a shotgun for whoever wins the hand.
@@ -42,6 +42,18 @@ thing itself) and you walk over:
 
 The room code is in `scripts/three/world3d.gd` (look for "the room"), the
 furniture in `scripts/three/props.gd`.
+
+### Music
+
+A honky-tonk saloon tune plays in the background: an out-of-tune bar-room
+piano over a stride bass, swung like ragtime. The room has the main theme and
+every game plays its own twist on it (its own key and tempo, and a banjo or a
+whistle on the tune for some), fading over as you sit down at the table.
+Turn it off with **MUSIC** at the bar or in the in-game MENU (**SOUND** turns
+everything off). The tune is written out note by note in
+`scripts/audio/saloon.gd`, with a line per game in `VARIANTS`; after changing
+it (or adding a game) render the tracks into `music/` with
+`godot --headless --path . -s tools/make_music.gd`.
 
 ### Cartridges
 
@@ -180,9 +192,9 @@ The window opens at phone shape (portrait). To try it alone, use
 `export_presets.cfg` has two ready-made exports (Godot's export templates
 need installing once: **Editor → Manage Export Templates → Download**):
 
-- **Windows Desktop**: one `ShotgunCards.exe` with everything packed inside.
+- **Windows Desktop**: one `ShotgunParty.exe` with everything packed inside.
   **Project → Export → Windows Desktop → Export Project**, or
-  `godot --headless --export-release "Windows Desktop" build/windows/ShotgunCards.exe`
+  `godot --headless --export-release "Windows Desktop" build/windows/ShotgunParty.exe`
 - **Web**: for itch.io and other sites that run games in the browser.
   `godot --headless --export-release "Web" build/web/index.html`, then zip
   what's in `build/web/` and upload it. Browsers can't open the connections

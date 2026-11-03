@@ -27,6 +27,11 @@ func _initialize() -> void:
 	await _frames(50)
 	var w = main.world
 	check(w.in_room() and w._focus == "", "the menu is the room")
+	main.sound_on = true
+	main.music_on = true
+	main._play_music("room", true)
+	await _frames(30)
+	check(main._music_id == "room" and main._music_player.playing, "the saloon tune plays in the room")
 	for k in w.STATIONS:
 		check(w._signs[k].visible, "%s has its sign up" % k)
 	# look round: drag left, the view turns
@@ -65,5 +70,12 @@ func _initialize() -> void:
 	main._start_solo()
 	await _frames(10)
 	check(not w.in_room(), "at the table, the room's signs are gone")
+	await _frames(60)
+	check(main._music_id == "rummy" and main._music_player.playing, "the table plays the game's own twist on the tune (%s)" % main._music_id)
+	main._toggle_music()
+	check(not main._music_player.playing, "MUSIC off stops it")
+	main._toggle_music()
+	await _frames(30)
+	check(main._music_player.playing, "and back on")
 	print("ROOM CHECK OK" if fails == 0 else "%d failures" % fails)
 	quit(1 if fails > 0 else 0)

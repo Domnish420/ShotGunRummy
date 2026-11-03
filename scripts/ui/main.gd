@@ -1,5 +1,5 @@
 extends Control
-## Shotgun Cards UI (phone first): Shotgun Rummy and Shotgun Blackjack.
+## Shotgun Party UI (phone first): the room, the table and every game.
 ##
 ## Screens are built in code: main menu -> lobby (same Wi-Fi) or pass-and-play
 ## setup -> table, with overlays on top for "pass the phone", item reveals,
@@ -84,6 +84,10 @@ var _sfx: Dictionary = {} # name -> AudioStream
 var _sfx_players: Array = []
 var _jingle_player: AudioStreamPlayer
 var sound_on := true
+var music_on := true
+var _music_player: AudioStreamPlayer
+var _music_id := "" # which track is playing (room, or a game's own)
+const MUSIC_DB := -11.0
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -240,6 +244,51 @@ func _toggle_sound() -> void:
 	else:
 		if _jingle_player != null:
 			_jingle_player.stop()
+	_play_music(_music_id, true)
+
+
+func _toggle_music() -> void:
+	music_on = not music_on
+	_save_settings()
+	_play_music(_music_id, true)
+
+
+# ================================================================ music
+
+## The saloon music (scripts/audio/saloon.gd, made by tools/make_music.gd):
+## the room has its tune, every game its own twist on it. Changing track
+## fades one out and the next in.
+func _play_music(id: String, force: bool = false) -> void:
+	if id == "":
+		id = "room"
+	if _music_player == null:
+		_music_player = AudioStreamPlayer.new()
+		_music_player.volume_db = MUSIC_DB
+		add_child(_music_player)
+	if not (sound_on and music_on):
+		_music_player.stop()
+		_music_id = id
+		return
+	if id == _music_id and _music_player.playing and not force:
+		return
+	var path := "res://music/%s.res" % id
+	if not ResourceLoader.exists(path):
+		path = "res://music/room.res"
+		if not ResourceLoader.exists(path):
+			return
+	var next: AudioStream = load(path)
+	if _music_player.playing and _music_player.stream == next:
+		_music_id = id
+		return
+	_music_id = id
+	var t := create_tween()
+	if _music_player.playing:
+		t.tween_property(_music_player, "volume_db", -40.0, 0.5)
+	t.tween_callback(func() -> void:
+		_music_player.stream = next
+		_music_player.volume_db = -40.0
+		_music_player.play())
+	t.tween_property(_music_player, "volume_db", MUSIC_DB, 0.8)
 
 
 ## How sharp the 3D is: a share of the screen's resolution.
@@ -387,10 +436,16 @@ func _load_settings() -> void:
 	coins = Gacha.STARTING_COINS
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
-		# the game used to be called Shotgun Rummy: on a computer its settings
-		# (and your characters) were saved in a folder by that name
-		var old := OS.get_user_data_dir().get_base_dir().path_join("Shotgun Rummy").path_join("settings.cfg")
-		if not FileAccess.file_exists(old) or cfg.load(old) != OK:
+		# the game used to be called Shotgun Cards, and before that Shotgun
+		# Rummy: on a computer its settings (your characters, coins and
+		# collection) were saved in a folder by that name
+		var found := false
+		for old_name in ["Shotgun Cards", "Shotgun Rummy"]:
+			var old := OS.get_user_data_dir().get_base_dir().path_join(old_name).path_join("settings.cfg")
+			if FileAccess.file_exists(old) and cfg.load(old) == OK:
+				found = true
+				break
+		if not found:
 			return
 	player_names = cfg.get_value("setup", "names", player_names)
 	hide_hands = cfg.get_value("setup", "hide_hands", true)
@@ -400,6 +455,7 @@ func _load_settings() -> void:
 		game_kind = "rummy"
 	played = cfg.get_value("progress", "played", {})
 	sound_on = cfg.get_value("audio", "on", true)
+	music_on = cfg.get_value("audio", "music", true)
 	tutorial_offered = cfg.get_value("progress", "tutorial_offered", false)
 	normal_mode = cfg.get_value("setup", "normal", false) and _normal_unlocked(game_kind)
 	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
@@ -438,6 +494,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "normal", normal_mode)
 	cfg.set_value("progress", "played", played)
 	cfg.set_value("audio", "on", sound_on)
+	cfg.set_value("audio", "music", music_on)
 	cfg.set_value("progress", "tutorial_offered", tutorial_offered)
 	cfg.set_value("solo", "opponents", solo_opponents)
 	cfg.set_value("solo", "level", solo_level)
@@ -484,7 +541,7 @@ func show_name_screen() -> void:
 	world.hide_carousel()
 	world.set_menu_mode(true)
 	var box := _paper()
-	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("WHO'S PLAYING?", 34, Palette.CARD_INK, true))
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
@@ -542,6 +599,7 @@ func show_menu() -> void:
 		show_name_screen()
 		return
 	world.set_cartridge(game_kind)
+	_play_music("room")
 	_room_hud()
 	if not tutorial_offered:
 		tutorial_offered = true
@@ -575,7 +633,7 @@ func _room_hud() -> void:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 6)
 	margin.add_child(col)
-	var title := _label("SHOTGUN CARDS", 44, Color(0.85, 0.15, 0.1), true)
+	var title := _label("SHOTGUN PARTY", 44, Color(0.85, 0.15, 0.1), true)
 	var who := _label("%s · %d GACHA COIN%s" % [profile_name, coins, "" if coins == 1 else "S"], 24, Palette.INK, true)
 	var parts: Array = [title, who]
 	if menu_message != "":
@@ -679,6 +737,9 @@ func show_bar() -> void:
 		show_bar())
 	_panel_button(box, "SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
 		_toggle_sound()
+		show_bar())
+	_panel_button(box, "MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
+		_toggle_music()
 		show_bar())
 	box.add_child(_label("New to a game? Every cartridge at the table has a DEMO.", 18, Palette.DIM, true))
 	if not OS.has_feature("web"):
@@ -1048,7 +1109,7 @@ func _finish_demo() -> void:
 	box.add_child(_label("That's %s. Ready to play it for real?" % Games.label(game.kind), 28, Palette.INK, true))
 	box.add_child(_button("PLAY %s" % Games.label(game.kind), _closing(show_play_choice)))
 	box.add_child(_button("WATCH THE DEMO AGAIN", _closing(_start_tutorial)))
-	box.add_child(_button("MAIN MENU", show_menu))
+	box.add_child(_button("BACK TO THE ROOM", show_menu))
 
 
 func _blackjack() -> bool:
@@ -1717,7 +1778,7 @@ func show_setup() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	paper.add_child(box)
-	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
 	box.add_child(_label("The undersigned agree to a game of %s." % ("Blackjack" if game_kind == "blackjack" else "Rummy") + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
 
@@ -3176,6 +3237,8 @@ func _drive_snaps(delta: float) -> void:
 # ================================================================ table
 
 func _build_table() -> void:
+	if game != null:
+		_play_music(game.kind) # each game has its own twist on the tune
 	_close_overlay()
 	_clear(screen)
 	world.set_menu_mode(false)
@@ -4028,7 +4091,7 @@ func _show_match_end() -> void:
 	else:
 		box.add_child(_button("PLAY AGAIN", _closing(start_match)))
 		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
-		box.add_child(_button("MAIN MENU", show_menu))
+		box.add_child(_button("BACK TO THE ROOM", show_menu))
 
 
 func _play_again_online() -> void:
@@ -4091,10 +4154,13 @@ func _show_menu() -> void:
 	box.add_child(_button("RESUME", _closing(_after_action)))
 	box.add_child(_button("GRAPHICS: %s" % graphics, _cycle_graphics))
 	box.add_child(_button("SOUND: %s" % ("ON" if sound_on else "OFF"), _pause_sound))
+	box.add_child(_button("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
+		_toggle_music()
+		_show_menu()))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
 		box.add_child(_button("LEAVE THE GAME", show_menu))
 	else:
 		box.add_child(_button("RESTART MATCH", _closing(start_match)))
 		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
-		box.add_child(_button("MAIN MENU", show_menu))
+		box.add_child(_button("BACK TO THE ROOM", show_menu))

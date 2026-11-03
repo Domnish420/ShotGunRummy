@@ -1,5 +1,5 @@
 extends RefCounted
-## The cartridges: every card game in Shotgun Cards, in shelf order.
+## The cartridges: every game in Shotgun Party, in shelf order.
 ##
 ## Each game is a rules engine built on game.gd (players, items, health and
 ## the shotgun). To add one: write its engine (and an AI in its own file),
@@ -39,7 +39,7 @@ static func has(kind: String) -> bool:
 	return LIST.has(kind)
 
 
-## A game's name, as it's shown everywhere ("Shotgun Cards" already says
+## A game's name, as it's shown everywhere ("Shotgun Party" already says
 ## the rest).
 static func title(kind: String) -> String:
 	return label(kind)
