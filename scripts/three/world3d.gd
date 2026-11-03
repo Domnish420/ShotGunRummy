@@ -886,7 +886,9 @@ func _sync_figures(game, viewer: int) -> void:
 
 func _card(id: String, card_size: Vector2, spawn: Transform3D) -> Card3D:
 	if _cards.has(id):
-		return _cards[id]
+		var known: Card3D = _cards[id]
+		known.resize(card_size) # a card moving from the table to a hand changes size
+		return known
 	var c := Card3D.new()
 	_cards_root.add_child(c)
 	c.setup(card_size, _back_mat)

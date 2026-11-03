@@ -43,6 +43,17 @@ func setup(card_size: Vector2, back_material: Material) -> void:
 	add_child(_area)
 
 
+## The same card at a new size: picked up off the table into a hand, say.
+func resize(card_size: Vector2) -> void:
+	if card_size == _size or _front == null:
+		return
+	_size = card_size
+	(_front.mesh as QuadMesh).size = card_size # the back shares this mesh
+	(_outline.mesh as QuadMesh).size = card_size + Vector2(0.014, 0.014)
+	var shape := _area.get_child(0) as CollisionShape3D
+	(shape.shape as BoxShape3D).size = Vector3(card_size.x, card_size.y, 0.004)
+
+
 func set_face(face_key: String, face_material: Material) -> void:
 	key = face_key
 	_front.material_override = face_material
