@@ -1,60 +1,71 @@
 extends RefCounted
-## The saloon: background music played on an old bar-room piano. One tune,
-## "Shotgun Party", written out below: a honky-tonk melody over a stride
-## left hand (a low bass note, then a chord, then the fifth, then the chord),
-## swung like ragtime. Each game plays the same tune with its own little
-## twist (its own key and tempo, sometimes a banjo or a whistle on the
-## melody), so new games only need a line in VARIANTS.
+## The background music: a slow swing jazz blues in E minor, played by a
+## little late-night trio. A mellow piano takes the tune, an upright bass
+## walks underneath, a guitar strums soft chords on every beat, and the
+## drummer keeps it moving with brushes and a quiet ride cymbal. No singing:
+## just something to swing to.
+##
+## The tune is a 12-bar minor blues, written out note by note below. The room
+## plays it on the piano; each game plays the same tune with its own little
+## twist (the tempo, and the piano, vibraphone, guitar or a soft muted horn
+## taking the lead), so a new game only needs a line in VARIANTS.
 ##
 ## Rendering is slow in GDScript, so the tracks are made once by
 ## tools/make_music.gd and saved in res://music/. render() is what it calls.
 
 const RATE := 16000
-const SWING := 0.62 # the first eighth of each beat is longer: the bounce
+const ROOT := 64 # E4: everything below is in semitones above (or below) it
 
-## The chord of each bar (semitones above the key), and its bass root.
+## Each bar's chord: one per bar, or [first half, second half].
+## Em7 Em7 Em7 Em7 | Am7 Am7 Em7 Em7 | Cmaj7 B7 Em7 F#m7b5-B7
+const EM7 := [0, 3, 7, 10]
+const AM7 := [5, 8, 12, 15]
+const CMAJ7 := [-4, 0, 3, 7]
+const B7 := [-5, -1, 2, 5]
+const FSHM7B5 := [2, 5, 8, 12]
 const CHORDS := [
-	[0, 4, 7], [0, 4, 7], [5, 9, 12], [0, 4, 7],
-	[7, 11, 14, 17], [7, 11, 14, 17], [0, 4, 7], [0, 4, 7],
-	[0, 4, 7], [0, 4, 7, 10], [5, 9, 12], [5, 8, 12],
-	[0, 4, 7], [7, 11, 14, 17], [0, 4, 7], [7, 11, 14, 17],
+	[EM7], [EM7], [EM7], [EM7],
+	[AM7], [AM7], [EM7], [EM7],
+	[CMAJ7], [B7], [EM7], [FSHM7B5, B7],
 ]
-const ROOTS := [0, 0, 5, 0, 7, 7, 0, 0, 0, 0, 5, 5, 0, 7, 0, 7]
 
-## The tune: each bar is a list of [eighth (0-7), semitones above the key's
-## middle C, length in eighths].
+## The walking bass: four notes a bar, semitones above E2.
+const BASS := [
+	[0, 3, 7, 5], [0, 3, 5, -1], [0, 3, 7, 10], [12, 10, 7, 4],
+	[5, 8, 12, 8], [5, 8, 10, 11], [12, 10, 7, 3], [0, 3, 5, 7],
+	[8, 12, 15, 12], [7, 11, 14, 11], [12, 10, 7, 5], [2, 5, 7, -1],
+]
+
+## The tune: each bar is a list of [eighth (0-7), semitones above E4,
+## length in eighths]. Bluesy and laid back, with room to breathe.
 const MELODY := [
-	[[0, 4, 1], [1, 7, 1], [2, 9, 1], [3, 7, 2], [5, 4, 1], [6, 0, 2]],
-	[[0, 2, 1], [1, 4, 1], [2, 7, 2], [4, 4, 1], [5, 2, 1], [6, 0, 2]],
-	[[0, 5, 1], [1, 9, 1], [2, 12, 2], [4, 9, 1], [5, 5, 1], [6, 9, 2]],
-	[[0, 7, 3], [3, 4, 1], [4, 0, 2], [7, -5, 1]],
-	[[0, 5, 1], [1, 7, 1], [2, 9, 1], [3, 11, 2], [5, 14, 1], [6, 11, 2]],
-	[[0, 9, 1], [1, 7, 1], [2, 5, 2], [4, 2, 1], [5, 5, 1], [6, 7, 2]],
-	[[0, 4, 1], [1, 7, 1], [2, 12, 2], [4, 7, 1], [5, 4, 1], [6, 7, 2]],
-	[[0, 12, 4], [4, 7, 1], [5, 9, 1], [6, 10, 2]],
-	[[0, 4, 1], [1, 7, 1], [2, 9, 1], [3, 7, 2], [5, 4, 1], [6, 0, 2]],
-	[[0, 4, 1], [1, 7, 1], [2, 10, 2], [4, 9, 1], [5, 7, 1], [6, 4, 2]],
-	[[0, 5, 1], [1, 9, 1], [2, 12, 2], [4, 9, 1], [5, 5, 1], [6, 9, 2]],
-	[[0, 9, 1], [1, 8, 1], [2, 9, 2], [4, 5, 1], [5, 2, 1], [6, 0, 2]],
-	[[0, 4, 1], [1, 7, 1], [2, 12, 3], [5, 11, 1], [6, 9, 2]],
-	[[0, 7, 2], [2, 5, 2], [4, 2, 2], [6, -1, 2]],
-	[[0, 0, 2], [2, 4, 1], [3, 7, 1], [4, 12, 2], [6, 7, 2]],
-	[[0, 5, 1], [1, 4, 1], [2, 2, 2], [4, 7, 2]],
+	[[1, 7, 1], [2, 10, 1], [3, 12, 3], [6, 10, 1], [7, 7, 1]],
+	[[0, 10, 2], [2, 7, 1], [3, 5, 1], [4, 3, 3]],
+	[[1, 7, 1], [2, 10, 1], [3, 12, 2], [5, 15, 1], [6, 14, 1], [7, 12, 1]],
+	[[0, 10, 3], [3, 6, 1], [4, 7, 4]],
+	[[1, 12, 1], [2, 15, 1], [3, 17, 3], [6, 15, 1], [7, 12, 1]],
+	[[0, 15, 2], [2, 12, 1], [3, 10, 1], [4, 8, 3]],
+	[[1, 7, 1], [2, 10, 1], [3, 12, 3], [6, 10, 1], [7, 7, 1]],
+	[[0, 5, 1], [1, 3, 1], [2, 0, 4]],
+	[[0, 15, 2], [2, 19, 2], [4, 15, 1], [5, 12, 1], [6, 8, 2]],
+	[[0, 11, 2], [2, 14, 1], [3, 17, 1], [4, 14, 1], [5, 11, 1], [6, 7, 2]],
+	[[0, 12, 3], [3, 10, 1], [4, 7, 2], [6, 3, 1], [7, 5, 1]],
+	[[0, 7, 1], [1, 6, 1], [2, 5, 1], [3, 3, 1], [4, 2, 2], [6, -1, 2]],
 ]
 
-## The room's tune, and each game's twist on it: key (semitones from C),
-## tempo, what plays the melody, how hard it swings.
+## The room's version, and each game's twist: tempo, who takes the lead,
+## how lazy the swing is (0.5 straight, 0.67 a full triplet shuffle).
 const VARIANTS := {
-	"room": {"key": 0, "bpm": 112, "lead": "piano", "swing": SWING},
-	"rummy": {"key": 2, "bpm": 118, "lead": "piano", "swing": SWING},
-	"blackjack": {"key": 5, "bpm": 124, "lead": "banjo", "swing": 0.6},
-	"gofish": {"key": 7, "bpm": 110, "lead": "whistle", "swing": 0.64},
-	"cheat": {"key": -2, "bpm": 128, "lead": "banjo", "swing": 0.66},
-	"hearts": {"key": 3, "bpm": 100, "lead": "piano", "swing": 0.58},
-	"spades": {"key": -3, "bpm": 114, "lead": "whistle", "swing": 0.6},
-	"snap": {"key": 4, "bpm": 140, "lead": "banjo", "swing": 0.62},
-	"president": {"key": -4, "bpm": 106, "lead": "piano", "swing": 0.64},
-	"poker": {"key": -5, "bpm": 92, "lead": "piano", "swing": 0.68},
+	"room": {"bpm": 84, "lead": "piano", "swing": 0.66},
+	"rummy": {"bpm": 88, "lead": "piano", "swing": 0.66},
+	"blackjack": {"bpm": 82, "lead": "vibes", "swing": 0.66},
+	"gofish": {"bpm": 90, "lead": "guitar", "swing": 0.64},
+	"cheat": {"bpm": 86, "lead": "horn", "swing": 0.66},
+	"hearts": {"bpm": 76, "lead": "vibes", "swing": 0.67},
+	"spades": {"bpm": 80, "lead": "horn", "swing": 0.66},
+	"snap": {"bpm": 96, "lead": "guitar", "swing": 0.64},
+	"president": {"bpm": 80, "lead": "piano", "swing": 0.67},
+	"poker": {"bpm": 72, "lead": "horn", "swing": 0.67},
 }
 
 
@@ -75,7 +86,18 @@ static func _table(harmonics: Array) -> PackedFloat32Array:
 	return t
 
 
-## Where an eighth-note slot falls, in seconds, with the swing.
+static func _tables() -> Dictionary:
+	return {
+		"piano": _table([1.0, 0.42, 0.16, 0.08, 0.03]),
+		"piano_soft": _table([1.0, 0.15, 0.03]),
+		"bass": _table([1.0, 0.45, 0.12, 0.05]),
+		"guitar": _table([1.0, 0.55, 0.3, 0.18, 0.08]),
+		"vibes": _table([1.0, 0.0, 0.0, 0.18]),
+		"horn": _table([1.0, 0.35, 0.5, 0.15, 0.25, 0.06, 0.08]),
+	}
+
+
+## Where an eighth-note slot falls, in seconds, swung.
 static func _slot_time(bar: int, slot: float, beat: float, swing: float) -> float:
 	var b := floorf(slot / 2.0)
 	var off := slot - b * 2.0
@@ -83,96 +105,144 @@ static func _slot_time(bar: int, slot: float, beat: float, swing: float) -> floa
 	return (bar * 4.0 + b + within) * beat
 
 
-## A note into `buf`, wrapping round the end so the track loops cleanly.
-## kind: "piano" (two strings a little out of tune: honky-tonk), "banjo"
-## (a bright pluck) or "whistle" (a pure tone with vibrato).
+## A pitched note into `buf`, wrapping round the end so the track loops.
 static func _note(buf: PackedFloat32Array, tables: Dictionary, start: float, length: float, midi: float, kind: String, volume: float) -> void:
 	var f := 440.0 * pow(2.0, (midi - 69.0) / 12.0)
 	var total := buf.size()
-	var bright: PackedFloat32Array = tables["bright"]
-	var mellow: PackedFloat32Array = tables["mellow"]
-	var tail := 0.18
+	var bright: PackedFloat32Array = tables["piano"]
+	var mellow: PackedFloat32Array = tables["piano_soft"]
+	var tail := 0.3
 	match kind:
-		"banjo":
-			bright = tables["banjo"]
-			tail = 0.06
-		"whistle":
-			bright = tables["sine"]
-			mellow = tables["sine"]
-			tail = 0.07
+		"bass":
+			bright = tables["bass"]
+			mellow = tables["bass"]
+			tail = 0.08
+		"guitar":
+			bright = tables["guitar"]
+			mellow = tables["piano_soft"]
+			tail = 0.05
+		"vibes":
+			bright = tables["vibes"]
+			mellow = tables["vibes"]
+			tail = 0.6
+		"horn":
+			bright = tables["horn"]
+			mellow = tables["piano_soft"]
+			tail = 0.08
 	var n := int((length + tail) * RATE)
 	var s0 := int(start * RATE)
-	var detune := 1.0035 if kind == "piano" else 1.0012
-	var p1 := 0.0
-	var p2 := 0.37
 	var size := bright.size()
+	var p1 := 0.0
+	var p2 := 0.31
 	for i in range(n):
 		var t := float(i) / RATE
-		# the envelope: a quick strike, a decay, and a quick fade once let go
 		var env := 0.0
+		var ff := f
 		match kind:
-			"whistle":
-				env = minf(1.0, t / 0.03) * 0.85
-			"banjo":
-				env = minf(1.0, t / 0.002) * exp(-t * 7.0)
-			_:
-				env = minf(1.0, t / 0.004) * exp(-t * 2.4)
+			"bass": # a round pluck that rings for the beat
+				env = minf(1.0, t / 0.006) * exp(-t * 2.2)
+			"guitar": # a soft, damped strum
+				env = minf(1.0, t / 0.004) * exp(-t * 9.0)
+			"vibes": # a mallet, a long ring, the vibrato motor turning
+				env = minf(1.0, t / 0.003) * exp(-t * 1.1) * (0.82 + 0.18 * sin(TAU * 5.0 * t))
+			"horn": # breathed in, held, a little vibrato as it goes
+				env = minf(1.0, t / 0.06) * (0.9 - 0.15 * minf(1.0, t / 1.5))
+				ff = f * (1.0 + 0.004 * sin(TAU * 5.0 * t) * minf(1.0, t / 0.4))
+			_: # the piano
+				env = minf(1.0, t / 0.004) * exp(-t * 1.7)
 		if t > length:
 			env *= exp(-(t - length) / (tail * 0.3))
-		var ff := f
-		if kind == "whistle":
-			ff = f * (1.0 + 0.006 * sin(TAU * 5.5 * t) * minf(1.0, t / 0.25))
 		p1 = fmod(p1 + ff / RATE, 1.0)
-		p2 = fmod(p2 + ff * detune / RATE, 1.0)
+		p2 = fmod(p2 + ff * 1.0009 / RATE, 1.0)
 		var k1 := int(p1 * size)
 		var k2 := int(p2 * size)
-		var brightness := clampf(env * 1.3, 0.0, 1.0) # louder notes sound brighter
-		var v1 := lerpf(mellow[k1], bright[k1], brightness)
-		var v2 := lerpf(mellow[k2], bright[k2], brightness)
+		var tone := clampf(env * 1.2, 0.0, 1.0) # struck harder, it sounds brighter
+		var v := (lerpf(mellow[k1], bright[k1], tone) + lerpf(mellow[k2], bright[k2], tone)) * 0.5
 		var j := (s0 + i) % total
-		buf[j] += (v1 + v2) * 0.5 * env * volume
+		buf[j] += v * env * volume
+
+
+## The drummer: brushes swished round the snare, a hi-hat chick on 2 and 4,
+## and a quiet ride cymbal keeping the swing.
+static func _drums(buf: PackedFloat32Array, bars: int, beat: float, swing: float, rng: RandomNumberGenerator) -> void:
+	var total := buf.size()
+	var low := 0.0 # a one-pole filter to soften the noise into a brush
+	for bar in range(bars):
+		for b in range(4):
+			var at := (bar * 4.0 + b) * beat
+			# the brush: a soft swish across the whole beat
+			var n := int(beat * 0.95 * RATE)
+			var s0 := int(at * RATE)
+			for i in range(n):
+				var t := float(i) / n
+				var env := sin(PI * t) * (0.6 + 0.4 * (1.0 - t))
+				low += (rng.randf_range(-1.0, 1.0) - low) * 0.18
+				buf[(s0 + i) % total] += low * env * 0.05
+			# the ride: ding, ding-a ding
+			var hits := [at]
+			if b == 1 or b == 3:
+				hits.append(at + swing * beat)
+			for h in hits:
+				var m := int(0.45 * RATE)
+				var r0 := int(h * RATE)
+				for i in range(m):
+					var tt := float(i) / RATE
+					var e := exp(-tt * 9.0)
+					var v := sin(TAU * 3150.0 * tt) * 0.4 + sin(TAU * 4720.0 * tt) * 0.3 + sin(TAU * 5930.0 * tt) * 0.2 + rng.randf_range(-1.0, 1.0) * 0.25
+					buf[(r0 + i) % total] += v * e * 0.03
+			# the hi-hat closing on 2 and 4
+			if b == 1 or b == 3:
+				var k := int(0.05 * RATE)
+				for i in range(k):
+					var e := exp(-float(i) / RATE * 70.0)
+					buf[(s0 + i) % total] += rng.randf_range(-1.0, 1.0) * e * 0.05
 
 
 ## The whole track for `id` (a key of VARIANTS), as a looping sound.
 static func render(id: String) -> AudioStreamWAV:
 	var v: Dictionary = VARIANTS.get(id, VARIANTS["room"])
-	var key := int(v["key"])
 	var beat := 60.0 / float(v["bpm"])
 	var swing := float(v["swing"])
+	var lead: String = v["lead"]
 	var bars := MELODY.size()
 	var buf := PackedFloat32Array()
 	buf.resize(int(bars * 4.0 * beat * RATE))
-	var tables := {
-		"bright": _table([1.0, 0.62, 0.45, 0.32, 0.22, 0.14, 0.08]),
-		"mellow": _table([1.0, 0.3, 0.1, 0.04]),
-		"banjo": _table([1.0, 0.9, 0.75, 0.6, 0.5, 0.4, 0.3, 0.22, 0.15]),
-		"sine": _table([1.0, 0.05]),
-	}
-	var lead: String = v["lead"]
-	var lead_vol := 0.34 if lead == "piano" else (0.3 if lead == "banjo" else 0.24)
+	var tables := _tables()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("shotgun party " + id) # a human touch, but the same every time
+	var lead_vol: float = {"piano": 0.36, "vibes": 0.34, "guitar": 0.36, "horn": 0.22}.get(lead, 0.34)
 	for bar in range(bars):
-		# the left hand: stride
-		var root := 48 + key + int(ROOTS[bar])
-		var chord: Array = CHORDS[bar]
-		_note(buf, tables, bar * 4.0 * beat, beat * 0.9, root, "piano", 0.32)
-		_note(buf, tables, (bar * 4.0 + 2.0) * beat, beat * 0.9, root + 7 - 12 if root + 7 > 55 else root + 7, "piano", 0.28)
-		for b in [1, 3]:
+		# the walking bass
+		for b in range(4):
+			var swing_push := rng.randf_range(-0.008, 0.008)
+			_note(buf, tables, (bar * 4.0 + b) * beat + swing_push, beat * 0.92, 40 + int(BASS[bar][b]), "bass", 0.42 if b % 2 == 0 else 0.36)
+		# the guitar: a soft chord on every beat, a touch more on 2 and 4
+		var chords: Array = CHORDS[bar]
+		for b in range(4):
+			var chord: Array = chords[0] if chords.size() == 1 or b < 2 else chords[1]
 			for tone in chord:
-				var m := 60 + key + int(tone)
-				while m > 66:
+				var m := 52 + int(tone)
+				while m > 62:
 					m -= 12
-				while m < 54:
+				while m < 50:
 					m += 12
-				_note(buf, tables, (bar * 4.0 + b) * beat, beat * 0.45, m, "piano", 0.13)
-		# the right hand: the tune
+				_note(buf, tables, (bar * 4.0 + b) * beat + rng.randf_range(0.0, 0.012), beat * 0.35, m, "guitar", 0.07 if b % 2 == 0 else 0.09)
+		# the tune
 		for nt in MELODY[bar]:
-			var at := _slot_time(bar, float(nt[0]), beat, swing)
+			var at := _slot_time(bar, float(nt[0]), beat, swing) + rng.randf_range(-0.012, 0.018)
 			var end := _slot_time(bar, float(nt[0]) + float(nt[2]), beat, swing)
-			var pitch := 72 + key + int(nt[1])
-			_note(buf, tables, at, (end - at) * 0.92, pitch, lead, lead_vol)
-			if lead == "piano":
-				_note(buf, tables, at, (end - at) * 0.92, pitch - 12, "piano", lead_vol * 0.35) # an octave under, for body
-	# a gentle limiter so it never clips
+			var pitch := ROOT + int(nt[1])
+			var vel := lead_vol * rng.randf_range(0.85, 1.0)
+			_note(buf, tables, at, (end - at) * 0.95, pitch, lead, vel)
+			if lead == "guitar":
+				_note(buf, tables, at, (end - at) * 0.95, pitch - 12, "guitar", vel * 0.6) # octaves, the jazz way
+		# the piano comps a little behind the other leads, on the "and" of 2
+		if lead != "piano":
+			var chord: Array = chords[0]
+			for tone in chord:
+				_note(buf, tables, _slot_time(bar, 3.0, beat, swing), beat * 0.6, 60 + int(tone), "piano", 0.06)
+	_drums(buf, bars, beat, swing, rng)
+	# a soft limiter so it never clips
 	var peak := 0.0
 	for x in buf:
 		peak = maxf(peak, absf(x))

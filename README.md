@@ -45,15 +45,17 @@ furniture in `scripts/three/props.gd`.
 
 ### Music
 
-A honky-tonk saloon tune plays in the background: an out-of-tune bar-room
-piano over a stride bass, swung like ragtime. The room has the main theme and
-every game plays its own twist on it (its own key and tempo, and a banjo or a
-whistle on the tune for some), fading over as you sit down at the table.
-Turn it off with **MUSIC** at the bar or in the in-game MENU (**SOUND** turns
-everything off). The tune is written out note by note in
-`scripts/audio/saloon.gd`, with a line per game in `VARIANTS`; after changing
-it (or adding a game) render the tracks into `music/` with
-`godot --headless --path . -s tools/make_music.gd`.
+A slow swing jazz blues in E minor plays in the background, like a little
+late-night trio: a mellow piano takes the tune, an upright bass walks
+underneath, a guitar strums soft chords on every beat, and brushes and a quiet
+ride cymbal keep it swinging. No singing, just something to swing to. The room
+plays it on the piano; every game plays the same tune with its own twist (its
+tempo, and the piano, vibraphone, guitar or a soft muted horn on the tune),
+fading over as you sit down at the table. Turn it off with **MUSIC** at the
+bar or in the in-game MENU (**SOUND** turns everything off). The tune is
+written out note by note in `scripts/audio/saloon.gd`, with a line per game in
+`VARIANTS`; after changing it (or adding a game) render the tracks into
+`music/` with `godot --headless --path . -s tools/make_music.gd`.
 
 ### Cartridges
 

@@ -247,6 +247,13 @@ func _toggle_sound() -> void:
 	_play_music(_music_id, true)
 
 
+## Let go of the music on the way out, so nothing's left playing.
+func _exit_tree() -> void:
+	if _music_player != null:
+		_music_player.stop()
+		_music_player.stream = null
+
+
 func _toggle_music() -> void:
 	music_on = not music_on
 	_save_settings()
