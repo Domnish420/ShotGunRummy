@@ -286,8 +286,10 @@ static func helps_hand_only(game, hand: Array, card: Dictionary) -> bool:
 
 # ================================================================ the shotgun
 
-## Who to shoot. Normal finishes off the weakest; hard goes for whoever is
-## winning; easy picks anyone.
+## Who to shoot. The AIs take turns round the table: they aim at whoever's
+## been shot the least this match, so nobody (you included) gets picked on.
+## Among those, easy and normal pick at random; hard goes for a knockout, or
+## whoever's winning.
 static func choose_target(game, seat: int, level: String = "normal") -> int:
 	var others: Array = game.others(seat)
 	if game.gun != null and game.gun.has("targets") and int(game.gun["holder"]) == seat:
@@ -295,7 +297,11 @@ static func choose_target(game, seat: int, level: String = "normal") -> int:
 		others = others.filter(func(p): return game.gun["targets"].has(p.seat))
 	if others.is_empty():
 		return -1
-	if level == "easy":
+	var fewest := 1 << 30
+	for p in others:
+		fewest = mini(fewest, int(p.times_shot))
+	others = others.filter(func(p): return int(p.times_shot) == fewest)
+	if level != "hard":
 		return others[game.rng.randi_range(0, others.size() - 1)].seat
 	var best := -1
 	var best_score := -(1 << 30)

@@ -36,7 +36,7 @@ func _init() -> void:
 		"test_sticky_fingers", "test_tarot", "test_joker_paint", "test_shakedown", "test_switcheroo",
 		"test_bad_trade", "test_chaos", "test_dumpster_dive", "test_garbage_day",
 		"test_spotlight", "test_flashbang", "test_revolver", "test_double_down",
-		"test_looks", "test_face_anchors", "test_sets", "test_runs", "test_lay_off", "test_lay_off_needs_meld", "test_best_partition",
+		"test_looks", "test_face_anchors", "test_sets", "test_runs", "test_lay_off", "test_lay_off_needs_meld", "test_ai_shares_shots", "test_best_partition",
 		"test_deal", "test_drawing_an_item", "test_beer_can_burn_an_item", "test_dealer_rotation", "test_turn_guards", "test_discard_pickup_rule",
 		"test_many_items_per_turn", "test_handcuffs", "test_items_need_targets", "test_magnifier_and_beer",
 		"test_adrenaline", "test_going_out_scores_everyone", "test_shotgun_and_elimination",
@@ -201,6 +201,23 @@ func test_lay_off_needs_meld() -> void:
 	g.phase = "round_over"
 	g.start_round()
 	check(not g.players[0].has_melded, "every round starts with no meld down")
+
+
+## The AIs take turns: whoever's been shot the least this match is next.
+func test_ai_shares_shots() -> void:
+	for level in ["easy", "normal", "hard"]:
+		var g := new_game(4)
+		var counts := {1: 0, 2: 0, 3: 0}
+		for k in range(9):
+			g.phase = "shoot"
+			g.gun = {"holder": 0, "shells": 1, "total": 1}
+			for p in g.players:
+				p.hp = 4 # nobody goes out: just count who gets picked
+			var t: int = Bot.choose_target(g, 0, level)
+			check(t != 0 and counts.has(t), "%s: shoots someone else" % level)
+			counts[t] += 1
+			g.shoot(0, t)
+		check(counts[1] == 3 and counts[2] == 3 and counts[3] == 3, "%s AIs share their shots round the table: %s" % [level, counts])
 
 
 func test_trump_lay_off() -> void:

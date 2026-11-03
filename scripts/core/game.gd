@@ -76,6 +76,7 @@ class Player:
 	var bot: String = "" # "" for a person, or the AI's difficulty: easy | normal | hard
 	var stood: bool = false # Blackjack: done for this round
 	var bust: bool = false # Blackjack: went over 21
+	var times_shot: int = 0 # this match: so the AIs share their shots round
 
 	func _init(p_seat: int, p_name: String) -> void:
 		seat = p_seat
@@ -156,6 +157,7 @@ func reset_match() -> void:
 		p.sawed = false
 		p.score = 0
 		p.rounds_won = 0
+		p.times_shot = 0
 		p.hand = []
 		p.items = []
 	round_num = 0
@@ -1196,6 +1198,7 @@ func shoot(shooter: int, target: int) -> Dictionary:
 	blank_loaded = false
 	if blank:
 		dmg = 0
+	players[target].times_shot += 1
 	_emit("shot", {"shooter": shooter, "target": target, "damage": dmg, "blank": blank})
 	if not blank:
 		damage(target, dmg, "shotgun")
@@ -1221,7 +1224,7 @@ func snapshot(view_seat: int) -> Dictionary:
 			"score": p.score, "rounds_won": p.rounds_won, "turns_taken": p.turns_taken,
 			"hand": p.hand.duplicate(true) if mine or p.exposed else _hidden_hand(p),
 			"exposed": p.exposed, "ultimatum": p.ultimatum, "extra_draws": p.extra_draws, "look": p.look, "bot": p.bot,
-			"stood": p.stood, "bust": p.bust,
+			"stood": p.stood, "bust": p.bust, "times_shot": p.times_shot,
 			"items": p.items.duplicate(true) if mine else _hidden(p.items.size(), "i%d" % p.seat),
 		})
 	return {
@@ -1252,6 +1255,7 @@ func load_snapshot(d: Dictionary) -> void:
 		p.has_melded = pd["has_melded"]
 		p.score = pd["score"]
 		p.rounds_won = pd["rounds_won"]
+		p.times_shot = int(pd.get("times_shot", 0))
 		p.turns_taken = pd["turns_taken"]
 		p.exposed = pd["exposed"]
 		p.ultimatum = pd["ultimatum"]
