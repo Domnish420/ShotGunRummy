@@ -232,20 +232,6 @@ static func fanfare() -> AudioStreamWAV:
 	return _stream(out)
 
 
-## The lamp's hum, looping quietly under everything.
-static func hum() -> AudioStreamWAV:
-	var out := PackedFloat32Array()
-	var n := RATE * 2
-	for i in range(n):
-		var t := float(i) / RATE
-		out.append(sin(TAU * 60.0 * t) * 0.05 + sin(TAU * 120.0 * t) * 0.03 + (randf() - 0.5) * 0.01)
-	var s := _stream(out)
-	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	s.loop_begin = 0
-	s.loop_end = n
-	return s
-
-
 # ================================================================ everything else
 
 ## Two layers played together.

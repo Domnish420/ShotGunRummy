@@ -83,7 +83,6 @@ var coach_label: Label
 var _sfx: Dictionary = {} # name -> AudioStream
 var _sfx_players: Array = []
 var _jingle_player: AudioStreamPlayer
-var _hum_player: AudioStreamPlayer
 var sound_on := true
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
@@ -226,12 +225,6 @@ func _ready() -> void:
 
 	get_tree().root.size_changed.connect(_fit_window)
 	_fit_window()
-	_hum_player = AudioStreamPlayer.new()
-	_hum_player.stream = Chiptune.hum()
-	_hum_player.volume_db = -20.0
-	add_child(_hum_player)
-	if sound_on:
-		_hum_player.play()
 	show_menu()
 
 
@@ -243,10 +236,8 @@ func _toggle_sound() -> void:
 	sound_on = not sound_on
 	_save_settings()
 	if sound_on:
-		_hum_player.play()
 		_sound("select")
 	else:
-		_hum_player.stop()
 		if _jingle_player != null:
 			_jingle_player.stop()
 
