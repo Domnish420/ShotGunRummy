@@ -3524,6 +3524,54 @@ func _on_table_input(event: InputEvent) -> void:
 
 
 func _refresh() -> void:
+	_refresh_body()
+	_tint_actions()
+
+
+## Each action word at the bottom has its own colour, whatever game it's in.
+const ACTION_COLORS := {
+	"MELD": Color(1.0, 0.82, 0.3), # gold
+	"DISCARD": Color(1.0, 0.36, 0.3), # red
+	"USE ITEM": Color(0.76, 0.52, 1.0), # purple
+	"SORT": Color(0.55, 0.85, 1.0), # sky
+	"HIT": Color(0.45, 0.95, 0.45), # green
+	"STAND": Color(1.0, 0.58, 0.2), # orange
+	"CHECK": Color(0.3, 0.9, 0.8), # teal
+	"CALL": Color(0.78, 1.0, 0.3), # lime
+	"RAISE": Color(1.0, 0.38, 0.62), # pink
+	"FOLD": Color(0.62, 0.66, 0.82), # slate
+	"PLAY": Color(1.0, 0.92, 0.4), # yellow
+	"CHEAT!": Color(1.0, 0.3, 0.85), # magenta
+	"LET IT GO": Color(0.5, 1.0, 0.75), # mint
+	"ASK": Color(0.35, 0.78, 1.0), # cyan
+	"PASS": Color(1.0, 0.72, 0.56), # peach
+	"FLIP": Color(1.0, 0.68, 0.32), # tangerine
+	"COUNT UP": Color(0.66, 0.56, 1.0), # violet
+	"SNAP!": Color(1.0, 0.22, 0.22), # scarlet
+	"BID": Color(0.45, 0.6, 1.0), # blue
+}
+
+
+static func action_color(word: String) -> Color:
+	var best := ""
+	for k in ACTION_COLORS:
+		if word.begins_with(k) and k.length() > best.length():
+			best = k
+	return ACTION_COLORS[best] if best != "" else Palette.INK
+
+
+func _tint_actions() -> void:
+	for b in [meld_btn, use_btn, discard_btn, sort_btn]:
+		if b == null or not is_instance_valid(b):
+			continue
+		var c := action_color(b.text)
+		b.add_theme_color_override("font_color", c)
+		b.add_theme_color_override("font_hover_color", c.lightened(0.3))
+		b.add_theme_color_override("font_pressed_color", c.lightened(0.5))
+		b.add_theme_color_override("font_disabled_color", Color(c.darkened(0.5), 0.75)) # not yet: a dim shade of its own colour
+
+
+func _refresh_body() -> void:
 	if game == null or round_label == null:
 		return
 	_refresh_coach()
