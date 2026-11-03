@@ -43,7 +43,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_music", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1643,6 +1643,29 @@ func test_unlocks() -> void:
 						check(ch == "." or sk["palette"].has(ch), "%s: colour '%s' is in the palette" % [id, ch])
 	# shotgun skins travel with your look
 	check(LooksT.clean({"gun": "neon"})["gun"] == "neon" and LooksT.clean({"gun": "nope"})["gun"] == "standard", "looks carry a shotgun skin")
+
+## The background music: the room in E minor, every game in its own scale,
+## and every track made.
+func test_music() -> void:
+	var Saloon = load("res://scripts/audio/saloon.gd")
+	var room: Dictionary = Saloon.VARIANTS["room"]
+	check(int(room["key"]) == 0 and room["mode"] == "minor", "the room is in E minor")
+	var seen := {}
+	for id in Saloon.VARIANTS:
+		var v: Dictionary = Saloon.VARIANTS[id]
+		check(Saloon.MODES.has(v["mode"]), "%s: a real scale (%s)" % [id, v["mode"]])
+		var sig := "%d %s" % [posmod(int(v["key"]), 12), v["mode"]]
+		check(not seen.has(sig), "%s has its own key and scale (%s)" % [id, sig])
+		seen[sig] = true
+		check(ResourceLoader.exists("res://music/%s.res" % id), "%s: its track is made (tools/make_music.gd)" % id)
+	for kind in Games.kinds():
+		check(Saloon.VARIANTS.has(kind), "%s has its own music" % kind)
+	# moving the tune into a scale
+	check(Saloon.in_mode(3, "major") == 4 and Saloon.in_mode(10, "major") == 11, "minor steps move to major ones")
+	check(Saloon.in_mode(8, "dorian") == 9 and Saloon.in_mode(3, "dorian") == 3, "dorian raises the sixth only")
+	check(Saloon.in_mode(6, "major") == 6 and Saloon.in_mode(11, "minor") == 11, "blue notes stay put")
+	check(Saloon.in_mode(-1, "minor") == -1 and Saloon.in_mode(15, "major") == 16, "works below and above the octave")
+
 
 # ================================================================ poker
 

@@ -6,9 +6,10 @@ extends RefCounted
 ## just something to swing to.
 ##
 ## The tune is a 12-bar minor blues, written out note by note below. The room
-## plays it on the piano; each game plays the same tune with its own little
-## twist (the tempo, and the piano, vibraphone, guitar or a soft muted horn
-## taking the lead), so a new game only needs a line in VARIANTS.
+## plays it in E minor on the piano; each game plays the same tune in its own
+## key and scale (dorian, lydian, harmonic minor...), at its own tempo, with
+## the piano, vibraphone, guitar or a soft muted horn taking the lead, so a
+## new game only needs a line in VARIANTS.
 ##
 ## Rendering is slow in GDScript, so the tracks are made once by
 ## tools/make_music.gd and saved in res://music/. render() is what it calls.
@@ -53,20 +54,47 @@ const MELODY := [
 	[[0, 7, 1], [1, 6, 1], [2, 5, 1], [3, 3, 1], [4, 2, 2], [6, -1, 2]],
 ]
 
-## The room's version, and each game's twist: tempo, who takes the lead,
-## how lazy the swing is (0.5 straight, 0.67 a full triplet shuffle).
-const VARIANTS := {
-	"room": {"bpm": 84, "lead": "piano", "swing": 0.66},
-	"rummy": {"bpm": 88, "lead": "piano", "swing": 0.66},
-	"blackjack": {"bpm": 82, "lead": "vibes", "swing": 0.66},
-	"gofish": {"bpm": 90, "lead": "guitar", "swing": 0.64},
-	"cheat": {"bpm": 86, "lead": "horn", "swing": 0.66},
-	"hearts": {"bpm": 76, "lead": "vibes", "swing": 0.67},
-	"spades": {"bpm": 80, "lead": "horn", "swing": 0.66},
-	"snap": {"bpm": 96, "lead": "guitar", "swing": 0.64},
-	"president": {"bpm": 80, "lead": "piano", "swing": 0.67},
-	"poker": {"bpm": 72, "lead": "horn", "swing": 0.67},
+## The scales a version can be in. The tune is written in E natural minor;
+## each step of that scale moves to the same step of the new one (so the
+## chords change with it), and the bluesy notes outside the scale stay put.
+const MODES := {
+	"minor": [0, 2, 3, 5, 7, 8, 10], # natural minor (aeolian)
+	"dorian": [0, 2, 3, 5, 7, 9, 10],
+	"phrygian": [0, 1, 3, 5, 7, 8, 10],
+	"harmonic": [0, 2, 3, 5, 7, 8, 11], # harmonic minor
+	"melodic": [0, 2, 3, 5, 7, 9, 11], # melodic minor
+	"major": [0, 2, 4, 5, 7, 9, 11],
+	"mixolydian": [0, 2, 4, 5, 7, 9, 10],
+	"lydian": [0, 2, 4, 6, 7, 9, 11],
 }
+const _MINOR_STEP := {0: 0, 2: 1, 3: 2, 5: 3, 7: 4, 8: 5, 10: 6}
+
+## The room's version (E minor) and each game's twist: its own key (semitones
+## from E) and scale, its tempo, who takes the lead (piano, vibes, guitar or
+## horn), and how lazy the swing is (0.5 straight, 0.67 a full triplet).
+const VARIANTS := {
+	"room": {"key": 0, "mode": "minor", "bpm": 84, "lead": "piano", "swing": 0.66},
+	"rummy": {"key": 5, "mode": "dorian", "bpm": 88, "lead": "piano", "swing": 0.66},
+	"blackjack": {"key": 3, "mode": "major", "bpm": 82, "lead": "vibes", "swing": 0.66},
+	"gofish": {"key": 1, "mode": "lydian", "bpm": 90, "lead": "guitar", "swing": 0.64},
+	"cheat": {"key": -4, "mode": "harmonic", "bpm": 86, "lead": "horn", "swing": 0.66},
+	"hearts": {"key": 2, "mode": "melodic", "bpm": 76, "lead": "vibes", "swing": 0.67},
+	"spades": {"key": -5, "mode": "phrygian", "bpm": 80, "lead": "horn", "swing": 0.66},
+	"snap": {"key": 5, "mode": "mixolydian", "bpm": 96, "lead": "guitar", "swing": 0.64},
+	"president": {"key": 6, "mode": "major", "bpm": 80, "lead": "piano", "swing": 0.67},
+	"poker": {"key": -2, "mode": "dorian", "bpm": 72, "lead": "horn", "swing": 0.67},
+}
+
+
+## A note of the tune (semitones above E, as written in E minor) moved into
+## `mode`: scale steps move with the scale, the blue notes stay as they are.
+static func in_mode(semis: int, mode: String) -> int:
+	var scale: Array = MODES.get(mode, MODES["minor"])
+	var octave := floori(semis / 12.0)
+	var pc := semis - octave * 12
+	if _MINOR_STEP.has(pc):
+		pc = int(scale[_MINOR_STEP[pc]])
+	return octave * 12 + pc
 
 
 ## One cycle of a tone, made of harmonics: [strength of the 1st, 2nd, ...].
@@ -204,6 +232,8 @@ static func render(id: String) -> AudioStreamWAV:
 	var beat := 60.0 / float(v["bpm"])
 	var swing := float(v["swing"])
 	var lead: String = v["lead"]
+	var key := int(v.get("key", 0))
+	var mode := str(v.get("mode", "minor"))
 	var bars := MELODY.size()
 	var buf := PackedFloat32Array()
 	buf.resize(int(bars * 4.0 * beat * RATE))
@@ -215,13 +245,13 @@ static func render(id: String) -> AudioStreamWAV:
 		# the walking bass
 		for b in range(4):
 			var swing_push := rng.randf_range(-0.008, 0.008)
-			_note(buf, tables, (bar * 4.0 + b) * beat + swing_push, beat * 0.92, 40 + int(BASS[bar][b]), "bass", 0.42 if b % 2 == 0 else 0.36)
+			_note(buf, tables, (bar * 4.0 + b) * beat + swing_push, beat * 0.92, 40 + key + in_mode(int(BASS[bar][b]), mode), "bass", 0.42 if b % 2 == 0 else 0.36)
 		# the guitar: a soft chord on every beat, a touch more on 2 and 4
 		var chords: Array = CHORDS[bar]
 		for b in range(4):
 			var chord: Array = chords[0] if chords.size() == 1 or b < 2 else chords[1]
 			for tone in chord:
-				var m := 52 + int(tone)
+				var m := 52 + key + in_mode(int(tone), mode)
 				while m > 62:
 					m -= 12
 				while m < 50:
@@ -231,7 +261,9 @@ static func render(id: String) -> AudioStreamWAV:
 		for nt in MELODY[bar]:
 			var at := _slot_time(bar, float(nt[0]), beat, swing) + rng.randf_range(-0.012, 0.018)
 			var end := _slot_time(bar, float(nt[0]) + float(nt[2]), beat, swing)
-			var pitch := ROOT + int(nt[1])
+			var pitch := ROOT + key + in_mode(int(nt[1]), mode)
+			while pitch > 86:
+				pitch -= 12
 			var vel := lead_vol * rng.randf_range(0.85, 1.0)
 			_note(buf, tables, at, (end - at) * 0.95, pitch, lead, vel)
 			if lead == "guitar":
@@ -240,7 +272,10 @@ static func render(id: String) -> AudioStreamWAV:
 		if lead != "piano":
 			var chord: Array = chords[0]
 			for tone in chord:
-				_note(buf, tables, _slot_time(bar, 3.0, beat, swing), beat * 0.6, 60 + int(tone), "piano", 0.06)
+				var cm := 60 + key + in_mode(int(tone), mode)
+				while cm > 70:
+					cm -= 12
+				_note(buf, tables, _slot_time(bar, 3.0, beat, swing), beat * 0.6, cm, "piano", 0.06)
 	_drums(buf, bars, beat, swing, rng)
 	# a soft limiter so it never clips
 	var peak := 0.0

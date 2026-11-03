@@ -49,9 +49,22 @@ A slow swing jazz blues in E minor plays in the background, like a little
 late-night trio: a mellow piano takes the tune, an upright bass walks
 underneath, a guitar strums soft chords on every beat, and brushes and a quiet
 ride cymbal keep it swinging. No singing, just something to swing to. The room
-plays it on the piano; every game plays the same tune with its own twist (its
-tempo, and the piano, vibraphone, guitar or a soft muted horn on the tune),
-fading over as you sit down at the table. Turn it off with **MUSIC** at the
+plays it in E minor on the piano; every game plays the same tune in its own key
+and scale, fading over as you sit down at the table:
+
+| Game | Key and scale | Lead |
+|---|---|---|
+| The room | E minor | piano |
+| Rummy | A dorian | piano |
+| Blackjack | G major | vibraphone |
+| Go Fish | F lydian | guitar |
+| Cheat | C harmonic minor | muted horn |
+| Hearts | F# melodic minor | vibraphone |
+| Spades | B phrygian | muted horn |
+| Snap | A mixolydian | guitar |
+| President | Bb major | piano |
+| Poker | D dorian | muted horn |
+ Turn it off with **MUSIC** at the
 bar or in the in-game MENU (**SOUND** turns everything off). The tune is
 written out note by note in `scripts/audio/saloon.gd`, with a line per game in
 `VARIANTS`; after changing it (or adding a game) render the tracks into
