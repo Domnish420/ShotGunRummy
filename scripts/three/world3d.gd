@@ -558,6 +558,12 @@ func enter_room() -> void:
 func leave_room() -> void:
 	_room = false
 	_focus = ""
+	# a walk round the room still going would carry the camera off the table
+	if _cam_tween != null and _cam_tween.is_valid():
+		_cam_tween.kill()
+	_room_hold = 0.0
+	if _preview.is_empty():
+		_fit_camera() # back to your seat at the table
 	if _room_fill != null:
 		_room_fill.visible = false
 	lamp.shadow_enabled = true
@@ -732,9 +738,14 @@ func _gacha_wide() -> Transform3D:
 	return Transform3D(Basis(), from).looking_at(m.to_global(Vector3(0, 0.62 if not _landscape else 0.7, 0)), Vector3.UP)
 
 
+var _cam_tween: Tween
+
+
 func _move_camera(to: Transform3D, time: float) -> void:
-	var t := camera.create_tween()
-	t.tween_property(camera, "global_transform", to, time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	if _cam_tween != null and _cam_tween.is_valid():
+		_cam_tween.kill()
+	_cam_tween = camera.create_tween()
+	_cam_tween.tween_property(camera, "global_transform", to, time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 func hide_gacha() -> void:
@@ -892,10 +903,21 @@ const FACE_LEAN := 0.42
 func _flat(pos: Vector3, yaw: float, face_up: bool) -> Transform3D:
 	if not face_up:
 		return Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI / 2.0), pos)
-	var tilt := Basis(Vector3.RIGHT, -PI / 2.0 + FACE_LEAN)
-	# lift it so its near edge still rests on the table
-	var lift := Vector3(0, sin(FACE_LEAN) * TABLE_CARD.y * 0.5, 0)
-	return Transform3D(Basis(Vector3.UP, yaw) * tilt, pos + lift)
+	return _leaned(pos, yaw, 0.0, 0)
+
+
+## A face-up card leaning back towards you. Cards in a pile all lean the same
+## way: `spin` turns a card round in its own plane (a messy pile, a fan) so it
+## never cuts through the card under it, and `layer` lifts it clear of them.
+const LAYER_GAP := 0.0035
+
+
+func _leaned(pos: Vector3, yaw: float, spin: float, layer: int) -> Transform3D:
+	var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -PI / 2.0 + FACE_LEAN) * Basis(Vector3.BACK, spin)
+	# lift it so its lowest corner still rests on the table, however it's turned
+	var reach := absf(cos(spin)) * TABLE_CARD.y * 0.5 + absf(sin(spin)) * TABLE_CARD.x * 0.5
+	var lift := Vector3(0, sin(FACE_LEAN) * reach, 0)
+	return Transform3D(b, pos + lift + b.z * (LAYER_GAP * layer))
 
 
 func _tween(node: Node3D, prop: String, value, delay: float = 0.0, time: float = MOVE_TIME) -> void:
@@ -985,7 +1007,7 @@ func sync(s: Dictionary) -> void:
 	for i in range(from, pile.size()):
 		var c: Dictionary = pile[i]
 		var yaw := (hash(c["id"]) % 100) / 100.0 * 0.5 - 0.25
-		var xf := _flat(discard_base + Vector3(0, 0.003 * (i - from), 0), yaw, true)
+		var xf := _leaned(discard_base, 0.0, yaw, i - from)
 		var top_one := i == pile.size() - 1
 		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] else "", game.is_trump(c), stock_xf)
 	if game.kind == "rummy" or not pile.is_empty():
@@ -1005,7 +1027,7 @@ func sync(s: Dictionary) -> void:
 		for ci in range(cards.size()):
 			var c: Dictionary = cards[ci]
 			var pos := Vector3(start + step * ci, TABLE_TOP + 0.002 + 0.0015 * ci, base.z)
-			_place(seen, c["id"], c, TABLE_CARD, _flat(pos, 0.0, true), true, true, "meld", m["id"], "target" if is_target else "", Cards.is_wild(c, trump_rank), stock_xf)
+			_place(seen, c["id"], c, TABLE_CARD, _leaned(pos, 0.0, 0.0, ci), true, true, "meld", m["id"], "target" if is_target else "", Cards.is_wild(c, trump_rank), stock_xf)
 		_label_at(game.players[m["owner"]].name, Vector3(base.x, TABLE_TOP + 0.01, base.z + 0.14), 22, Palette.DIM)
 
 	if game.kind == "hearts" or game.kind == "spades":
@@ -1034,7 +1056,8 @@ func sync(s: Dictionary) -> void:
 			pos.y = TABLE_TOP + 0.002 + 0.001 * i
 			# Spotlight / Flashbang: revealed cards lie face up
 			var shown: bool = p.exposed or hand[i].get("shown", false)
-			var xf := _flat(pos, yaw + (i - hand.size() * 0.5) * 0.06, shown)
+			var fan := (i - hand.size() * 0.5) * 0.06
+			var xf := _leaned(pos, 0.0, yaw + fan, i) if shown else _flat(pos, yaw + fan, false)
 			_place(seen, hand[i]["id"], hand[i], OPP_CARD, xf, shown, true, "", "", "", game.is_trump(hand[i]) if shown else false, stock_xf)
 		var items: Array = p.items
 		for i in range(items.size()):
@@ -1097,14 +1120,15 @@ func _trick_cards(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> vo
 	if entries.is_empty() and not game.last_trick.is_empty() and game.phase == "play":
 		entries = game.last_trick["cards"]
 		done = true
-	for t in entries:
+	for ti in range(entries.size()):
+		var t: Dictionary = entries[ti]
 		var seat_pos := seat_position(int(t["seat"]), viewer, n)
 		var pos := _toward_center(seat_pos, 0.58)
 		pos.y = TABLE_TOP + 0.004
 		var yaw := atan2(-seat_pos.x, -seat_pos.z)
 		var c: Dictionary = t["card"]
 		var lit := "gold" if done and int(t["seat"]) == int(game.last_trick["winner"]) else ""
-		_place(seen, c["id"], c, TABLE_CARD, _flat(pos, yaw, true), true, true, "", "", lit, game.is_trump(c), spawn)
+		_place(seen, c["id"], c, TABLE_CARD, _leaned(pos, 0.0, yaw, ti), true, true, "", "", lit, game.is_trump(c), spawn)
 	if done:
 		_label_at("%s TAKES IT" % game.players[int(game.last_trick["winner"])].name, Vector3(0, TABLE_TOP + 0.01, 0.12), 26, Palette.GOLD)
 	for p in game.players:
@@ -1159,7 +1183,7 @@ func _president_pile(seen: Dictionary, game, spawn: Transform3D) -> void:
 			cards.append(c)
 	for i in range(cards.size()):
 		var pos := Vector3(0.14 + i * 0.07, TABLE_TOP + 0.003 + i * 0.002, -0.02)
-		_place(seen, cards[i]["id"], cards[i], TABLE_CARD, _flat(pos, (i - cards.size() * 0.5) * 0.08, true), true, true, "", "", "", game.is_trump(cards[i]), spawn)
+		_place(seen, cards[i]["id"], cards[i], TABLE_CARD, _leaned(pos, 0.0, -(i - cards.size() * 0.5) * 0.08, i), true, true, "", "", "", game.is_trump(cards[i]), spawn)
 	_label_at(game.players[int(top["seat"])].name, Vector3(0.22, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
 
 
@@ -1202,7 +1226,7 @@ func _blackjack_hand(seen: Dictionary, game, p, seat_pos: Vector3, side: Vector3
 		var pos := center + side * ((i - (hand.size() - 1) * 0.5) * step)
 		pos.y = TABLE_TOP + 0.002 + 0.001 * i
 		var up: bool = p.exposed or hand[i].get("shown", false)
-		_place(seen, hand[i]["id"], hand[i], BJ_CARD, _flat(pos, yaw, up), up, true, "", "", "", game.is_trump(hand[i]) if up else false, spawn)
+		_place(seen, hand[i]["id"], hand[i], BJ_CARD, _leaned(pos, 0.0, yaw, i) if up else _flat(pos, yaw, false), up, true, "", "", "", game.is_trump(hand[i]) if up else false, spawn)
 	if hand.is_empty() or not p.alive:
 		return
 	var note := ""
