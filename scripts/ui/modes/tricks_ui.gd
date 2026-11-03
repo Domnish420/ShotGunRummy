@@ -185,14 +185,14 @@ func rules() -> Array:
 		return ["HEARTS: DON'T TAKE HEARTS. 3 to 6 players."] + common + [
 			"POINTS. Each heart you take is 1 point. The Queen of Spades is 13. Hearts can't be led until one has been played.",
 			"THE QUEEN. Take the Queen of Spades and you lose 1 health on the spot.",
-			"WINNING. Fewest points wins the round. Take every point card and you SHOOT THE MOON: you win with 3 shells.",
-			"THE SHOTGUN. The winner gets 1 shell, +1 if they took no points at all. Everyone has 4 health. Last one standing walks out.",
+			"WINNING. Fewest points wins the round. Take every point card and you SHOOT THE MOON: an instant win, with 2 shells.",
+			"THE SHOTGUN. The winner gets 1 shell. Everyone has 4 health. Last one standing walks out.",
 		]
 	return ["SPADES: EVERYONE FOR THEMSELVES. 2 to 6 players."] + common + [
 		"BIDDING. Before the first trick everyone bids how many tricks they'll take. 0 is NIL.",
 		"SPADES ARE TRUMPS. A spade beats any other suit. Spades can't be led until one has been played.",
 		"SCORING. Make your bid: 10 per trick bid, +1 for each extra. Miss it: -10 per trick bid. Nil: +50 if you take none, -50 if you take any.",
-		"THE SHOTGUN. Best score this round wins, with 1 shell, +1 for making your bid exactly, +1 for making nil. Everyone has 4 health. Last one standing walks out.",
+		"THE SHOTGUN. Best score this round wins, with 1 shell, or 2 for making a nil bid. Everyone has 4 health. Last one standing walks out.",
 	]
 
 

@@ -43,6 +43,17 @@ thing itself) and you walk over:
 The room code is in `scripts/three/world3d.gd` (look for "the room"), the
 furniture in `scripts/three/props.gd`.
 
+### Shells
+
+Winning a round loads the shotgun with **1 shell**. An instant or perfect win
+loads **2**, the most there ever is: a **rummy** (going out in one turn), a
+natural **Blackjack** (two shots at the dealer, there and then), **shooting
+the moon** in Hearts, making **nil** in Spades, going out in Cheat without
+ever being caught lying, more than half the books in Go Fish, more than half
+the deck in Snap, going out first in President without passing once, or a
+straight flush in Poker. AI players with the gun take turns: each shoots
+whoever's been shot the least so far.
+
 ### Music
 
 Slow swing jazz plays in the background: the room has its own song, and each
@@ -294,7 +305,7 @@ the game ends for everyone. When exporting an app for Android, tick the
 - **Hints.** A gold outline means a card makes a meld in your hand, a gold
   underline means it fits a meld on the table, and a gold banner tells you when
   you can go out (and when it would be Rummy). Turn them off with HINTS.
-- **The shotgun.** The winner gets 1 shell, +1 for every 10 points (max 3), and
+- **The shotgun.** The winner gets 1 shell (2 for a **rummy**, going out in one turn), and
   picks who to shoot with each one. Everyone has 4 health. Health carries over
   between rounds. 0 health and you're out. Last one standing wins.
 
@@ -322,7 +333,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   busts, the dealer wins without playing.
 - **Blackjack shoots.** The moment you have a Blackjack, you shoot the
   dealer, free (no shells used).
-- **The shotgun.** The dealer gets 1 shell for every player who lost (max 3)
+- **The shotgun.** The dealer gets 1 shell for every player who lost (2 at most)
   and picks who to shoot, but only players who lost. Beat the dealer or push
   and you're safe.
 - **Items.** The same items, adapted where they need to be: the Burner Phone
@@ -347,7 +358,7 @@ the game ends for everyone. When exporting an app for Android, tick the
   wild for books (three of a rank and a trump, or two and two trumps). Nobody
   can ask for the trump rank, and trumps are never handed over.
 - **The end.** The round ends when someone has to fish and the pond is empty.
-  Most books wins and gets 1 shell for every book they're ahead (1 to 3).
+  Most books wins: 1 shell, or 2 for more than half the books.
 - **Items.** Shakedown throws a card back in the pond, Sticky Fingers steals a
   card from someone's book (the rest goes back in their hand), the Revolver
   makes someone get a card off another player or spin. Double Down fishes 2
@@ -365,8 +376,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   you get an item. If they told the truth, you pick it up.
 - **Trumps** always count as the rank you said: they're never a lie.
 - **Winning.** Play your last card and you win, unless the next player calls
-  CHEAT! and catches you. The winner gets 1 shell, +1 for every 15 cards the
-  others are left holding (max 3).
+  CHEAT! and catches you. The winner gets 1 shell, or 2 for going out without
+  ever being caught lying.
 - **Items.** The magnifier peeks at the last play (it shows you a lie if there
   is one), Shakedown makes someone take 3 cards off the bottom of the pile,
   Garbage Day makes someone pick up the whole pile, Sticky Fingers slips the
@@ -385,13 +396,13 @@ trick (the first one played, if there's more than one).
 - **Hearts.** Each heart taken is 1 point, the Queen of Spades 13; fewest
   points wins. Hearts can't be led until one has been played. Taking the Queen
   of Spades costs **1 health** on the spot. Take every point card and you
-  **shoot the moon**: 3 shells. Otherwise the winner gets 1 shell, +1 for
-  taking no points.
+  **shoot the moon**: an instant win with 2 shells. Otherwise the winner
+  gets 1 shell.
 - **Spades.** Everyone plays for themselves (2–6 players). Before the first
   trick everyone **bids** how many tricks they'll take (0 is nil). Spades beat
   the other suits and can't be led until one has been played. Make your bid:
   10 a trick, +1 for each extra; miss it: −10 a trick; nil: ±50. Best round
-  score wins, with 1 shell, +1 for making the bid exactly, +1 for making nil.
+  score wins, with 1 shell, or 2 for making a nil bid.
 - **Items.** Every trick needs a card from everyone, so here the items swap
   cards rather than add or take them. The Revolver makes someone spin if they
   win the next trick, Double Down makes someone play their highest card next
@@ -411,8 +422,8 @@ trick (the first one played, if there's more than one).
 - **Wrong snaps** cost 1 health (in normal mode, 2 cards from your pile go in
   the middle).
 - **The end.** When every pile has run out there's one last chance to snap,
-  then **COUNT UP**: most cards won takes the shotgun, 1 shell +1 for every 10
-  cards ahead.
+  then **COUNT UP**: most cards won takes the shotgun: 1 shell, or 2 for winning
+  more than half the deck.
 - **On one phone**, whoever grabs it first presses SNAP! and says who they are.
 - **Items.** The magnifier and the phone peek at the next card in a pile,
   Sticky Fingers steals 3 won cards, Double Down makes someone flip 2, and
@@ -426,8 +437,8 @@ trick (the first one played, if there's more than one).
   Going round, each player beats it with the same number of a higher rank, or
   **PASS**es (and sits out until the pile clears). When everyone else has
   passed, the last player to play leads again.
-- **President.** First out wins, with 1 shell for every 2 other players (1 to
-  3). Whoever's left holding the most is the **Scum**: next round they hand the
+- **President.** First out wins, with 1 shell, or 2 for going out without
+  passing once. Whoever's left holding the most is the **Scum**: next round they hand the
   President their best card and get the worst one back.
 
 ## How to play Poker
@@ -436,11 +447,12 @@ trick (the first one played, if there's more than one).
   cards go face up in the middle: the flop (3), the turn (1) and the river (1),
   with a round of betting before each and after the last.
 - **Betting shells.** There are no chips. **CHECK**, or **RAISE** to load
-  another shell into the shotgun (max 3). Once someone raises, everyone else
+  another shell into the shotgun (2 at most). Once someone raises, everyone else
   still in **CALL**s it or **FOLD**s.
 - **Fold and you're safe**: you can't win, but the winner can't shoot you.
 - **Winning.** Best five-card hand from your two and the five in the middle.
-  The winner fires every shell that was loaded, only at players who stayed in.
+  The winner fires every shell that was loaded, only at players who stayed in;
+  a straight flush loads both, whatever was bet.
 - **Items.** The magnifier peeks at the next card for the middle, Beer burns
   it, Spotlight turns someone's cards up, Double Down stops someone folding,
   the Revolver makes a folder spin, Shakedown swaps one of someone's cards

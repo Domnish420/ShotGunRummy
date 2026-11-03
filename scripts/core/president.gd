@@ -19,6 +19,7 @@ var pile_top := {} # { seat, ids, count, value }: the play to beat
 var passed := {} # seat -> true: out until the pile clears
 var president := -1 # last round's winner
 var scum := -1 # last round's most cards
+var _ever_passed := {} # seat -> true: passed at least once this round
 
 
 func _init() -> void:
@@ -76,6 +77,7 @@ func start_round() -> Dictionary:
 		scum = -1
 	dealer = prev_alive(0) if dealer < 0 else prev_alive(dealer)
 	trump_rank = trump_for_round(round_num) if options["trump_cards"] else 0
+	_ever_passed = {}
 	for p in players:
 		p.hand = []
 		p.items = []
@@ -227,6 +229,7 @@ func pass_turn(seat: int) -> Dictionary:
 		return _fail("You're leading: play something.")
 	var p := current()
 	passed[seat] = true
+	_ever_passed[seat] = true
 	_emit("pass", {"seat": seat})
 	if p.ultimatum:
 		p.ultimatum = false
@@ -249,10 +252,9 @@ func _finish_round(w: int) -> void:
 			worst = p.seat
 	president = w
 	scum = worst
-	var others_n := alive_count() - 1
 	var result := {"round": round_num, "winner": w, "points": 0, "shells": 0, "rummy": false, "hands": hands, "scum": worst, "reason": ""}
 	players[w].rounds_won += 1
-	result["shells"] = clampi(int(others_n / 2), 1, int(options["max_shells"]))
+	result["shells"] = _shells(not _ever_passed.has(w)) # 2 for going out without passing once
 	last_result = result
 	if options["shotgun"]:
 		phase = "shoot"

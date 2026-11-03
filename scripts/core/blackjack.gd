@@ -207,8 +207,12 @@ func _blackjack_shots() -> void:
 		if s == dealer or not p.alive or not d.alive or _shot_dealer.has(s) or not is_blackjack(s):
 			continue
 		_shot_dealer[s] = true
-		_emit("blackjack_shot", {"shooter": s, "target": dealer, "damage": 1})
-		damage(dealer, 1, "blackjack")
+		# a natural 21 is an instant win: two shots at the dealer
+		for k in range(_shells(true)):
+			if not d.alive or phase == "match_over":
+				break
+			_emit("blackjack_shot", {"shooter": s, "target": dealer, "damage": 1})
+			damage(dealer, 1, "blackjack")
 		if phase == "match_over":
 			return
 		if not d.alive:

@@ -78,7 +78,7 @@ func _finish_round() -> void:
 	for s in pts:
 		if dealt_points > 0 and pts[s] == dealt_points:
 			players[s].score += dealt_points
-			_end_with(s, mini(3, int(options["max_shells"])), {"points": pts[s], "hands": hands, "moon": true, "reason": ""})
+			_end_with(s, _shells(true), {"points": pts[s], "hands": hands, "moon": true, "reason": ""})
 			return
 	var best := 999
 	var winners := []
@@ -92,7 +92,7 @@ func _finish_round() -> void:
 		_end_with(-1, 0, {"points": best, "hands": hands, "moon": false, "reason": "A tie for the fewest points. Nobody wins."})
 		return
 	var w: int = winners[0]
-	_end_with(w, mini(int(options["max_shells"]), 1 + (1 if best == 0 else 0)), {"points": best, "hands": hands, "moon": false, "reason": ""})
+	_end_with(w, _shells(false), {"points": best, "hands": hands, "moon": false, "reason": ""})
 
 
 # ---------------------------------------------------------------- items

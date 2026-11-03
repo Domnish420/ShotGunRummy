@@ -321,7 +321,7 @@ func _finish_round() -> void:
 	if w >= 0:
 		players[w].rounds_won += 1
 		players[w].score += best
-		result["shells"] = clampi(best - second, 1, int(options["max_shells"]))
+		result["shells"] = _shells(best * 2 > 13) # 2 for more than half the books
 	last_result = result
 	if options["shotgun"] and w >= 0:
 		phase = "shoot"

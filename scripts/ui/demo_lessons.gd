@@ -64,7 +64,7 @@ const GAMES := {
 		["trick_won", "The highest card of the suit led takes the trick, and everything in it. They lead next."],
 		["hearts_broken", "Hearts are BROKEN: now they can be led. Before this, nobody could lead one."],
 		["queen_taken", "The QUEEN OF SPADES: 13 points, and in Shotgun Hearts she costs you 1 health on the spot!"],
-		["round_end", "Fewest points wins. Take EVERY point card and you SHOOT THE MOON: you win, with 3 shells."],
+		["round_end", "Fewest points wins. Take EVERY point card and you SHOOT THE MOON: an instant win, with 2 shells."],
 		["end", "Can't follow suit? That's your chance to dump the Queen or a high heart on someone else."],
 	],
 	"spades": [
@@ -94,7 +94,7 @@ const GAMES := {
 	"poker": [
 		["start", "POKER: Texas Hold'em, betting SHELLS instead of chips. Everyone gets 2 cards face down."],
 		["bet:action=check", "CHECK: stay in without raising."],
-		["bet:action=raise", "RAISE: load another shell into the shotgun (up to 3). Everyone still in must CALL it, or fold."],
+		["bet:action=raise", "RAISE: load another shell into the shotgun (2 at most). Everyone still in must CALL it, or fold."],
 		["bet:action=call", "CALL: match the raise and stay in."],
 		["bet:action=fold", "FOLD: you can't win this round, but you're SAFE. The winner can't shoot you."],
 		["board", "Cards in the middle: 3 (the flop), then 1 (the turn), then 1 (the river). Everyone uses them."],

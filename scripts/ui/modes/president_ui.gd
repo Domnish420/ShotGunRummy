@@ -114,7 +114,7 @@ func show_result(box: VBoxContainer) -> void:
 	box.add_child(main._label("PRESIDENT", 64, Palette.GOLD, true))
 	box.add_child(main._title("%s IS OUT FIRST" % main._name(w), Palette.AMBER))
 	if g.options["shotgun"]:
-		box.add_child(main._label("%d shell%s in the shotgun. (1 for every 2 other players, max 3)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
+		box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for going out without passing once)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
 	for h in r["hands"]:
 		if h["seat"] == w:
 			continue
@@ -129,7 +129,7 @@ func rules() -> Array:
 		"RANKS. 3 is lowest, then up to K, then A, and 2 is the highest.",
 		"PLAYING. The leader plays a single, a pair, three or four of a kind. Going round, each player must beat it with the same number of cards of a higher rank, or PASS. Once you pass you sit out until the pile clears. When everyone else has passed, the pile clears and the last player to play leads again.",
 		"PRESIDENT AND SCUM. First to play their last card is PRESIDENT and wins. Whoever is left holding the most cards is the SCUM: next round they hand the President their best card and get the President's worst back.",
-		"THE SHOTGUN. The President gets 1 shell for every 2 other players (at least 1, at most 3) and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
+		"THE SHOTGUN. The President gets 1 shell, or 2 for going out first without passing once, and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]
 
 

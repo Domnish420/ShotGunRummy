@@ -98,7 +98,7 @@ var options := {
 	"items_per_turn": 0, # 0 = no limit
 	"rummy_bonus": true,
 	"max_reshuffles": 3,
-	"max_shells": 3,
+	"max_shells": 2, # a win loads 1 shell; an instant or perfect win, 2
 	"points_per_shell": 10,
 	"trump_cards": true,
 	"no_placing_first_turn": true,
@@ -716,7 +716,7 @@ func _end_round(winner_seat: int, reason: String = "") -> void:
 		w.score += pts
 		w.rounds_won += 1
 		result["points"] = pts
-		result["shells"] = mini(int(options["max_shells"]), 1 + int(pts / float(options["points_per_shell"])))
+		result["shells"] = _shells(result["rummy"]) # 2 for a rummy: out in one go
 	last_result = result
 	if options["shotgun"] and winner_seat >= 0 and int(result["shells"]) > 0:
 		phase = "shoot"
@@ -1180,6 +1180,12 @@ func _eliminate(seat: int) -> void:
 
 
 # ---------------------------------------------------------------- shotgun
+
+## Shells for a win: 1, or 2 (the most there is) for an instant or perfect
+## win: a rummy, a natural blackjack, shooting the moon...
+func _shells(instant: bool) -> int:
+	return mini(int(options["max_shells"]), 2 if instant else 1)
+
 
 func shoot(shooter: int, target: int) -> Dictionary:
 	if phase != "shoot" or gun == null:

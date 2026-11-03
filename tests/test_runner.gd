@@ -675,7 +675,7 @@ func test_going_out_scores_everyone() -> void:
 	check(r["winner"] == 0, "seat 1 wins")
 	check(r["rummy"], "went out in one turn")
 	check(r["points"] == 50, "(15 + 10) x 2 = 50, got %d" % r["points"])
-	check(r["shells"] == 3, "shells capped at 3")
+	check(r["shells"] == 2, "a rummy (out in one go) is an instant win: 2 shells")
 	check(g.phase == "shoot" and g.gun["holder"] == 0, "winner holds the gun")
 
 
@@ -871,7 +871,7 @@ func test_bj_winner() -> void:
 	check(g.phase == "round_over" and g.last_result["shooters"].is_empty(), "a push: nobody gets shot")
 	# the dealer beats everyone: 1 shell for each, aimed only at them
 	g = _bj_round(13, ["10H 6C", "10S 7D", "9C 8H", "10D 10C"])
-	check(g.gun != null and g.gun["holder"] == g.dealer and g.gun["shells"] == 3 and g.gun["targets"].size() == 3, "the dealer beats 3 players: 3 shells")
+	check(g.gun != null and g.gun["holder"] == g.dealer and g.gun["shells"] == 2 and g.gun["targets"].size() == 3, "the dealer beats 3 players: 2 shells (the most there is)")
 	check(Bot.choose_target(g, g.dealer) in g.gun["targets"], "the AI dealer aims at a loser")
 	# the dealer goes bust: players still in are safe, a player who busted isn't
 	g = new_bj(3, 15)
@@ -915,6 +915,7 @@ func test_bj_blackjack_shot() -> void:
 		if kinds.has("blackjack_shot"):
 			found = true
 			check(g.players[g.dealer].hp < g.players[g.dealer].max_hp, "the dealer took the free shot")
+			check(shots % 2 == 0 and shots >= 2, "a natural 21 is an instant win: two shots (%d)" % shots)
 			break
 	check(found, "some deal has a Blackjack")
 	# by item: Shakedown leaves a player with 2 cards making 21
@@ -927,7 +928,7 @@ func test_bj_blackjack_shot() -> void:
 	var hp: int = g.players[g.dealer].hp
 	g.players[me].items = [{"id": "I-shakedown-1", "item": "shakedown"}]
 	check(g.use_item(me, "I-shakedown-1", them)["ok"], "shakedown")
-	check(g.players[g.dealer].hp == hp - 1, "a Blackjack made by an item shoots the dealer too")
+	check(g.players[g.dealer].hp == hp - 2, "a Blackjack made by an item shoots the dealer twice too")
 
 
 func test_bj_items() -> void:
@@ -1071,7 +1072,7 @@ func test_gf_books() -> void:
 	g.players[me].hand = cards("10H")
 	g.players[them].hand = cards("JC")
 	g.ask(me, them, 10)
-	check(g.phase == "shoot" and g.gun["holder"] == me and g.gun["shells"] == 3, "3 books ahead: 3 shells (%s)" % [g.phase])
+	check(g.phase == "shoot" and g.gun["holder"] == me and g.gun["shells"] == 1, "a win with 3 books: 1 shell (%s)" % [g.phase])
 
 
 ## Every level of Go Fish AI finishes whole matches, cards all accounted for.

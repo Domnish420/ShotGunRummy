@@ -128,8 +128,7 @@ func _finish_round() -> void:
 	var w: int = winners[0]
 	var b: int = int(bids.get(w, 0))
 	var t: int = int(tricks_won.get(w, 0))
-	var shells := 1 + (1 if b > 0 and t == b else 0) + (1 if b == 0 and t == 0 else 0)
-	_end_with(w, mini(int(options["max_shells"]), shells), {"points": best, "hands": hands, "reason": ""})
+	_end_with(w, _shells(b == 0 and t == 0), {"points": best, "hands": hands, "reason": ""}) # 2 for making nil
 
 
 func perform_action(seat: int, action: String, args: Array) -> Dictionary:

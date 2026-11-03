@@ -317,6 +317,8 @@ func _showdown() -> void:
 	for s in live:
 		if s != w:
 			targets.append(s)
+	if w >= 0 and int(best[0]) >= 8:
+		shells = _shells(true) # a straight flush: the gun's full, whatever was bet
 	var result := {"round": round_num, "winner": w, "points": 0, "shells": shells, "rummy": false, "hands": hands,
 		"hand": hand_name(best), "board": board.duplicate(true), "targets": targets,
 		"reason": "" if w >= 0 else "A split pot. Nobody shoots."}

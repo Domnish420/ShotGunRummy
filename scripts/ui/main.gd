@@ -2968,8 +2968,8 @@ const BLACKJACK_RULES := [
 	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
-	"BLACKJACK SHOOTS. The moment you have a Blackjack, you shoot the dealer, free.",
-	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (max 3) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
+	"BLACKJACK SHOOTS. A Blackjack is an instant win: the moment you have one, you shoot the dealer twice, free.",
+	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (2 at most) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
 ]
 
 
@@ -3156,7 +3156,7 @@ func _show_blackjack_result() -> void:
 			losers.append(_name(s))
 		var n: int = shooters[0][1]
 		box.add_child(_label("THE DEALER GETS %d SHELL%s TO SHOOT %s" % [n, "" if n == 1 else "S", ", ".join(losers)], 28, Palette.RED.lightened(0.3), true))
-		box.add_child(_label("(1 shell for each player who lost, max 3. Only players who lost can be shot.)", 20, Palette.DIM, true))
+		box.add_child(_label("(1 shell for each player who lost, 2 at most. Only players who lost can be shot.)", 20, Palette.DIM, true))
 	_add_result_buttons(box, int(game.gun["holder"]) if game.gun != null else -1)
 
 
@@ -3966,7 +3966,7 @@ func _show_round_result() -> void:
 		if r["rummy"]:
 			box.add_child(_label("Out in a single turn. Points doubled.", 26, Palette.GOLD, true))
 		box.add_child(_label("%d points = %d shell%s in the shotgun." % [r["points"], r["shells"], "" if r["shells"] == 1 else "s"], 28, Palette.INK, true))
-		box.add_child(_label("(1 shell, +1 for every 10 points, max 3)", 20, Palette.DIM, true))
+		box.add_child(_label("(1 shell, or 2 for a RUMMY: going out in one go)", 20, Palette.DIM, true))
 	for h in r["hands"]:
 		if h["seat"] == w:
 			continue
@@ -4154,7 +4154,7 @@ func _show_rules() -> void:
 		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
 		"LAYING OFF. Once you've put down a meld of your own this round, add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
 		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
-		"THE SHOTGUN. The winner gets the shotgun with 1 shell, +1 for every 10 points scored (max 3), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
+		"THE SHOTGUN. The winner gets the shotgun with 1 shell (2 for a RUMMY: going out all in one turn), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
 		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
 		"SWAPPING A TRUMP. If a meld on the table has a trump in it and you hold the real card it stands for, you can swap that card in and take the trump, but only if you meld the trump straight away with 2 or more of your own cards. Select the real card plus the cards for your new meld, then tap the glowing meld.",
 		"FIRST TURN. Nobody can put cards down on their first turn of a round: just draw and discard.",

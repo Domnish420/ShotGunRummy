@@ -157,7 +157,7 @@ func show_result(box: VBoxContainer) -> void:
 	else:
 		box.add_child(main._title("%s WINS WITH %d BOOKS" % [main._name(w), r["points"]], Palette.AMBER))
 		if g.options["shotgun"]:
-			box.add_child(main._label("%d shell%s in the shotgun. (1 for every book ahead of the next player, max 3)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
+			box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for more than half the books)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
 	for h in r["hands"]:
 		var books: Array = g.books_of(h["seat"])
 		var names := []
@@ -173,7 +173,7 @@ func rules() -> Array:
 		"YOUR TURN. Tap a card to pick its rank, then ASK a player for that rank. If they have any, they hand them all over and you go again. If not, GO FISH: you draw from the pond. If you draw the rank you asked for, you go again. Otherwise your turn ends. Draw an item and you keep it and draw again.",
 		"BOOKS. Four of a kind is a BOOK, and goes down in front of you by itself.",
 		"THE END. The round ends when someone has to fish and the pond is empty, or nobody has any cards. Most books wins (a tie goes to whoever holds fewer cards).",
-		"THE SHOTGUN. The winner gets 1 shell for every book they're ahead of the next player (at least 1, at most 3) and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
+		"THE SHOTGUN. The winner gets 1 shell, or 2 for taking more than half the books, and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]
 
 

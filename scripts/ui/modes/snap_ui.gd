@@ -124,7 +124,7 @@ func show_result(box: VBoxContainer) -> void:
 	else:
 		box.add_child(main._title("%s WON %d CARDS" % [main._name(w), r["points"]], Palette.AMBER))
 		if g.options["shotgun"]:
-			box.add_child(main._label("%d shell%s in the shotgun. (1, +1 for every 10 cards ahead, max 3)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
+			box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for winning more than half the deck)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
 	for h in r["hands"]:
 		box.add_child(main._label("%s: %d cards won" % [h["name"], h["points"]], 24, Palette.GOLD if h["seat"] == w else Palette.INK))
 
@@ -136,7 +136,7 @@ func rules() -> Array:
 		"YOUR TURN. FLIP the top card of your pile onto the pile in the middle (tap your pile or press FLIP). Flip an item and you keep it and flip again.",
 		"SNAP! When the top two cards in the middle match, anyone can press SNAP! at any time. The first to snap wins every card in the middle.",
 		"WRONG SNAPS. Snap when they don't match and you lose 1 health (in normal mode, 2 cards from your pile go in the middle).",
-		"THE END. When everyone's pile has run out, whoever won the most cards wins: 1 shell, +1 for every 10 cards ahead (max 3).",
+		"THE END. When everyone's pile has run out, whoever won the most cards wins: 1 shell, or 2 for winning more than half the deck.",
 		"ON ONE PHONE. With more than one person, whoever grabs the phone first presses SNAP! and says who they are.",
 	]
 

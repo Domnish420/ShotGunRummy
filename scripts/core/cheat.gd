@@ -213,7 +213,7 @@ func _finish_round(w: int) -> void:
 	if w >= 0:
 		players[w].rounds_won += 1
 		players[w].score += left
-		result["shells"] = mini(int(options["max_shells"]), 1 + int(left / 15))
+		result["shells"] = _shells(int(caught.get(w, 0)) == 0) # 2 if they were never caught lying
 	last_result = result
 	if options["shotgun"] and w >= 0:
 		phase = "shoot"

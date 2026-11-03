@@ -209,7 +209,7 @@ func _finish_round() -> void:
 	if w >= 0:
 		players[w].rounds_won += 1
 		players[w].score += best
-		result["shells"] = mini(int(options["max_shells"]), 1 + int((best - second) / 10))
+		result["shells"] = _shells(best * 2 > 52) # 2 for winning more than half the deck
 	last_result = result
 	if options["shotgun"] and w >= 0:
 		phase = "shoot"

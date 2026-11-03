@@ -147,7 +147,7 @@ func show_result(box: VBoxContainer) -> void:
 	var w: int = r["winner"]
 	box.add_child(main._title("%s GETS RID OF EVERY CARD" % main._name(w), Palette.AMBER))
 	if g.options["shotgun"]:
-		box.add_child(main._label("%d shell%s in the shotgun. (1, +1 for every 15 cards the others are left holding, max 3)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
+		box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for going out without ever being caught lying)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
 	for h in r["hands"]:
 		if h["seat"] == w:
 			continue
@@ -162,7 +162,7 @@ func rules() -> Array:
 		"YOUR TURN. Cards go down in order: aces, then twos, then threes, up to kings, then round again. Tap 1 to 4 cards and PLAY them face down as the rank that's due. You can lie.",
 		"CHEAT! Before you play, you can call CHEAT! on the player before you. Their cards are turned over. If any of them isn't what they said, they pick up the whole pile and you get an item. If they told the truth, you pick it up.",
 		"WINNING. Play your last card and you win, unless the next player calls CHEAT! and catches you.",
-		"THE SHOTGUN. The winner gets 1 shell, +1 for every 15 cards the others are left holding (max 3), and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
+		"THE SHOTGUN. The winner gets 1 shell, or 2 for going out without ever being caught lying, and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]
 
 
