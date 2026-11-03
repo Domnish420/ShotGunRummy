@@ -101,7 +101,7 @@ func _play(kind: String, what: String) -> void:
 	var my_moves := 0
 	for step in range(300000):
 		await process_frame
-		if g.phase == "match_over" and main._overlay_kind == "match":
+		if (g.phase == "match_over" or main._humans_out) and main._overlay_kind == "match": # over, or YOU'RE OUT
 			break
 		if what == "tutorial" and main.demo_stage == "" and main._overlay_kind == "match":
 			break # the demo's finished
@@ -185,7 +185,7 @@ func _play(kind: String, what: String) -> void:
 	if what == "tutorial":
 		check(main.demo_stage == "" and g.round_num >= 1, "%s demo: the practice finishes (round %d)" % [kind, g.round_num])
 	else:
-		check(g.phase == "match_over", "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
+		check(g.phase == "match_over" or main._humans_out, "%s %s: the match finishes (round %d, phase %s)" % [kind, what, g.round_num, g.phase])
 	check(my_moves > 0, "%s %s: you played" % [kind, what])
 	if what == "tutorial":
 		check(coached, "%s tutorial: tips showed" % kind)

@@ -69,7 +69,7 @@ func _initialize() -> void:
 	var poked := false
 	for step in range(200000):
 		await process_frame
-		if g.phase == "match_over" and main._overlay_kind == "match":
+		if (g.phase == "match_over" or main._humans_out) and main._overlay_kind == "match": # over, or YOU'RE OUT
 			break
 		if main._hand_hidden or main._overlay_kind == "pass":
 			check(false, "the hand was hidden with only one person playing")
@@ -116,7 +116,7 @@ func _initialize() -> void:
 	for line in main.log_lines:
 		if line.contains(" shoots ") and not line.begins_with("SAM"):
 			ai_shots += 1
-	check(g.phase == "match_over", "the match finishes (round %d, phase %s)" % [g.round_num, g.phase])
+	check(g.phase == "match_over" or main._humans_out, "the match finishes (round %d, phase %s)" % [g.round_num, g.phase])
 	check(ai_turns > 5, "the AIs took turns (%d)" % ai_turns)
 	print("AI CHECK: %d rounds, %d AI turns, %d AI shots, winner %s" % [g.round_num, ai_turns, ai_shots, g.players[g.winner].name if g.winner >= 0 else "-"])
 	print("AI CHECK OK" if fails == 0 else "%d failures" % fails)

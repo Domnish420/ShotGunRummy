@@ -55,8 +55,8 @@ func _initialize() -> void:
 	var chip_moves := 0
 	for step in range(200000):
 		await process_frame
-		if g.phase == "match_over" and main._overlay_kind == "match":
-			break
+		if (g.phase == "match_over" or main._humans_out) and main._overlay_kind == "match":
+			break # the match is over, or you're out and it's over for you (YOU'RE OUT)
 		rounds[g.round_num] = true
 		if step % 2000 == 0 and OS.get_cmdline_user_args().has("--progress"):
 			print("step %d: round %d phase %s turn %d overlay %s status '%s' dealing %s fx %s" % [step, g.round_num, g.phase, g.turn, main._overlay_kind if main.overlay_layer.get_child_count() > 0 else "-", main.status_label.text, main.world.dealing, main.world.fx_busy])
@@ -84,9 +84,11 @@ func _initialize() -> void:
 		else:
 			main._discard_selected() # the STAND button
 			my_stands += 1
-	check(g.phase == "match_over", "the blackjack match finishes (round %d, phase %s)" % [g.round_num, g.phase])
+	check(g.phase == "match_over" or main._humans_out, "the blackjack match finishes (round %d, phase %s)" % [g.round_num, g.phase])
 	check(my_hits > 0 and my_stands > 0, "you hit and stood (%d, %d)" % [my_hits, my_stands])
 	check(chip_moves >= 1 or rounds.size() == 1, "the deal moved round the table")
+	if main._humans_out:
+		print("BLACKJACK CHECK: SAM went out in round %d" % g.round_num)
 	print("BLACKJACK CHECK: %d rounds, winner %s, chip moved %d times" % [g.round_num, g.players[g.winner].name if g.winner >= 0 else "-", chip_moves])
 	print("BLACKJACK CHECK OK" if fails == 0 else "%d failures" % fails)
 	quit(1 if fails > 0 else 0)

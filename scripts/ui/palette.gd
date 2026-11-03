@@ -47,17 +47,25 @@ static func make_theme() -> Theme:
 
 	t.set_color("font_color", "Label", INK)
 
-	t.set_stylebox("normal", "Button", box(BUTTON, BUTTON_EDGE, 2, 2, 10))
-	t.set_stylebox("hover", "Button", box(BUTTON, INK, 2, 2, 10))
-	t.set_stylebox("pressed", "Button", box(Color(0.15, 0.14, 0.12), AMBER, 2, 2, 10))
-	t.set_stylebox("disabled", "Button", box(Color(0.05, 0.05, 0.045), Color(0.13, 0.12, 0.11), 2, 2, 10))
-	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	# every button is a bubble word: outlined letters, no box (see bubble_word.gd)
+	for state in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
+		var e := StyleBoxEmpty.new()
+		e.content_margin_left = 10
+		e.content_margin_right = 10
+		e.content_margin_top = 4
+		e.content_margin_bottom = 4
+		t.set_stylebox(state, "Button", e)
 	t.set_color("font_color", "Button", INK)
-	t.set_color("font_hover_color", "Button", INK)
+	t.set_color("font_hover_color", "Button", INK.lightened(0.3))
 	t.set_color("font_pressed_color", "Button", AMBER)
 	t.set_color("font_focus_color", "Button", INK)
 	t.set_color("font_hover_pressed_color", "Button", AMBER)
-	t.set_color("font_disabled_color", "Button", Color(0.3, 0.29, 0.26))
+	t.set_color("font_outline_color", "Button", Color(0.05, 0.02, 0.02))
+	t.set_constant("outline_size", "Button", 12)
+	# words float over the table, so they get a dark edge to read against it
+	t.set_color("font_outline_color", "Label", Color(0.03, 0.02, 0.02))
+	t.set_constant("outline_size", "Label", 6)
+	t.set_color("font_disabled_color", "Button", Color(0.38, 0.36, 0.33))
 
 	t.set_stylebox("normal", "LineEdit", _underline(Color(0, 0, 0, 0)))
 	t.set_stylebox("focus", "LineEdit", _underline(Color(0, 0, 0, 0.06)))
@@ -79,8 +87,7 @@ static func _underline(bg: Color) -> StyleBoxFlat:
 
 
 ## A coloured button style, e.g. red for DISCARD.
+## (Buttons are bubble words now, so the colour is the letters'.)
 static func accent(button: Button, color: Color) -> void:
-	button.add_theme_stylebox_override("normal", box(BUTTON, color, 2, 2, 10))
-	button.add_theme_stylebox_override("hover", box(BUTTON, color.lightened(0.3), 2, 2, 10))
-	button.add_theme_color_override("font_color", color.lightened(0.45))
-	button.add_theme_color_override("font_hover_color", color.lightened(0.6))
+	button.add_theme_color_override("font_color", color.lightened(0.25))
+	button.add_theme_color_override("font_hover_color", color.lightened(0.5))

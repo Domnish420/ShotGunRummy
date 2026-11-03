@@ -416,12 +416,13 @@ func _typing_sounds(edit: LineEdit) -> void:
 	edit.text_submitted.connect(func(_t: String) -> void: _sound("select"))
 
 
+## Every button is a bubble word: big outlined letters that bob, no box.
 func _plain_button(text: String, on_press: Callable, font_size: int = 30) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.add_theme_font_size_override("font_size", font_size)
+	var b := BubbleWord.new()
+	b.setup(text, on_press, Palette.INK, int(round(font_size * 1.25)))
+	b.remove_theme_color_override("font_disabled_color") # the theme's dim grey
+	b.add_theme_color_override("font_pressed_color", Palette.AMBER)
 	b.custom_minimum_size = Vector2(0, 64)
-	b.pressed.connect(on_press)
 	return b
 
 
@@ -759,12 +760,17 @@ func _station_panel(title: String) -> VBoxContainer:
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(gap)
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.88), Palette.BUTTON_EDGE, 2, 4, 14))
+	panel.add_theme_stylebox_override("panel", _soft_panel())
 	col.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
 	return box
+
+
+## A soft, see-through backing for floating words (no hard box).
+static func _soft_panel() -> StyleBoxFlat:
+	return Palette.box(Color(0.02, 0.015, 0.01, 0.5), Color(0, 0, 0, 0), 0, 26, 14)
 
 
 func _panel_button(box: Container, text: String, on_press: Callable, size: int = 26) -> Button:
@@ -1581,7 +1587,7 @@ func _character_screen(look: Dictionary) -> VBoxContainer:
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(gap)
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.88), Palette.BUTTON_EDGE, 2, 4, 14))
+	panel.add_theme_stylebox_override("panel", _soft_panel())
 	col.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
@@ -2476,7 +2482,7 @@ func show_gacha() -> void:
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(gap)
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", Palette.box(Color(0.03, 0.03, 0.025, 0.85), Palette.BUTTON_EDGE, 2, 4, 14))
+	panel.add_theme_stylebox_override("panel", _soft_panel())
 	col.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
@@ -3351,6 +3357,7 @@ func _build_table() -> void:
 	# top bar
 	var top := HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_theme_constant_override("separation", 22)
 	round_label = _label("", 24, Palette.DIM)
 	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -3362,6 +3369,7 @@ func _build_table() -> void:
 		else:
 			_show_settings(), 22), _button("MENU", _show_menu, 22)]:
 		b.custom_minimum_size = Vector2(0, 46)
+		Palette.accent(b, Palette.AMBER)
 		top.add_child(b)
 	col.add_child(top)
 
@@ -3832,6 +3840,8 @@ func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "
 	if hud != null and is_instance_valid(hud):
 		hud.visible = not bottom
 	var bg := ColorRect.new()
+	if kind != "pass" and kind != "rules" and kind != "log":
+		opacity = minf(opacity, 0.62) # the table shows through; the words float over it
 	bg.color = Color(0, 0, 0, opacity)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay_layer.add_child(_full(bg))
