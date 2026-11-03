@@ -247,6 +247,26 @@ func _toggle_sound() -> void:
 	_play_music(_music_id, true)
 
 
+## Which file to play for `id`. Real recordings dropped into music/ (named
+## room.ogg, poker.mp3, snap.wav...) come first; a game without its own uses
+## the room's recording; only with no recordings at all does it fall back to
+## the tracks made in code (music/<id>.res, from tools/make_music.gd).
+const MUSIC_EXTS := ["ogg", "mp3", "wav"]
+
+
+func _music_path(id: String) -> String:
+	for name_ in [id, "room"]:
+		for ext in MUSIC_EXTS:
+			var p := "res://music/%s.%s" % [name_, ext]
+			if ResourceLoader.exists(p):
+				return p
+	for name_ in [id, "room"]:
+		var made := "res://music/%s.res" % name_
+		if ResourceLoader.exists(made):
+			return made
+	return ""
+
+
 ## Let go of the music on the way out, so nothing's left playing.
 func _exit_tree() -> void:
 	if _music_player != null:
@@ -278,12 +298,18 @@ func _play_music(id: String, force: bool = false) -> void:
 		return
 	if id == _music_id and _music_player.playing and not force:
 		return
-	var path := "res://music/%s.res" % id
-	if not ResourceLoader.exists(path):
-		path = "res://music/room.res"
-		if not ResourceLoader.exists(path):
-			return
+	var path := _music_path(id)
+	if path == "":
+		return
 	var next: AudioStream = load(path)
+	if next is AudioStreamWAV:
+		var wav := next as AudioStreamWAV
+		if wav.loop_mode == AudioStreamWAV.LOOP_DISABLED: # a recording dropped in: loop the lot
+			wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			wav.loop_begin = 0
+			wav.loop_end = int(wav.get_length() * wav.mix_rate)
+	elif "loop" in next:
+		next.set("loop", true) # recorded tracks (ogg, mp3) loop too
 	if _music_player.playing and _music_player.stream == next:
 		_music_id = id
 		return

@@ -65,7 +65,14 @@ and scale, fading over as you sit down at the table:
 | President | Bb major | piano |
 | Poker | D dorian | muted horn |
  Turn it off with **MUSIC** at the
-bar or in the in-game MENU (**SOUND** turns everything off). The tune is
+bar or in the in-game MENU (**SOUND** turns everything off). **Your own music.** Drop recorded tracks into `music/` as `.ogg`, `.mp3`
+or `.wav`, named for where they play: `room` for the room, and the game's
+name for its table (`rummy`, `blackjack`, `gofish`, `cheat`, `hearts`,
+`spades`, `snap`, `president`, `poker`). They loop, and they're used ahead of
+the made-in-code tracks; a game without its own recording plays `room`'s. Open
+the project in Godot once after adding them so it imports them.
+
+The made-in-code fallback is
 written out note by note in `scripts/audio/saloon.gd`, with a line per game in
 `VARIANTS`; after changing it (or adding a game) render the tracks into
 `music/` with `godot --headless --path . -s tools/make_music.gd`.
