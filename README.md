@@ -45,37 +45,21 @@ furniture in `scripts/three/props.gd`.
 
 ### Music
 
-A slow swing jazz blues in E minor plays in the background, like a little
-late-night trio: a mellow piano takes the tune, an upright bass walks
-underneath, a guitar strums soft chords on every beat, and brushes and a quiet
-ride cymbal keep it swinging. No singing, just something to swing to. The room
-plays it in E minor on the piano; every game plays the same tune in its own key
-and scale, fading over as you sit down at the table:
+Slow swing jazz plays in the background: the room has its own song, and each
+game its own (in its own key and scale), fading over as you sit down at the
+table. They're whole songs, so each plays through to its natural ending, takes
+a breath and starts again. Turn the music off with **MUSIC** at the bar or in
+the in-game MENU (**SOUND** turns everything off).
 
-| Game | Key and scale | Lead |
-|---|---|---|
-| The room | E minor | piano |
-| Rummy | A dorian | piano |
-| Blackjack | G major | vibraphone |
-| Go Fish | F lydian | guitar |
-| Cheat | C harmonic minor | muted horn |
-| Hearts | F# melodic minor | vibraphone |
-| Spades | B phrygian | muted horn |
-| Snap | A mixolydian | guitar |
-| President | Bb major | piano |
-| Poker | D dorian | muted horn |
- Turn it off with **MUSIC** at the
-bar or in the in-game MENU (**SOUND** turns everything off). **Your own music.** Drop recorded tracks into `music/` as `.ogg`, `.mp3`
-or `.wav`, named for where they play: `room` for the room, and the game's
+The songs are in `music/`, named for where they play: `room`, and the game's
 name for its table (`rummy`, `blackjack`, `gofish`, `cheat`, `hearts`,
-`spades`, `snap`, `president`, `poker`). They loop, and they're used ahead of
-the made-in-code tracks; a game without its own recording plays `room`'s. Open
-the project in Godot once after adding them so it imports them.
+`spades` so far; `snap`, `president` and `poker` play the room's song until
+they get their own). Drop in `.ogg`, `.mp3` or `.wav` files with those names
+and open the project in Godot once to import them.
 
-The made-in-code fallback is
-written out note by note in `scripts/audio/saloon.gd`, with a line per game in
-`VARIANTS`; after changing it (or adding a game) render the tracks into
-`music/` with `godot --headless --path . -s tools/make_music.gd`.
+If there are no recordings at all, a made-in-code stand-in plays instead:
+the tune is written out note by note in `scripts/audio/saloon.gd`, and
+`godot --headless --path . -s tools/make_music.gd` renders it into `music/`.
 
 ### Cartridges
 

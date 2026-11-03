@@ -88,6 +88,7 @@ var music_on := true
 var _music_player: AudioStreamPlayer
 var _music_id := "" # which track is playing (room, or a game's own)
 const MUSIC_DB := -11.0
+const MUSIC_GAP := 1.5 # seconds between the end of a song and its start
 var solo_opponents := 3 # vs AI: how many AIs
 var solo_level := "normal" # vs AI: easy | normal | hard | mixed
 var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
@@ -247,6 +248,16 @@ func _toggle_sound() -> void:
 	_play_music(_music_id, true)
 
 
+## A song's finished: a short pause, then the same one again (unless the
+## music's been turned off or changed meanwhile).
+func _on_music_finished() -> void:
+	var id := _music_id
+	await get_tree().create_timer(MUSIC_GAP).timeout
+	if id == _music_id and sound_on and music_on and _music_player != null and not _music_player.playing:
+		_music_player.volume_db = MUSIC_DB
+		_music_player.play()
+
+
 ## Which file to play for `id`. Real recordings dropped into music/ (named
 ## room.ogg, poker.mp3, snap.wav...) come first; a game without its own uses
 ## the room's recording; only with no recordings at all does it fall back to
@@ -292,6 +303,7 @@ func _play_music(id: String, force: bool = false) -> void:
 		_music_player = AudioStreamPlayer.new()
 		_music_player.volume_db = MUSIC_DB
 		add_child(_music_player)
+		_music_player.finished.connect(_on_music_finished)
 	if not (sound_on and music_on):
 		_music_player.stop()
 		_music_id = id
@@ -302,14 +314,11 @@ func _play_music(id: String, force: bool = false) -> void:
 	if path == "":
 		return
 	var next: AudioStream = load(path)
-	if next is AudioStreamWAV:
-		var wav := next as AudioStreamWAV
-		if wav.loop_mode == AudioStreamWAV.LOOP_DISABLED: # a recording dropped in: loop the lot
-			wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-			wav.loop_begin = 0
-			wav.loop_end = int(wav.get_length() * wav.mix_rate)
-	elif "loop" in next:
-		next.set("loop", true) # recorded tracks (ogg, mp3) loop too
+	# recordings are whole songs that fade out at the end: they play through,
+	# take a breath, and start again (see _on_music_finished). The tracks
+	# made in code loop seamlessly by themselves.
+	if "loop" in next:
+		next.set("loop", false)
 	if _music_player.playing and _music_player.stream == next:
 		_music_id = id
 		return

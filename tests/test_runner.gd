@@ -1648,6 +1648,7 @@ func test_unlocks() -> void:
 ## and every track made.
 func test_music() -> void:
 	var Saloon = load("res://scripts/audio/saloon.gd")
+	check(ResourceLoader.exists("res://music/room.mp3"), "the room's song is in")
 	var room: Dictionary = Saloon.VARIANTS["room"]
 	check(int(room["key"]) == 0 and room["mode"] == "minor", "the room is in E minor")
 	var seen := {}
@@ -1657,7 +1658,12 @@ func test_music() -> void:
 		var sig := "%d %s" % [posmod(int(v["key"]), 12), v["mode"]]
 		check(not seen.has(sig), "%s has its own key and scale (%s)" % [id, sig])
 		seen[sig] = true
-		check(ResourceLoader.exists("res://music/%s.res" % id), "%s: its track is made (tools/make_music.gd)" % id)
+		var has_track := false
+		for ext in ["ogg", "mp3", "wav", "res"]:
+			for name_ in [id, "room"]:
+				if ResourceLoader.exists("res://music/%s.%s" % [name_, ext]):
+					has_track = true
+		check(has_track, "%s: there's music for it (its own, or the room's)" % id)
 	for kind in Games.kinds():
 		check(Saloon.VARIANTS.has(kind), "%s has its own music" % kind)
 	# moving the tune into a scale
