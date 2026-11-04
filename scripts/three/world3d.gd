@@ -758,6 +758,12 @@ func hide_gacha() -> void:
 
 
 ## Menu mode: an empty table and a slowly moving camera.
+## The station signs over the room, off while a menu's words are up.
+func set_signs(on: bool) -> void:
+	for k in _signs:
+		_signs[k].visible = on and _room and _focus == ""
+
+
 func set_menu_mode(on: bool) -> void:
 	hide_preview()
 	hide_gacha()

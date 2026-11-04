@@ -560,26 +560,85 @@ func _save_settings() -> void:
 
 # ================================================================ main menu
 
+## A menu with no card behind it: just the words, floating over the room in
+## big yellow letters with a dark edge, and bubble-word buttons. (These
+## screens used to be printed on a sheet of paper.) Scrolls if it's tall.
 func _paper(width: float = 620.0) -> VBoxContainer:
 	_close_overlay()
 	_clear(screen)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	screen.add_child(_full(sc))
 	var center := CenterContainer.new()
-	screen.add_child(_full(center))
-	var paper := PanelContainer.new()
-	paper.add_theme_stylebox_override("panel", Palette.box(Palette.WAIVER, Color(0, 0, 0, 0), 0, 2, 28))
-	paper.custom_minimum_size = Vector2(width, 0)
-	paper.rotation_degrees = -1.0
-	center.add_child(paper)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.custom_minimum_size = get_viewport_rect().size
+	sc.add_child(center)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	paper.add_child(box)
+	box.add_theme_constant_override("separation", 14)
+	box.custom_minimum_size = Vector2(minf(width, get_viewport_rect().size.x - 32.0), 0)
+	center.add_child(box)
+	box.child_entered_tree.connect(_float_text)
+	_hide_signs_soon()
 	return box
 
 
+## The room's signs would show through the words: off until the menu goes.
+func _hide_signs_soon() -> void:
+	await get_tree().process_frame # after whatever brought us here turned them on
+	if world != null and screen.get_child_count() > 0 and screen.get_child(0) is ScrollContainer:
+		world.set_signs(false)
+
+
+const FLOAT_YELLOW := Color(1.0, 0.86, 0.25)
+
+
+## Restyles what goes on a _paper menu: ink-black writing becomes big yellow
+## letters (titles bright red-orange), name boxes get yellow text.
+func _float_text(node: Node) -> void:
+	if node is Label:
+		var l := node as Label
+		var col: Color = l.get_theme_color("font_color")
+		var dark := col.get_luminance() < 0.3
+		if dark:
+			var title := col.r > col.g * 2.0 and col.r > 0.2 # the dark red titles
+			l.add_theme_color_override("font_color", Color(1.0, 0.42, 0.22) if title else (Color(1.0, 0.45, 0.4) if col.r > 0.5 else FLOAT_YELLOW))
+		var fs := l.get_theme_font_size("font_size")
+		var big := mini(fs * 2, 52) if fs < 50 else mini(int(fs * 1.25), 96)
+		l.add_theme_font_size_override("font_size", big)
+		l.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		l.add_theme_constant_override("outline_size", 12 if big < 60 else 18)
+	elif node is LineEdit:
+		var e := node as LineEdit
+		e.add_theme_color_override("font_color", FLOAT_YELLOW)
+		e.add_theme_color_override("caret_color", FLOAT_YELLOW)
+		e.add_theme_color_override("font_placeholder_color", Color(1.0, 0.86, 0.25, 0.45))
+		e.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		e.add_theme_constant_override("outline_size", 10)
+		var line := Palette.box(Color(0, 0, 0, 0.25), FLOAT_YELLOW, 0, 0, 6)
+		line.border_width_bottom = 3
+		e.add_theme_stylebox_override("normal", line)
+		e.add_theme_stylebox_override("focus", line)
+	elif node is CheckBox:
+		var c := node as CheckBox
+		for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+			c.add_theme_color_override(k, FLOAT_YELLOW)
+		c.add_theme_font_size_override("font_size", 40)
+		c.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		c.add_theme_constant_override("outline_size", 10)
+	elif node is Button:
+		for k in ["normal", "hover", "pressed", "focus", "disabled"]:
+			node.add_theme_stylebox_override(k, StyleBoxEmpty.new()) # no ink blocks
+		# big bubble words; a bit smaller when several share a row
+		var crowded: bool = node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3
+		var fs: int = node.get_theme_font_size("font_size")
+		node.add_theme_font_size_override("font_size", mini(int(fs * (1.15 if crowded else 1.6)), 64))
+	for child in node.get_children():
+		_float_text(child)
+
+
 func _paper_button(text: String, on_press: Callable, font_size: int = 32) -> Button:
-	var b := _button(text, on_press, font_size)
-	b.add_theme_stylebox_override("normal", Palette.box(Palette.CARD_INK, Palette.CARD_INK, 2, 2, 10))
-	return b
+	return _button(text, on_press, font_size)
 
 
 ## The first thing you see: sign your name. After that it's yours (change it
@@ -1262,7 +1321,6 @@ func show_solo() -> void:
 	}
 	box.add_child(_label(about.get(solo_level, ""), 22, Palette.CARD_INK, true))
 	var go := _button("DEAL ME IN", _start_solo, 34)
-	go.add_theme_stylebox_override("normal", Palette.box(Palette.CARD_INK, Palette.CARD_INK, 2, 2, 10))
 	box.add_child(go)
 	box.add_child(_paper_button("BACK", show_this_phone, 28))
 
@@ -1818,20 +1876,8 @@ var _name_edits: Array = []
 
 func show_setup() -> void:
 	_fit_setup_looks()
-	_close_overlay()
-	_clear(screen)
-	var center := CenterContainer.new()
-	screen.add_child(_full(center))
-
-	var paper := PanelContainer.new()
-	paper.add_theme_stylebox_override("panel", Palette.box(Palette.WAIVER, Color(0, 0, 0, 0), 0, 2, 28))
-	paper.custom_minimum_size = Vector2(620, 0)
-	paper.rotation_degrees = -1.0
-	center.add_child(paper)
-
-	var box := VBoxContainer.new()
+	var box := _paper()
 	box.add_theme_constant_override("separation", 10)
-	paper.add_child(box)
 	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
 	box.add_child(_label("The undersigned agree to a game of %s." % ("Blackjack" if game_kind == "blackjack" else "Rummy") + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
@@ -1879,7 +1925,6 @@ func show_setup() -> void:
 	box.add_child(hide_box)
 
 	var sign_btn := _button("SIGN THE WAIVER", _start_from_setup, 34)
-	sign_btn.add_theme_stylebox_override("normal", Palette.box(Palette.CARD_INK, Palette.CARD_INK, 2, 2, 10))
 	box.add_child(sign_btn)
 	box.add_child(_paper_button("BACK", show_this_phone, 28))
 
