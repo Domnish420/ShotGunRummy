@@ -11,7 +11,8 @@ config_version=5
 [application]
 
 config/name="Shotgun Party"
-config/description="Card games with items and a shotgun: Rummy and Blackjack."
+config/description="Nine card games with items and a shotgun: Rummy, Blackjack, Go Fish, Cheat, Hearts, Spades, Snap, President and Poker."
+config/version="1.0"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://icon.png"

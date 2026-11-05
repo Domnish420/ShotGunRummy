@@ -70,13 +70,16 @@ furniture in `scripts/three/props.gd`.
 ### Shells
 
 Winning a round loads the shotgun with **1 shell**. An instant or perfect win
-loads **2**, the most there ever is: a **rummy** (going out in one turn), a
-natural **Blackjack** (two shots at the dealer, there and then), **shooting
-the moon** in Hearts, making **nil** in Spades, going out in Cheat without
+loads **2**: a **rummy** (going out in one turn), **shooting the moon** in
+Hearts, making **nil** in Spades, going out in Cheat without
 ever being caught lying, more than half the books in Go Fish, more than half
 the deck in Snap, going out first in President without passing once, or a
 straight flush in Poker. AI players with the gun take turns: each shoots
-whoever's been shot the least so far.
+whoever's been shot the least so far. (A Blackjack wins an item instead, and
+in Snap every player's first wrong snap adds a shell, up to one per player.)
+
+Once the gun's empty, the next round deals itself after 3 seconds (or press
+NEXT ROUND straight away).
 
 ### At the table
 

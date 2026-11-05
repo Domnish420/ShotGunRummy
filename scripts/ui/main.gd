@@ -4421,7 +4421,7 @@ func _add_result_buttons(box: VBoxContainer, w: int) -> void:
 
 
 ## NEXT ROUND button, or a waiting note on phones that aren't the host.
-func _add_next_round(box: VBoxContainer) -> void:
+func _add_next_round(box: VBoxContainer, auto: bool = false) -> void:
 	if demo_stage == "practice" and game.round_num >= DEMO_ROUNDS:
 		box.add_child(_button("FINISH THE DEMO", _closing(_finish_demo)))
 		return
@@ -4429,13 +4429,41 @@ func _add_next_round(box: VBoxContainer) -> void:
 		box.add_child(_label("The demo carries on by itself...", 24, Palette.DIM, true))
 		return
 	if not _online() or session.is_host():
+		if auto:
+			# the gun's empty: the next round deals itself in a few seconds
+			var count := _label("", 26, FLOAT_YELLOW, true)
+			box.add_child(count)
+			_auto_next_round(count)
 		box.add_child(_button("NEXT ROUND", _next_round))
 	else:
 		box.add_child(_label("Waiting for the host to deal the next round...", 24, Palette.DIM, true))
 		box.add_child(_button("BACK TO THE TABLE", _closing(_refresh)))
 
 
+const AUTO_ROUND_SECONDS := 3
+var _auto_round_token := 0
+
+
+## Counts down on `label`, then deals the next round, unless something else
+## happened first (NEXT ROUND pressed, the menu opened, the match ended).
+func _auto_next_round(label: Label) -> void:
+	_auto_round_token += 1
+	var token := _auto_round_token
+	var round_was: int = game.round_num
+	for left in range(AUTO_ROUND_SECONDS, 0, -1):
+		if not is_instance_valid(label):
+			return
+		label.text = "NEXT ROUND IN %d..." % left
+		await get_tree().create_timer(1.0).timeout
+		if token != _auto_round_token or game == null or game.round_num != round_was:
+			return
+	if not is_instance_valid(label) or _overlay_kind != "gun" or game.phase != "round_over" or game.gun != null:
+		return # the overlay moved on (a menu, the rules...): leave it to NEXT ROUND
+	_next_round()
+
+
 func _next_round() -> void:
+	_auto_round_token += 1 # no countdown deals it a second time
 	_close_overlay()
 	_act("next_round", [], _ignore_result)
 
@@ -4511,7 +4539,7 @@ func _show_gun(last_text: String = "") -> void:
 			box.add_child(_button("CONTINUE", _show_match_end))
 		else:
 			box.add_child(_label("The shotgun goes back on the wall.", 24, Palette.DIM, true))
-			_add_next_round(box)
+			_add_next_round(box, true)
 
 
 func _fire(shooter: int, target: int) -> void:
