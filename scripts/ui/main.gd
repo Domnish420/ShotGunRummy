@@ -157,7 +157,7 @@ func _sound(name_: String) -> void:
 	if name_.begins_with("jingle:"):
 		if _jingle_player == null:
 			_jingle_player = AudioStreamPlayer.new()
-			_jingle_player.volume_db = -6.0
+			_jingle_player.volume_db = -18.0 # a quarter of the loudness: a little jingle under the music
 			add_child(_jingle_player)
 		_jingle_player.stream = stream # a new tune cuts off the last one
 		_jingle_player.play()
@@ -2426,6 +2426,8 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 		"eliminated":
 			_log("%s IS OUT." % _name(d["seat"]))
 			_check_humans_out()
+		"blackjack_blocked":
+			_log("%s has a Blackjack, but so does the dealer, %s: no free shot." % [_name(d["shooter"]), _name(d["target"])])
 		"blackjack_shot":
 			_log("BLACKJACK! %s shoots the dealer, %s." % [_name(d["shooter"]), _name(d["target"])])
 			_blackjack_shot_fx(int(d["shooter"]), int(d["target"]))
@@ -3448,7 +3450,7 @@ func _show_blackjack_result() -> void:
 # ================================================================ AI players
 
 ## Seconds the AI waits after each kind of move, so you can follow along.
-const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 1.5, "finish": 1.5}
+const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 2.3, "finish": 1.5}
 
 
 # ---------------------------------------------------------------- pinch to zoom
@@ -3525,6 +3527,13 @@ func _drive_ai(delta: float) -> void:
 		return
 	if world.dealing or world.fx_busy or _pending_cb.is_valid() or _lesson_showing():
 		return
+	if game.kind == "snap" and game.snap_ready():
+		# a match is showing: give everyone time to snap before the next flip
+		_snap_hold += delta
+		if _snap_hold < SnapBot.MATCH_HOLD:
+			return
+	else:
+		_snap_hold = 0.0
 	if not _online():
 		# wait while the rules, log or menu are open, and for the gun to come out
 		if game.phase == "shoot":
@@ -3572,6 +3581,9 @@ var _snap_timers := {} # AI seat -> seconds until it snaps
 
 ## Snap: the AIs snap out of turn. Each flip gives every AI a reaction time;
 ## the quickest one snaps (easy ones sometimes snap at nothing).
+var _snap_hold := 0.0 # how long the current match has been showing
+
+
 func _drive_snaps(delta: float) -> void:
 	if game.phase != "play" or world.dealing or _pending_cb.is_valid():
 		return
@@ -3584,7 +3596,7 @@ func _drive_snaps(delta: float) -> void:
 			if not p.alive or p.bot == "":
 				continue
 			if game.snap_ready():
-				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot)
+				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot) + 0.45 # the card turning over first
 			elif game.rng.randf() < SnapBot.false_snap_chance(p.bot):
 				_snap_timers[p.seat] = game.rng.randf_range(0.4, 1.0)
 	if not game.snap_ready() and game.discard_pile.size() < 2:
@@ -3773,6 +3785,9 @@ func _on_table_input(event: InputEvent) -> void:
 		return
 	if _pinching or Time.get_ticks_msec() - _pinch_ended < 250:
 		return # the first finger of a pinch isn't a tap
+	if _aiming and _overlay_kind == "gun":
+		_aim_tap(event.position)
+		return
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
@@ -4185,6 +4200,8 @@ func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "
 
 
 func _close_overlay() -> void:
+	if _aiming:
+		_stop_aiming()
 	if overlay_layer != null:
 		_clear(overlay_layer)
 	_overlay_kind = ""
@@ -4457,26 +4474,25 @@ func _show_gun(last_text: String = "") -> void:
 				row.add_child(_tag("OUT", 26, Palette.RED))
 			box.add_child(row)
 	elif holder >= 0:
-		var note := "Choose who to shoot."
+		# no buttons: you tap (or click) the person you want to shoot
+		var note := "TAP WHO TO SHOOT"
 		if game.players[holder].sawed:
-			note = "Sawn-off barrel: the next shell hits for 2. Choose who to shoot."
-		box.add_child(_label(note, 26, Palette.INK, true))
+			note = "SAWN-OFF: THE NEXT SHELL HITS FOR 2. TAP WHO TO SHOOT"
+		var aim := _label(note, 34, FLOAT_YELLOW, true)
+		aim.add_theme_constant_override("outline_size", 12)
+		box.add_child(aim)
 		var allowed: Array = game.gun.get("targets", []) if game.gun != null else []
 		if not allowed.is_empty():
 			box.add_child(_label("You can only shoot players who stayed in." if game.kind == "poker" else "You can only shoot players who lost to you.", 22, Palette.DIM, true))
-		for p in game.others(holder):
-			if not allowed.is_empty() and not allowed.has(p.seat):
-				continue
+		var targets := _gun_targets()
+		for t in targets:
 			var row := HBoxContainer.new()
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
 			row.add_theme_constant_override("separation", 12)
-			var b := _button("SHOOT %s" % p.name, _fire.bind(holder, p.seat))
-			Palette.accent(b, Palette.RED)
-			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(b)
-			var hp := _hp_bar(p, Vector2(20, 18))
-			hp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			row.add_child(hp)
+			row.add_child(_tag(_name(t), 26, Palette.INK))
+			row.add_child(_hp_bar(game.players[t], Vector2(20, 14)))
 			box.add_child(row)
+		_aim_at(targets)
 	else:
 		for p in game.players:
 			var row := HBoxContainer.new()
@@ -4496,7 +4512,64 @@ func _show_gun(last_text: String = "") -> void:
 
 
 func _fire(shooter: int, target: int) -> void:
+	_stop_aiming()
 	_act("shoot", [target], _after_fire.bind(shooter, target))
+
+
+var _aiming := false # you hold the gun: tap someone at the table to shoot them
+
+
+## Who the gun in your hands can shoot.
+func _gun_targets() -> Array:
+	var out := []
+	if game == null or game.gun == null:
+		return out
+	var holder: int = game.gun["holder"]
+	var allowed: Array = game.gun.get("targets", [])
+	for p in game.others(holder):
+		if p.alive and (allowed.is_empty() or allowed.has(p.seat)):
+			if game.has_method("protected") and game.protected(p.seat):
+				continue # a Blackjack protects them
+			out.append(p.seat)
+	return out
+
+
+## The gun's yours: the overlay lets taps through to the table, and the
+## people you can shoot get a marker over their heads.
+func _aim_at(targets: Array) -> void:
+	_aiming = true
+	for c in overlay_layer.get_children():
+		_let_taps_through(c)
+	world.mark_targets(targets)
+
+
+func _let_taps_through(n: Node) -> void:
+	if n is Control and not (n is BaseButton):
+		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_let_taps_through(c)
+
+
+func _stop_aiming() -> void:
+	_aiming = false
+	if world != null:
+		world.mark_targets([])
+
+
+## A tap while aiming: if it's on someone you can shoot, bang.
+func _aim_tap(at: Vector2) -> void:
+	if game == null or game.gun == null:
+		return
+	if not _shoot_seat(world.pick_seat(_to_view(at))):
+		_sound("click")
+
+
+## Shoot this player, if the gun in your hands can. Returns whether it fired.
+func _shoot_seat(seat: int) -> bool:
+	if not _aiming or game == null or game.gun == null or not _gun_targets().has(seat):
+		return false
+	_fire(int(game.gun["holder"]), seat)
+	return true
 
 
 func _after_fire(res: Dictionary, shooter: int, target: int) -> void:

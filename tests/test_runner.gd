@@ -404,12 +404,13 @@ func test_bad_trade() -> void:
 
 func test_chaos() -> void:
 	var g := new_game(3)
-	g.players[0].hand = cards("2S")
-	g.players[1].hand = cards("3H")
+	g.players[0].hand = cards("2S 5S 9C")
+	g.players[1].hand = cards("3H KH")
 	g.players[2].hand = cards("4D")
 	g.use_item(0, _give_item(g, 0, "chaos"))
-	check(Cards.ids_of(g.players[1].hand) == ["2S"], "seat 1's card went left to seat 2")
-	check(Cards.ids_of(g.players[0].hand) == ["4D"], "and the last seat's came round to seat 1")
+	check(Cards.ids_of(g.players[1].hand) == ["2S", "5S", "9C"], "seat 0's whole hand went left to seat 1")
+	check(Cards.ids_of(g.players[2].hand) == ["3H", "KH"], "seat 1's whole hand went to seat 2")
+	check(Cards.ids_of(g.players[0].hand) == ["4D"], "and the last seat's came round to seat 0")
 
 
 func test_dumpster_dive() -> void:

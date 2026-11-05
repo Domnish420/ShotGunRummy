@@ -344,9 +344,10 @@ the game ends for everyone. When exporting an app for Android, tick the
   nothing but trumps). The round's trump is shown on the table.
 - **Hints.** A gold outline means a card makes a meld in your hand, a gold
   underline means it fits a meld on the table, and a gold banner tells you when
-  you can go out (and when it would be Rummy). Turn them off with HINTS.
+  you can go out (and when it would be Rummy). Turn them off in SETTINGS.
 - **The shotgun.** The winner gets 1 shell (2 for a **rummy**, going out in one turn), and
-  picks who to shoot with each one. Everyone has 4 health. Health carries over
+  shoots someone with each one: no buttons, just **tap (or click) the person**
+  you want to shoot (a red marker floats over everyone you can). Everyone has 4 health. Health carries over
   between rounds. 0 health and you're out. Last one standing wins.
 
 ## How to play Blackjack
@@ -372,9 +373,11 @@ the game ends for everyone. When exporting an app for Android, tick the
   which beats the higher total. The same hand is a push. If every player
   busts, the dealer wins without playing.
 - **Blackjack shoots.** The moment you have a Blackjack, you shoot the
-  dealer, free (no shells used).
+  dealer twice, free (no shells used), unless the dealer has a Blackjack too.
+- **A Blackjack protects you.** Holding one, nobody can shoot you that round,
+  not even a dealer with a Blackjack of their own.
 - **The shotgun.** The dealer gets 1 shell for every player who lost (2 at most)
-  and picks who to shoot, but only players who lost. Beat the dealer or push
+  and taps who to shoot, but only players who lost. Beat the dealer or push
   and you're safe.
 - **Items.** The same items, adapted where they need to be: the Burner Phone
   sees someone's face-down card, Spotlight and Flashbang turn face-down cards
@@ -456,9 +459,14 @@ trick (the first one played, if there's more than one).
   a random few rare items shuffled in. Nobody looks at their pile.
 - **Your turn.** **FLIP** your top card onto the middle (or tap your pile).
   Flip an item and you keep it and flip again.
+- **The middle** isn't on the table, where it'd be too small to see: every
+  card flipped shows big over the table, turning over next to the one it lands
+  on (a 2 next to a 2), then the old one fades.
 - **SNAP!** When the top two cards in the middle match (same rank, or either
   is a trump), anyone can press **SNAP!** at any time. First to snap wins the
-  middle. The AIs snap too, quicker the harder they are.
+  middle. The AIs snap too: easy ones take about 4 seconds, normal about 2½,
+  hard about 1½. While a match is showing, the AIs wait before flipping again
+  so everyone gets their chance.
 - **Wrong snaps** cost 1 health (in normal mode, 2 cards from your pile go in
   the middle).
 - **The end.** When every pile has run out there's one last chance to snap,
@@ -526,7 +534,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | 👊 Shakedown (1) | A player of your choice discards a random card (never their last). |
 | 🔄 Switcheroo (1) | Swap your whole hand with another player's. |
 | 🤝 Bad Trade (1) | Swap 2 random cards with another player. |
-| 🌀 Chaos (1) | Everyone passes a random card to the player on their left. |
+| 🌀 Chaos (1) | Everyone passes their whole hand to the player on their left. |
 | ✋ Sticky Fingers (2) | Steal a card from a meld (it must stay a meld). A meld left with 2 cards goes to the discard pile. |
 | 🗑️ Dumpster Dive (1) | Take the top 3 cards of the discard pile. |
 | 🚮 Garbage Day (1) | A player of your choice takes the whole discard pile. |

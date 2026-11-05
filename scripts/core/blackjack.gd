@@ -207,6 +207,10 @@ func _blackjack_shots() -> void:
 		if s == dealer or not p.alive or not d.alive or _shot_dealer.has(s) or not is_blackjack(s):
 			continue
 		_shot_dealer[s] = true
+		if protected(dealer):
+			# the dealer has a Blackjack too: it protects them, no free shot
+			_emit("blackjack_blocked", {"shooter": s, "target": dealer})
+			continue
 		# a natural 21 is an instant win: two shots at the dealer
 		for k in range(_shells(true)):
 			if not d.alive or phase == "match_over":
@@ -302,7 +306,15 @@ func _pass_gun() -> void:
 		gun = null
 
 
+## Holding a Blackjack this round protects you: nobody can shoot you, not
+## even a dealer with a Blackjack of their own.
+func protected(seat: int) -> bool:
+	return phase != "match_over" and players[seat].alive and is_blackjack(seat)
+
+
 func shoot(shooter: int, target: int) -> Dictionary:
+	if protected(target):
+		return _fail("%s has a Blackjack: they can't be shot this round." % players[target].name)
 	if gun != null and gun.has("targets") and int(gun["holder"]) == shooter and not gun["targets"].has(target):
 		return _fail("The dealer can only shoot players who lost.")
 	var res := super.shoot(shooter, target)

@@ -108,6 +108,16 @@ func _run() -> void:
 				if text.contains("DREW AN ITEM"):
 					await _shot("04b_drew_item")
 				await _shot("04_item")
+			if main._aiming: # the gun's yours: tap someone at the table
+				await _shot("06b_aiming")
+				var ts: Array = main._gun_targets()
+				var head: Vector2 = main.world.camera.unproject_position(main.world._head_of(ts[0]))
+				if main.world.pick_seat(head) != ts[0]:
+					push_error("tapping %s's head didn't pick them" % game.players[ts[0]].name)
+					quit(1)
+					return
+				main._shoot_seat(ts[0])
+				continue
 			var buttons := _overlay_buttons()
 			var pick = buttons[0] if not buttons.is_empty() else null
 			for b in buttons:

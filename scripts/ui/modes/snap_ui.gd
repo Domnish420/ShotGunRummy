@@ -31,6 +31,80 @@ func refresh() -> void:
 	main.status_label.add_theme_color_override("font_color", Palette.PINK if main.message != "" else Palette.AMBER)
 	main.status_label.text = main.message.to_upper() if main.message != "" else status()
 	main.go_out_label.visible = false
+	_flip_view()
+
+
+# ---------------------------------------------------------------- the flip view
+# The middle pile isn't on the table, where it's too small to see: each card
+# flipped shows big, floating over the table. The new card turns over next to
+# the one it lands on, overlapping it so both corners show (a 2 next to a 2),
+# and after a couple of seconds the old one fades and the new one stays.
+
+const FLIP_TIME := 0.45 # the card turning over
+const COMPARE_TIME := 2.0 # how long both cards show
+var _view: Control
+var _shown_top := ""
+
+
+func _flip_view() -> void:
+	var g = main.game
+	if _view == null or not is_instance_valid(_view) or not _view.is_inside_tree():
+		_view = Control.new()
+		_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		main.screen.add_child(main._full(_view))
+		_shown_top = ""
+	var pile: Array = g.discard_pile
+	var top: Dictionary = pile[-1] if not pile.is_empty() else {}
+	var top_id: String = str(top.get("id", ""))
+	if top_id == _shown_top:
+		return
+	_shown_top = top_id
+	main._clear(_view)
+	if top.is_empty() or main.world.dealing:
+		return
+	var prev: Dictionary = pile[-2] if pile.size() >= 2 else {}
+	var vs: Vector2 = main.get_viewport_rect().size
+	var w := clampf(vs.x * 0.27, 110.0, 210.0)
+	var size := Vector2(w, w * 1.42)
+	var center := Vector2(vs.x * 0.5, vs.y * 0.3)
+	var step := w * 0.4 # how much of the old card shows
+	var home := center - size * 0.5 # where a lone card sits
+	var old_card: CardView = null
+	if not prev.is_empty():
+		old_card = _card_view(prev, size, false)
+		old_card.position = home - Vector2(step * 0.5, 0)
+	var new_card := _card_view(top, size, true)
+	new_card.position = home + Vector2(step * 0.5 if old_card != null else 0.0, 0)
+	var count: Label = main._label("PILE %d" % pile.size(), 26, Palette.INK, true)
+	count.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+	count.add_theme_constant_override("outline_size", 10)
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	count.position = Vector2(0, center.y + size.y * 0.5 + 6)
+	count.size = Vector2(vs.x, 30)
+	_view.add_child(count)
+	# turn it over: squash to nothing, show its face, open back out
+	var t := new_card.create_tween()
+	t.tween_property(new_card, "scale:x", 0.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE)
+	t.tween_callback(func() -> void:
+		new_card.face_down = false
+		new_card.queue_redraw())
+	t.tween_property(new_card, "scale:x", 1.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE)
+	if old_card != null:
+		# both side by side for a bit, then down to the one on top
+		t.tween_interval(COMPARE_TIME - FLIP_TIME)
+		t.tween_property(old_card, "modulate:a", 0.0, 0.35)
+		t.parallel().tween_property(new_card, "position", home, 0.35).set_trans(Tween.TRANS_SINE)
+		t.tween_callback(old_card.queue_free)
+
+
+func _card_view(card: Dictionary, size: Vector2, face_down: bool) -> CardView:
+	var cv := CardView.new()
+	cv.setup(card, size, 0.0, face_down)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.size = size
+	cv.pivot_offset = size * 0.5
+	_view.add_child(cv)
+	return cv
 
 
 func status() -> String:

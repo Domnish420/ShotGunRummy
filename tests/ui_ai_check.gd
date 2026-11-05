@@ -86,6 +86,11 @@ func _initialize() -> void:
 					main._act("draw_stock", [], main._ignore_result)
 					check(g.stock.size() == stock and g.phase == "draw", "you can't play an AI's turn")
 		if main.overlay_layer.get_child_count() > 0:
+			if main._aiming: # you hold the gun: tap someone (no SHOOT buttons any more)
+				var ts: Array = main._gun_targets()
+				if not ts.is_empty() and step % 5 == 0:
+					main._shoot_seat(ts[0])
+				continue
 			var pick = null
 			for b in _buttons(main.overlay_layer):
 				var t: String = b.text

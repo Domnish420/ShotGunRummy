@@ -108,6 +108,11 @@ func _play(kind: String, what: String) -> void:
 		if main.tutorial and main.coach_label.visible and main.coach_label.text.begins_with("TIP"):
 			coached = true
 		if main.overlay_layer.get_child_count() > 0:
+			if main._aiming: # you hold the gun: tap someone (no SHOOT buttons any more)
+				var ts: Array = main._gun_targets()
+				if not ts.is_empty() and step % 5 == 0:
+					main._shoot_seat(ts[0])
+				continue
 			var pick = null
 			for b in _buttons(main.overlay_layer):
 				var t: String = b.text
@@ -132,7 +137,7 @@ func _play(kind: String, what: String) -> void:
 			main.mode_ui._snap_pressed() # race the AIs
 			continue
 		# and you don't flip straight over a live match: people stop and look
-		if kind == "snap" and g.phase == "play" and g.snap_ready() and waited < 1600.0:
+		if kind == "snap" and g.phase == "play" and g.snap_ready() and waited < 6000.0: # longer than the slowest AI (easy, about 4.5s after the flip)
 			continue
 		if not g.is_turn_of(0) or main.world.dealing or main.world.fx_busy or step % 3 != 0:
 			continue

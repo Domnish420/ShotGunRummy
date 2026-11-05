@@ -152,6 +152,12 @@ func _on_cartridge_art() -> void:
 
 func _on_textures_built() -> void:
 	_back_mat = textures.material("__back")
+	if dealing:
+		# mid-deal: repaint the backs; the faces catch up when the deal's done
+		for id in _cards:
+			_cards[id].set_back(_back_mat)
+		_resync = true
+		return
 	for id in _cards:
 		_cards[id].queue_free()
 	_cards.clear()
@@ -1180,8 +1186,8 @@ func sync(s: Dictionary) -> void:
 	elif game.kind == "president":
 		_president_pile(seen, game, stock_xf)
 		pile = []
-	elif game.kind == "blackjack":
-		pile = [] # no discard pile in blackjack: spent cards go out of play
+	elif game.kind != "rummy":
+		pile = [] # only Rummy has a discard pile (Snap shows its middle pile big, over the table); elsewhere spent cards just go out of play
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
 		var c: Dictionary = pile[i]
@@ -1368,8 +1374,7 @@ func _snap_piles(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> voi
 			_place(seen, "snapwon-%d-%d" % [p.seat, i], {}, OPP_CARD, _flat(pos, yaw + 0.3, false), false, true, "", "", "", false, spawn)
 		if p.seat == viewer:
 			_label_at("YOUR PILE %d · WON %d" % [count, won], base + Vector3(0.08, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
-	if game.snap_ready() and game.phase == "play":
-		_label_at("SNAP!", Vector3(0.2, TABLE_TOP + 0.02, 0.18), 48, Palette.GOLD)
+
 
 
 ## President: the set to beat, face up in the middle, and who played it.
@@ -1750,12 +1755,21 @@ func _begin_deal(game, viewer: int, my_hand: Array) -> void:
 	var hand_size := 0
 	for seat in seats:
 		hand_size = maxi(hand_size, (my_hand if seat == viewer else game.players[seat].hand).size())
+	if game.kind == "snap":
+		hand_size = 0 # Snap's hands are piles, dealt below
 	for k in range(hand_size):
 		for seat in seats:
 			var hand: Array = my_hand if seat == viewer else game.players[seat].hand
 			if k < hand.size():
 				order[hand[k]["id"]] = count
 				count += 1
+	if game.kind == "snap":
+		# Snap's hands are face-down piles (see _snap_piles): deal those out
+		for k in range(12):
+			for seat in seats:
+				if k < mini(game.players[seat].hand.size(), 12):
+					order["snappile-%d-%d" % [seat, k]] = count
+					count += 1
 	var item_rounds := 0
 	for seat in seats:
 		item_rounds = maxi(item_rounds, game.players[seat].items.size())
@@ -1904,6 +1918,16 @@ func pick(screen_pos: Vector2) -> Dictionary:
 
 func _build_shotgun() -> Node3D:
 	var g: Node3D = Props.build_shotgun()
+	# where the holder's hands go: right on the wrist of the stock, left
+	# under the fore-end (see _hold_gun)
+	_grip_r = Node3D.new()
+	_grip_r.name = "GripR"
+	_grip_r.position = Vector3(0.0, -0.07, 0.17)
+	g.add_child(_grip_r)
+	_grip_l = Node3D.new()
+	_grip_l.name = "GripL"
+	_grip_l.position = Vector3(0.0, -0.07, -0.2)
+	g.add_child(_grip_l)
 	var flash := OmniLight3D.new()
 	flash.name = "Flash"
 	flash.position = Vector3(0, 0, -0.66)
@@ -1921,11 +1945,56 @@ func _build_shotgun() -> Node3D:
 	return g
 
 
+var _grip_r: Node3D
+var _grip_l: Node3D
+var _holding := -1 # whose hands are on the gun
+
+
+## The player holding the shotgun reaches for it: both arms bend to its grip
+## and fore-end (an IK on each arm, off for everyone else), so they hold it
+## as it comes up, aims and kicks.
+func _hold_gun(seat: int) -> void:
+	if seat == _holding:
+		return
+	_holding = seat
+	for s in _figures:
+		var ik: TwoBoneIK3D = _arm_ik(_figures[s])
+		if ik == null:
+			continue
+		var on: bool = s == seat
+		var t := ik.create_tween()
+		t.tween_property(ik, "influence", 1.0 if on else 0.0, 0.25)
+
+
+func _arm_ik(f: Dictionary) -> TwoBoneIK3D:
+	if f.has("ik"):
+		return f["ik"]
+	f["ik"] = null
+	var node: Node3D = f["node"]
+	var sk: Skeleton3D = node.find_child("Skeleton3D", true, false)
+	if sk == null or sk.find_bone("upperarm.r") < 0 or sk.find_bone("hand.l") < 0:
+		return null
+	var ik := TwoBoneIK3D.new()
+	ik.setting_count = 2
+	sk.add_child(ik)
+	var arms := [["r", _grip_r], ["l", _grip_l]]
+	for i in range(2):
+		var side: String = arms[i][0]
+		ik.set_root_bone_name(i, "upperarm." + side)
+		ik.set_middle_bone_name(i, "lowerarm." + side)
+		ik.set_end_bone_name(i, "hand." + side)
+		ik.set_target_node(i, ik.get_path_to(arms[i][1]))
+	ik.influence = 0.0
+	f["ik"] = ik
+	return ik
+
+
 ## Out of sight under the table: the shotgun only comes out for the winner.
 const GUN_AWAY := Vector3(0.0, -1.4, 0.0)
 
 
 func _rest_gun(instant: bool = false) -> void:
+	_hold_gun(-1)
 	_gun_pose = "rest"
 	var xf := Transform3D(Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.FORWARD, PI * 0.5), GUN_AWAY)
 	if instant or not shotgun.visible:
@@ -1951,6 +2020,55 @@ func _holder_pose(holder: int, aim: Vector3) -> Transform3D:
 	else:
 		origin = seat_position(holder, _viewer, n) * 0.82 + Vector3(0, 0.5, 0)
 	return Transform3D(Basis.looking_at(aim - origin, Vector3.UP), origin)
+
+
+## The player under a tap (in the 3D view's pixels): their head or body.
+func pick_seat(at: Vector2) -> int:
+	var reach := get_viewport().get_visible_rect().size.y * 0.14
+	var best := -1
+	var best_d := reach
+	for seat in _figures:
+		if seat == _viewer:
+			continue
+		var head := _head_of(seat)
+		for p in [head, head + Vector3(0, -0.22, 0), head + Vector3(0, 0.12, 0)]:
+			if camera.is_position_behind(p):
+				continue
+			var d := at.distance_to(camera.unproject_position(p))
+			if d < best_d:
+				best_d = d
+				best = seat
+	return best
+
+
+var _target_marks: Array = []
+
+
+## Red markers over the heads of the people you can shoot.
+func mark_targets(seats: Array) -> void:
+	for m in _target_marks:
+		if is_instance_valid(m):
+			m.queue_free()
+	_target_marks = []
+	for seat in seats:
+		if not _figures.has(seat):
+			continue
+		var mark := Label3D.new()
+		mark.text = "▼"
+		mark.font = _font
+		mark.font_size = 120
+		mark.pixel_size = 0.0022
+		mark.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		mark.no_depth_test = true
+		mark.modulate = Color(1.0, 0.25, 0.2)
+		mark.outline_size = 22
+		mark.outline_modulate = Color(0, 0, 0, 0.9)
+		add_child(mark)
+		mark.global_position = _head_of(seat) + Vector3(0, 0.36, 0)
+		var t := mark.create_tween().set_loops()
+		t.tween_property(mark, "position:y", mark.position.y + 0.05, 0.4).set_trans(Tween.TRANS_SINE)
+		t.tween_property(mark, "position:y", mark.position.y, 0.4).set_trans(Tween.TRANS_SINE)
+		_target_marks.append(mark)
 
 
 func _head_of(seat: int) -> Vector3:
@@ -1997,6 +2115,7 @@ func _sync_gun(game, viewer: int) -> void:
 				shotgun.visible = true
 			_gun_pose = pose
 			_tween(shotgun, "transform", _holder_pose(holder, aim), 0.0, 0.5)
+		_hold_gun(holder)
 	elif _gun_pose != "rest" and game.phase != "match_over":
 		_rest_gun()
 

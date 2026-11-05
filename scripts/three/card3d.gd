@@ -54,6 +54,12 @@ func resize(card_size: Vector2) -> void:
 	(shape.shape as BoxShape3D).size = Vector3(card_size.x, card_size.y, 0.004)
 
 
+func set_back(back_material: Material) -> void:
+	_back.material_override = back_material
+	if key == "__back":
+		_front.material_override = back_material
+
+
 func set_face(face_key: String, face_material: Material) -> void:
 	key = face_key
 	_front.material_override = face_material

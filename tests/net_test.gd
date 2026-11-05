@@ -215,6 +215,11 @@ func _check_views(real) -> void:
 func _drive(main) -> void:
 	if main.game == null or main._pending_cb.is_valid():
 		return
+	if main.overlay_layer.get_child_count() > 0 and main._aiming:
+		var ts: Array = main._gun_targets() # tap someone to shoot them
+		if not ts.is_empty():
+			main._shoot_seat(ts[0])
+		return
 	if main.overlay_layer.get_child_count() > 0:
 		var pick = null
 		for b in _overlay_buttons(main):

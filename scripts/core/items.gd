@@ -37,7 +37,7 @@ const DEFS := {
 	"shakedown": {"name": "Shakedown", "icon": "👊", "text": "A player of your choice discards a random card.", "copies": 1, "needs": "player"},
 	"switcheroo": {"name": "Switcheroo", "icon": "🔄", "text": "Swap your whole hand with another player's.", "copies": 1, "needs": "player"},
 	"bad_trade": {"name": "Bad Trade", "icon": "🤝", "text": "Swap 2 random cards with another player.", "copies": 1, "needs": "player"},
-	"chaos": {"name": "Chaos", "icon": "🌀", "text": "Everyone passes a random card to the player on their left.", "copies": 1, "needs": ""},
+	"chaos": {"name": "Chaos", "icon": "🌀", "text": "Everyone passes their whole hand to the player on their left.", "copies": 1, "needs": ""},
 	"spotlight": {"name": "Spotlight", "icon": "🔦", "text": "A player's whole hand is shown to everyone until their next turn ends.", "copies": 1, "needs": "player"},
 	"flashbang": {"name": "Flashbang", "icon": "💥", "text": "Every other player shows 2 random cards until their next turn ends.", "copies": 1, "needs": ""},
 	"revolver": {"name": "Revolver", "icon": "🔫", "text": "A player must put cards down on their next turn, or play Russian roulette (1 in 6: lose 2 health).", "copies": 1, "needs": "player"},
@@ -96,6 +96,7 @@ const CHEAT := {
 ## Hearts and Spades: no stock or discard pile, and every trick needs a card
 ## from everyone, so here the items never change how many cards anyone holds.
 const TRICKS := {
+	"chaos": {"text": "Everyone passes a random card to the player on their left."}, # whole hands would leave someone short mid-trick
 	"beer": {"text": "A random card of a player of your choice is shown to everyone until the trick ends.", "needs": "player"},
 	"magnifier": {"text": "Secretly see the highest card of the next player to play."},
 	"handcuffs": {"text": "A player of your choice must play their lowest card next."},
@@ -136,6 +137,7 @@ const SNAP := {
 }
 
 const PRESIDENT := {
+	"chaos": {"text": "Everyone passes a random card to the player on their left."}, # whole hands would leave someone short mid-trick
 	"beer": {"text": "Knock the pile over: it clears and you lead."},
 	"magnifier": {"text": "Secretly see the best card of a player of your choice.", "needs": "player"},
 	"handcuffs": {"text": "A player of your choice passes their next turn."},
@@ -156,7 +158,7 @@ const POKER := {
 	"shakedown": {"text": "A player of your choice throws away a random card and gets a new one."},
 	"switcheroo": {"text": "Swap your two cards with another player's."},
 	"bad_trade": {"text": "Swap 1 random card with another player."},
-	"chaos": {"text": "Everyone passes a random card to the player on their left."},
+	"chaos": {"text": "Everyone passes their whole hand to the player on their left."},
 	"spotlight": {"text": "A player's cards are turned face up for everyone."},
 	"flashbang": {"text": "Every other player still in shows 1 card."},
 	"revolver": {"text": "If a player of your choice folds this hand, they play Russian roulette (1 in 6: lose 2 health)."},

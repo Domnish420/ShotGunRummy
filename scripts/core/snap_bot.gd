@@ -30,14 +30,20 @@ static func next_action(game, seat: int, level: String, memory: Dictionary) -> A
 	return ["flip", []]
 
 
-## Seconds this AI takes to snap a match.
+## Seconds this AI takes to snap a match, from the moment the card's face
+## shows (main.gd adds the flip itself). Easy is slow enough to beat.
 static func reaction(game, level: String) -> float:
 	match level:
 		"easy":
-			return game.rng.randf_range(0.7, 1.4)
+			return game.rng.randf_range(3.5, 4.5)
 		"hard":
-			return game.rng.randf_range(0.3, 0.6) # about as quick as a person
-	return game.rng.randf_range(0.5, 1.0)
+			return game.rng.randf_range(1.0, 1.6)
+	return game.rng.randf_range(2.0, 3.0)
+
+
+## While two cards match, nobody (AI) flips again for this long, so the
+## slowest snapper still gets their chance.
+const MATCH_HOLD := 5.5
 
 
 ## The chance this AI snaps at a flip that doesn't match.

@@ -1035,21 +1035,29 @@ func _apply_item(p: Player, item_id: String, target: int, choice: String) -> Dic
 				drawn_from_discard = ""
 			return {"text": "%s trades %d random card%s with %s" % [p.name, n, "" if n == 1 else "s", partner.name]}
 		"chaos":
-			var passing := []
-			for q in alive_players():
-				passing.append(_random_card(q.hand) if not q.hand.is_empty() else {})
+			if kind in ["hearts", "spades", "president"]:
+				# here hands are different sizes mid-trick (or someone's out):
+				# just a random card each goes left
+				var passing := []
+				var round_trip := alive_players()
+				for q in round_trip:
+					passing.append(_random_card(q.hand) if not q.hand.is_empty() else {})
+				for i in range(round_trip.size()):
+					var c: Dictionary = passing[i]
+					if c.is_empty():
+						continue
+					round_trip[i].hand.erase(c)
+					players[next_alive(round_trip[i].seat)].hand.append(c)
+				return {"text": "%s causes chaos: everyone passes a random card to their left" % p.name}
+			# everyone's whole hand goes to the player on their left
 			var alive := alive_players()
-			for i in range(alive.size()):
-				var c: Dictionary = passing[i]
-				if c.is_empty():
-					continue
-				var from_p: Player = alive[i]
-				var to_p: Player = players[next_alive(from_p.seat)]
-				from_p.hand.erase(c)
-				to_p.hand.append(c)
-				if c["id"] == drawn_from_discard:
-					drawn_from_discard = ""
-			return {"text": "%s causes chaos: everyone passes a random card to their left" % p.name}
+			var hands := {}
+			for q in alive:
+				hands[q.seat] = q.hand
+			for q in alive:
+				players[next_alive(q.seat)].hand = hands[q.seat]
+			drawn_from_discard = "" # whatever you just took has gone left
+			return {"text": "%s causes chaos: everyone passes their whole hand to the left" % p.name}
 		"sticky_fingers":
 			var m := _meld_with_card(choice)
 			var taken := {}
