@@ -3705,6 +3705,11 @@ func _build_table() -> void:
 		use_btn.visible = false # normal mode has no items
 	if mode_ui != null:
 		minor.visible = false
+		if mode_ui.has_method("book"):
+			# poker's hand book: what beats what, and what you're holding
+			minor.visible = true
+			sort_btn.visible = false
+			minor.add_child(_bubble("HAND BOOK", mode_ui.book, FLOAT_YELLOW, 30))
 		var specs: Array = mode_ui.buttons()
 		var btns := [meld_btn, use_btn, discard_btn]
 		for i in range(btns.size()):

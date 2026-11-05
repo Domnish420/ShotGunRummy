@@ -36,6 +36,101 @@ func refresh() -> void:
 	main.status_label.add_theme_color_override("font_color", Palette.PINK if main.message != "" else Palette.AMBER)
 	main.status_label.text = main.message.to_upper() if main.message != "" else status()
 	main.go_out_label.visible = false
+	if main._settings_open() and _book_open() and my_rank() != _book_rank:
+		_build_book.call_deferred() # new cards out: show what you've got now
+
+
+## The hands, best first, with an example of each.
+const BOOK := [
+	["STRAIGHT FLUSH", "5 in a row, all one suit", "9♥ 10♥ J♥ Q♥ K♥"],
+	["FOUR OF A KIND", "4 of the same rank", "7 7 7 7"],
+	["FULL HOUSE", "3 of a kind and a pair", "Q Q Q 4 4"],
+	["FLUSH", "any 5 of one suit", "2♠ 6♠ 9♠ J♠ K♠"],
+	["STRAIGHT", "5 in a row, any suits", "5 6 7 8 9"],
+	["THREE OF A KIND", "3 of the same rank", "8 8 8"],
+	["TWO PAIR", "2 pairs", "J J 3 3"],
+	["A PAIR", "2 of the same rank", "10 10"],
+	["HIGH CARD", "none of the above: your top card counts", "A"],
+]
+
+
+## Your best hand right now, as a rank (0 high card .. 8 straight flush), or
+## -1 when you've folded. Before the flop it's just your two cards.
+func my_rank() -> int:
+	var g = main.game
+	var seat: int = main._me()
+	if g.folded.has(seat):
+		return -1
+	var cards: Array = g.players[seat].hand + g.board
+	if cards.size() >= 5:
+		return int(g.best_hand(cards)[0])
+	var counts := {}
+	for c in cards:
+		counts[c["rank"]] = int(counts.get(c["rank"], 0)) + 1
+	var most := 0
+	for k in counts:
+		most = maxi(most, counts[k])
+	return 3 if most >= 3 else (1 if most == 2 else 0)
+
+
+## The little hand book: floats over the table and doesn't stop the game.
+## Tap HAND BOOK again (or CLOSE) to put it away.
+func book() -> void:
+	if main._settings_open():
+		main._hide_settings()
+		return
+	main._sound("open")
+	_build_book()
+
+
+var _book_rank := -2 # what the book showed you holding
+
+
+func _build_book() -> void:
+	main._clear(main.settings_layer)
+	var vs: Vector2 = main.get_viewport_rect().size
+	var panel := PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.03, 0.02, 0.02, 0.7)
+	st.set_corner_radius_all(24)
+	st.content_margin_left = 20
+	st.content_margin_right = 20
+	st.content_margin_top = 12
+	st.content_margin_bottom = 12
+	panel.add_theme_stylebox_override("panel", st)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	main.settings_layer.add_child(panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	panel.add_child(col)
+	var title: Label = main._label("HAND BOOK", 40, main.FLOAT_YELLOW, true)
+	title.add_theme_constant_override("outline_size", 12)
+	col.add_child(title)
+	col.add_child(main._label("Best at the top. Make your best 5 from your 2 cards and the 5 on the table.", 18, Palette.DIM, true))
+	var mine := my_rank()
+	_book_rank = mine
+	for i in range(BOOK.size()):
+		var rank := 8 - i
+		var entry: Array = BOOK[i]
+		var you := rank == mine
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var name_l: Label = main._tag(("▶ " if you else "") + entry[0], 26, Palette.GOLD if you else Palette.INK)
+		name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name_l)
+		row.add_child(main._tag(entry[2], 24, Palette.GOLD if you else Color(0.75, 0.75, 0.72)))
+		col.add_child(row)
+		col.add_child(main._label(entry[1] + ("  ◀ YOU HAVE THIS" if you else ""), 17, Palette.GOLD if you else Palette.DIM))
+	if mine < 0:
+		col.add_child(main._label("You folded this round.", 20, Palette.PINK, true))
+	var close: Button = main._bubble("CLOSE", main._hide_settings, Palette.RED, 34)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(close)
+	var w := minf(vs.x - 24.0, 620.0)
+	panel.custom_minimum_size = Vector2(w, 0)
+	var sz: Vector2 = panel.get_combined_minimum_size()
+	panel.size = sz
+	panel.position = Vector2((vs.x - sz.x) * 0.5, maxf(60.0, (vs.y - sz.y) * 0.32))
 
 
 func status() -> String:
@@ -153,3 +248,11 @@ func coach() -> String:
 	if int(r[0]) == 1:
 		return "A pair is fair. CHECK or CALL, but think about folding to a big raise."
 	return "Nothing yet. CHECK if you can; FOLD to a raise and you're safe from the shotgun."
+
+
+func _book_open() -> bool:
+	var p: Node = main.settings_layer.get_child(0)
+	if p.is_queued_for_deletion():
+		return false
+	var labels := p.find_children("*", "Label", true, false)
+	return not labels.is_empty() and (labels[0] as Label).text == "HAND BOOK"

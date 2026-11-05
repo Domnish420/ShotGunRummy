@@ -39,6 +39,29 @@ thing itself) and you walk over:
   graphics, sound).
 - **GACHA**, the machine in the back corner.
 - **EXIT**, the door: leave the game, and it swings open as you go.
+- **COMPUTER**, the old beige one in the front-left corner, with an arcade
+  stick plugged in. It won't boot until you've finished a match of every
+  game. Then it takes cheat codes (see below).
+
+### The computer: cheat codes and easter eggs
+
+Type codes on the arcade stick: the d-pad (up, down, left, right) and the
+**A** and **B** buttons (on a computer, the arrow keys and A and B work too).
+There are 14 codes. Each one unlocks a **secret skin** that never comes out
+of the gacha machine (decks, shotguns, hats and outfits), an **easter egg**,
+or both. You know the first one already: it's the most famous code in gaming.
+
+**HINTS** has a riddle for every code you haven't found, and the full code
+for the ones you have. **EGGS** switches the easter eggs you've found on and
+off:
+
+- **DISCO LAMP**: the lamp over the table cycles through the colours.
+- **POCKET MODE**: the whole screen in four shades of handheld green.
+- **FILM NOIR**: black and white.
+- **PARTY POPPERS**: every shotgun blast bursts into confetti.
+- **TURBO**: the AIs take their turns twice as fast.
+
+The codes and what they give are in `scripts/core/secrets.gd`.
 
 The room code is in `scripts/three/world3d.gd` (look for "the room"), the
 furniture in `scripts/three/props.gd`.
@@ -55,6 +78,10 @@ straight flush in Poker. AI players with the gun take turns: each shoots
 whoever's been shot the least so far.
 
 ### At the table
+
+**Items that need a card** (Joker Paint, Sticky Fingers, ...) don't open a
+menu: the cards you can pick glow, and you tap one. Tap the item again, or
+CANCEL, to put it away.
 
 **Zoom** in on any part of the table to read it: pinch with two fingers on a
 phone, or roll the mouse wheel over the spot on PC. Your hand stays in front of
@@ -463,6 +490,9 @@ trick (the first one played, if there's more than one).
   another shell into the shotgun (2 at most). Once someone raises, everyone else
   still in **CALL**s it or **FOLD**s.
 - **Fold and you're safe**: you can't win, but the winner can't shoot you.
+- **The hand book.** Tap **HAND BOOK** under your buttons for every hand from
+  best to worst, with an example of each and a marker on the one you're
+  holding right now. It floats over the table, and the game carries on.
 - **Winning.** Best five-card hand from your two and the five in the middle.
   The winner fires every shell that was loaded, only at players who stayed in;
   a straight flush loads both, whatever was bet.
