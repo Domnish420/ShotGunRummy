@@ -25,8 +25,8 @@ func refresh() -> void:
 		"hide_hand": false,
 	})
 	main.meld_btn.text = "COUNT UP" if g.last_call else "FLIP"
-	main.meld_btn.disabled = not my_turn
-	main.discard_btn.disabled = g.phase != "play" or not me.alive
+	main.meld_btn.disabled = not my_turn or _revealing
+	main.discard_btn.disabled = g.phase != "play" or not me.alive or _revealing
 	main.use_btn.disabled = not (my_turn and main.selected_item != "" and g.item_blocker(seat, main.selected_item) == "")
 	main.status_label.add_theme_color_override("font_color", Palette.PINK if main.message != "" else Palette.AMBER)
 	main.status_label.text = main.message.to_upper() if main.message != "" else status()
@@ -40,10 +40,17 @@ func refresh() -> void:
 # the one it lands on, overlapping it so both corners show (a 2 next to a 2),
 # and after a couple of seconds the old one fades and the new one stays.
 
-const FLIP_TIME := 0.45 # the card turning over
-const COMPARE_TIME := 2.0 # how long both cards show
+const FLIP_TIME := 2.0 # the card slowly turning over, back to face
+const COMPARE_TIME := 1.6 # then both show side by side this long
 var _view: Control
 var _shown_top := ""
+var _revealing := false # the new card's still turning over: no snapping (or flipping) yet
+
+
+## Is a card still turning over? Nobody can snap until it's face up, so
+## everyone sees the two cards side by side at the same moment.
+func revealing() -> bool:
+	return _revealing
 
 
 func _flip_view() -> void:
@@ -60,6 +67,7 @@ func _flip_view() -> void:
 		return
 	_shown_top = top_id
 	main._clear(_view)
+	_revealing = false
 	if top.is_empty() or main.world.dealing:
 		return
 	var prev: Dictionary = pile[-2] if pile.size() >= 2 else {}
@@ -82,16 +90,24 @@ func _flip_view() -> void:
 	count.position = Vector2(0, center.y + size.y * 0.5 + 6)
 	count.size = Vector2(vs.x, 30)
 	_view.add_child(count)
-	# turn it over: squash to nothing, show its face, open back out
+	# turn it over, slowly: squash to nothing, show its face, open back out,
+	# lifting a little as it turns
+	_revealing = true
+	main.refresh_later()
 	var t := new_card.create_tween()
-	t.tween_property(new_card, "scale:x", 0.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE)
+	t.tween_property(new_card, "scale:x", 0.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	t.parallel().tween_property(new_card, "position:y", new_card.position.y - 14.0, FLIP_TIME * 0.5)
 	t.tween_callback(func() -> void:
 		new_card.face_down = false
 		new_card.queue_redraw())
-	t.tween_property(new_card, "scale:x", 1.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE)
+	t.tween_property(new_card, "scale:x", 1.0, FLIP_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(new_card, "position:y", new_card.position.y, FLIP_TIME * 0.5)
+	t.tween_callback(func() -> void:
+		_revealing = false
+		main.refresh_later()) # SNAP! and FLIP light up
 	if old_card != null:
 		# both side by side for a bit, then down to the one on top
-		t.tween_interval(COMPARE_TIME - FLIP_TIME)
+		t.tween_interval(COMPARE_TIME)
 		t.tween_property(old_card, "modulate:a", 0.0, 0.35)
 		t.parallel().tween_property(new_card, "position", home, 0.35).set_trans(Tween.TRANS_SINE)
 		t.tween_callback(old_card.queue_free)
@@ -137,15 +153,15 @@ func on_pick(hit: Dictionary) -> void:
 
 func _flip_pressed() -> void:
 	var g = main.game
-	if not main._my_turn():
+	if not main._my_turn() or _revealing:
 		return
 	main._act("finish" if g.last_call else "flip", [], main._after_simple)
 
 
 func _snap_pressed() -> void:
 	var g = main.game
-	if g.phase != "play":
-		return
+	if g.phase != "play" or _revealing:
+		return # wait for it to turn over
 	if not main._online() and _local_people() > 1:
 		_who_snapped()
 		return
@@ -183,7 +199,7 @@ func on_event(kind: String, d: Dictionary) -> void:
 				main.world.announce("SNAP!\n%s +%d" % [main._name(d["seat"]), d["count"]])
 				main._flash(Palette.GOLD)
 			else:
-				main._log("%s snaps at nothing.%s" % [main._name(d["seat"]), " -1 health." if main.game.options["shotgun"] else " 2 cards to the middle."])
+				main._log("%s snaps at nothing: 2 cards to the middle%s." % [main._name(d["seat"]), ", and a shell into the gun" if d.get("shell", false) else ""])
 				main.world.announce("WRONG!\n%s" % main._name(d["seat"]))
 				main._flash(Palette.RED)
 
@@ -198,7 +214,7 @@ func show_result(box: VBoxContainer) -> void:
 	else:
 		box.add_child(main._title("%s WON %d CARDS" % [main._name(w), r["points"]], Palette.AMBER))
 		if g.options["shotgun"]:
-			box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for winning more than half the deck)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
+			box.add_child(main._label("%d shell%s in the shotgun. (1, or 2 for winning more than half the deck, plus 1 for every player who snapped wrong)" % [r["shells"], "" if r["shells"] == 1 else "s"], 24, Palette.INK, true))
 	for h in r["hands"]:
 		box.add_child(main._label("%s: %d cards won" % [h["name"], h["points"]], 24, Palette.GOLD if h["seat"] == w else Palette.INK))
 
@@ -209,7 +225,7 @@ func rules() -> Array:
 		"THE DEAL. All the cards are dealt face down into everyone's own pile, with a random few rare items shuffled in. Nobody looks at their pile.",
 		"YOUR TURN. FLIP the top card of your pile onto the pile in the middle (tap your pile or press FLIP). Flip an item and you keep it and flip again.",
 		"SNAP! When the top two cards in the middle match, anyone can press SNAP! at any time. The first to snap wins every card in the middle.",
-		"WRONG SNAPS. Snap when they don't match and you lose 1 health (in normal mode, 2 cards from your pile go in the middle).",
+		"WRONG SNAPS. Snap when they don't match and 2 cards from your pile go into the middle. Your first wrong snap each round also loads a shell into the shotgun for the winner (one per player at most, so the gun holds up to as many shells as there are players).",
 		"THE END. When everyone's pile has run out, whoever won the most cards wins: 1 shell, or 2 for winning more than half the deck.",
 		"ON ONE PHONE. With more than one person, whoever grabs the phone first presses SNAP! and says who they are.",
 	]

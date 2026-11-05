@@ -3517,6 +3517,8 @@ func _drive_ai(delta: float) -> void:
 		return
 	if world.dealing or world.fx_busy or _pending_cb.is_valid() or _lesson_showing():
 		return
+	if mode_ui != null and mode_ui.has_method("revealing") and mode_ui.revealing():
+		return # Snap: wait for the card to finish turning over
 	if game.kind == "snap" and game.snap_ready():
 		# a match is showing: give everyone time to snap before the next flip
 		_snap_hold += delta
@@ -3586,11 +3588,13 @@ func _drive_snaps(delta: float) -> void:
 			if not p.alive or p.bot == "":
 				continue
 			if game.snap_ready():
-				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot) + 0.45 # the card turning over first
+				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot) # from the moment it's face up
 			elif game.rng.randf() < SnapBot.false_snap_chance(p.bot):
 				_snap_timers[p.seat] = game.rng.randf_range(0.4, 1.0)
 	if not game.snap_ready() and game.discard_pile.size() < 2:
 		_snap_timers = {}
+	if mode_ui != null and mode_ui.has_method("revealing") and mode_ui.revealing():
+		return # the card's still turning over: nobody can see it yet
 	for s in _snap_timers.keys():
 		_snap_timers[s] -= delta
 		if _snap_timers[s] <= 0.0:
@@ -3808,6 +3812,20 @@ func _on_table_input(event: InputEvent) -> void:
 				_refresh()
 			else:
 				_lay_off_on(hit["id"])
+
+
+var _refresh_queued := false
+
+
+## A refresh at the end of this frame (from inside a refresh, say).
+func refresh_later() -> void:
+	if _refresh_queued:
+		return
+	_refresh_queued = true
+	(func() -> void:
+		_refresh_queued = false
+		if game != null:
+			_refresh()).call_deferred()
 
 
 func _refresh() -> void:

@@ -461,18 +461,21 @@ trick (the first one played, if there's more than one).
 - **Your turn.** **FLIP** your top card onto the middle (or tap your pile).
   Flip an item and you keep it and flip again.
 - **The middle** isn't on the table, where it'd be too small to see: every
-  card flipped shows big over the table, turning over next to the one it lands
-  on (a 2 next to a 2), then the old one fades.
+  card flipped shows big over the table, slowly turning over (2 seconds) next
+  to the one it lands on (a 2 next to a 2), then the old one fades. Nobody can
+  snap or flip until it's face up, so everyone sees the pair at the same moment.
 - **SNAP!** When the top two cards in the middle match (same rank, or either
   is a trump), anyone can press **SNAP!** at any time. First to snap wins the
   middle. The AIs snap too: easy ones take about 4 seconds, normal about 2½,
   hard about 1½. While a match is showing, the AIs wait before flipping again
   so everyone gets their chance.
-- **Wrong snaps** cost 1 health (in normal mode, 2 cards from your pile go in
-  the middle).
+- **Wrong snaps**: 2 cards from your pile go into the middle, every time. Your
+  first wrong snap each round also loads a shell into the shotgun for the
+  round's winner (only the first, so spamming SNAP! can't stack them up): the
+  gun holds up to as many shells as there are players.
 - **The end.** When every pile has run out there's one last chance to snap,
   then **COUNT UP**: most cards won takes the shotgun: 1 shell, or 2 for winning
-  more than half the deck.
+  more than half the deck, plus one for each player who snapped wrong.
 - **On one phone**, whoever grabs it first presses SNAP! and says who they are.
 - **Items.** The magnifier and the phone peek at the next card in a pile,
   Sticky Fingers steals 3 won cards, Double Down makes someone flip 2, and

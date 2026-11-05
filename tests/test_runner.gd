@@ -1415,7 +1415,17 @@ func test_snap() -> void:
 	var c := g.turn
 	check(g.snap(c)["good"] and g.won[c].size() == 2 and g.discard_pile.is_empty(), "anyone can snap, any time, and wins the middle")
 	var hp: int = g.players[a].hp
-	check(not g.snap(a)["good"] and g.players[a].hp == hp - 1, "a wrong snap costs 1 health")
+	g.players[a].hand = cards("2C 3C 4C")
+	var first: Dictionary = g.snap(a)
+	check(not first["good"] and first["shell"] and g.players[a].hp == hp, "a wrong snap loads a shell (no health lost)")
+	check(g.players[a].hand.size() == 1 and g.discard_pile.size() == 2, "and puts 2 of your cards in the middle")
+	var again: Dictionary = g.snap(a)
+	check(not again["good"] and not again["shell"] and g.bonus_shells == 1, "only your first wrong snap each round loads a shell")
+	check(g.players[a].hand.is_empty(), "but every wrong snap costs cards")
+	g.snap(b)
+	g.snap(c)
+	g.snap(c)
+	check(g.bonus_shells == mini(3, g.players.size()), "each player loads one at most (%d)" % g.bonus_shells)
 	# a trump matches anything
 	g.discard_pile = cards("4H KD")
 	check(g.snap_ready(), "a trump on top matches")

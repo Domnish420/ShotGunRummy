@@ -17,6 +17,8 @@ extends "res://scripts/core/game.gd"
 var won := {} # seat -> cards won by snapping
 var flips := 0 # counts flips, so the table and the AI notice new ones
 var last_call := false # every pile is empty: snap now or never
+var wrong_snappers := {} # seat -> true: snapped wrong this round (each loads 1 shell, once)
+var bonus_shells := 0 # loaded by wrong snaps this round
 
 
 func _init() -> void:
@@ -75,6 +77,8 @@ func start_round() -> Dictionary:
 		won[s] = []
 	flips = 0
 	last_call = false
+	wrong_snappers = {}
+	bonus_shells = 0
 	turn = order[0]
 	_emit("round_start", {"round": round_num, "dealer": dealer, "first": turn, "trump": trump_rank})
 	_begin_turn()
@@ -155,20 +159,26 @@ func snap(seat: int) -> Dictionary:
 		discard_pile = []
 		_emit("snap", {"seat": seat, "good": true, "count": n})
 		return _ok({"good": true, "count": n})
-	_emit("snap", {"seat": seat, "good": false, "count": 0})
-	if options["shotgun"]:
-		damage(seat, 1, "snap")
-		if p.ultimatum and p.alive:
-			p.ultimatum = false
-			_russian_roulette(p)
-	else:
-		for i in range(mini(2, p.hand.size())):
-			var c: Dictionary = p.hand.pop_back()
-			if c.has("item"):
-				p.items.append(c)
-			else:
-				discard_pile.insert(0, c)
-	return _ok({"good": false})
+	# a wrong snap: 2 cards from your pile go under the middle, every time.
+	# Your first one each round also loads a shell into the gun (for whoever
+	# wins the round), never more, up to one per player at the table.
+	var shell := false
+	if options["shotgun"] and not wrong_snappers.has(seat):
+		wrong_snappers[seat] = true
+		if bonus_shells < players.size():
+			bonus_shells += 1
+			shell = true
+	for i in range(mini(2, p.hand.size())):
+		var c: Dictionary = p.hand.pop_back()
+		if c.has("item"):
+			p.items.append(c)
+		else:
+			discard_pile.insert(0, c)
+	_emit("snap", {"seat": seat, "good": false, "count": 0, "shell": shell})
+	if options["shotgun"] and p.ultimatum and p.alive:
+		p.ultimatum = false
+		_russian_roulette(p)
+	return _ok({"good": false, "shell": shell})
 
 
 ## After the last flip: count up.
@@ -209,7 +219,10 @@ func _finish_round() -> void:
 	if w >= 0:
 		players[w].rounds_won += 1
 		players[w].score += best
-		result["shells"] = _shells(best * 2 > 52) # 2 for winning more than half the deck
+		# 2 for winning more than half the deck, plus a shell for each player
+		# who snapped wrong, up to one per player at the table
+		result["shells"] = mini(_shells(best * 2 > 52) + bonus_shells, players.size())
+		result["wrong_shells"] = bonus_shells
 	last_result = result
 	if options["shotgun"] and w >= 0:
 		phase = "shoot"

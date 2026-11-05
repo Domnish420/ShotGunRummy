@@ -80,7 +80,7 @@ const GAMES := {
 		["flip", "On your turn, FLIP your top card onto the middle."],
 		["flip:ready=true", "THEY MATCH! The top two cards are the same rank: hit SNAP! Anyone can, any time."],
 		["snap:good=true", "SNAP! The first to snap wins every card in the middle."],
-		["snap:good=false", "A wrong snap, when they don't match: that costs 1 health!"],
+		["snap:good=false", "A wrong snap, when they don't match: 2 cards from your pile go in the middle, and your first one each round loads a shell into the gun!"],
 		["round_end", "When every pile's run out, whoever won the most cards wins the round."],
 	],
 	"president": [

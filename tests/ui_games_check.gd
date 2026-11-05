@@ -125,6 +125,8 @@ func _play(kind: String, what: String) -> void:
 			if pick != null and step % 5 == 0:
 				pick.pressed.emit()
 			continue
+		if kind == "snap" and main.mode_ui.revealing():
+			continue # the card's still turning over: nobody can snap or flip yet
 		if kind == "snap" and g.snap_ready() and g.flips != _last_ready_flip:
 			_last_ready_flip = g.flips
 			_ready_seen += 1
