@@ -100,7 +100,7 @@ const STATIONS := {
 	"bar": {"sign": Vector3(-2.45, 0.75, -0.85), "spot": Vector3(-2.45, 0.25, -0.85), "name": "BAR"},
 	"gacha": {"sign": Vector3(2.35, 0.95, -1.7), "spot": Vector3(2.35, 0.1, -1.7), "name": "GACHA"},
 	"door": {"sign": Vector3(0.9, 1.75, -3.0), "spot": Vector3(0.9, 0.25, -3.05), "name": "EXIT"},
-	"computer": {"sign": Vector3(-2.6, 0.75, 1.75), "spot": Vector3(-2.65, 0.15, 1.75), "name": "COMPUTER"},
+	"computer": {"sign": Vector3(-2.6, 1.35, 1.75), "spot": Vector3(-2.6, 0.5, 1.75), "name": "ARCADE"},
 }
 var _gacha_light: SpotLight3D
 const PREVIEW_CAM := Vector3(-1.75, 1.15, 2.0) # from the spot: the gap beside the table
@@ -691,23 +691,26 @@ func focus_station(id: String) -> void:
 			camera.fov = 56.0 if not _landscape else 48.0
 			_move_camera(Transform3D(Basis(), Vector3(0.75, 0.45, -1.0)).looking_at(Vector3(0.9, 0.3, -3.1), Vector3.UP), 0.7)
 		"computer":
-			# close up on the screen, with it in the top half (the stick's below)
-			camera.fov = 50.0 if not _landscape else 44.0
-			var scr := COMPUTER_POS + Vector3(0.0, 0.99, 0.0)
-			_move_camera(Transform3D(Basis(), scr + Vector3(0.95, -0.05, 0.0)).looking_at(scr + Vector3(0, -0.22, 0), Vector3.UP), 0.7)
+			# in front of the cabinet: the screen up top, the controls below it
+			camera.fov = 52.0 if not _landscape else 44.0
+			var front := COMPUTER_POS + Vector3(0.35, 1.15, 0.0)
+			_move_camera(Transform3D(Basis(), front + Vector3(1.35, 0.2, 0.0)).looking_at(front + Vector3(0, -0.02, 0), Vector3.UP), 0.7)
 
 
 # ================================================================ the computer
 
-## An old beige computer on a desk in the front left corner, with an arcade
-## stick plugged in. It boots once you've played every game (secrets.gd);
-## codes typed on the stick unlock secret skins and easter eggs.
+## An arcade cabinet in the front left corner: a lit marquee, an angled
+## screen, and a control panel with a ball-top stick and A and B buttons
+## that you press on the cabinet itself. It boots once you've played every
+## game (secrets.gd); codes typed on it unlock secret skins and easter eggs.
 const COMPUTER_POS := Vector3(-2.75, FLOOR_Y, 1.75)
+const PANEL_Y := 1.0 # the control panel's height off the floor
 var _computer: Node3D
 var _screen_text: Label3D
 var _screen_mat: StandardMaterial3D
 var _stick: Node3D # the joystick, tilts as you press the arrows
 var _arcade_buttons := {} # "A"/"B" -> the button cap
+var _arcade_spots := {} # "U" "D" "L" "R" "A" "B" -> a point to tap (cabinet space)
 
 
 func _build_computer() -> void:
@@ -716,54 +719,95 @@ func _build_computer() -> void:
 	_computer.position = COMPUTER_POS
 	_computer.rotation.y = PI / 2.0 # faces into the room (+X)
 	add_child(_computer)
-	var wood := Props.tex_mat("wood", Color(0.42, 0.3, 0.2), 2.0)
-	var top_y := 0.74
-	Props.box(_computer, Vector3(1.1, 0.05, 0.6), wood, Vector3(0, top_y, 0))
-	for x in [-0.5, 0.5]:
-		for z in [-0.25, 0.25]:
-			Props.box(_computer, Vector3(0.05, top_y, 0.05), wood, Vector3(x, top_y * 0.5, z))
-	var beige := Props.plain(Color(0.82, 0.78, 0.66), 0.6)
-	# the CRT: a deep beige box, a bezel and the glass
-	Props.box(_computer, Vector3(0.46, 0.4, 0.42), beige, Vector3(0, top_y + 0.24, -0.08))
-	Props.box(_computer, Vector3(0.3, 0.3, 0.2), beige, Vector3(0, top_y + 0.22, -0.34))
-	Props.box(_computer, Vector3(0.2, 0.04, 0.2), beige, Vector3(0, top_y + 0.045, -0.08))
+	var body := Props.plain(Color(0.12, 0.06, 0.18), 0.6)
+	var trim := Props.glow(Color(1.0, 0.25, 0.75), 1.6)
+	var black := Props.plain(Color(0.05, 0.05, 0.06), 0.5)
+	# the cabinet: sides, back, the kick plate and a coin door
+	Props.box(_computer, Vector3(0.66, 1.9, 0.04), body, Vector3(0, 0.95, -0.34)) # back
+	for x in [-0.33, 0.33]:
+		Props.box(_computer, Vector3(0.04, 1.9, 0.72), body, Vector3(x, 0.95, 0.0)) # sides
+		Props.box(_computer, Vector3(0.045, 1.9, 0.02), trim, Vector3(x, 0.95, 0.36)) # neon edge
+	Props.box(_computer, Vector3(0.62, 0.86, 0.04), body, Vector3(0, 0.43, 0.3)) # lower front
+	Props.box(_computer, Vector3(0.2, 0.26, 0.02), black, Vector3(0, 0.45, 0.325)) # coin door
+	for x in [-0.05, 0.05]:
+		Props.box(_computer, Vector3(0.03, 0.05, 0.01), Props.glow(Color(1.0, 0.3, 0.2), 2.0), Vector3(x, 0.52, 0.337))
+	# the control panel, sloping towards you
+	var panel := Props.box(_computer, Vector3(0.62, 0.05, 0.32), black, Vector3(0, PANEL_Y, 0.42), Vector3(0.22, 0, 0))
+	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var top := Vector3(0, PANEL_Y + 0.03, 0.42) # the panel's top, middle
+	_stick = Node3D.new()
+	_stick.position = top + Vector3(-0.15, 0, 0)
+	_stick.rotation.x = 0.22
+	_computer.add_child(_stick)
+	Props.cyl(_stick, 0.04, 0.04, 0.01, 12, Props.plain(Color(0.2, 0.2, 0.22), 0.4), Vector3(0, 0.005, 0))
+	Props.cyl(_stick, 0.008, 0.008, 0.08, 6, Props.plain(Color(0.7, 0.7, 0.72), 0.3, 0.8), Vector3(0, 0.04, 0))
+	Props.ball(_stick, 0.03, 10, Props.plain(Color(0.9, 0.1, 0.1), 0.3), Vector3(0, 0.085, 0))
+	for b in [["B", Vector3(0.07, 0, 0.0), Color(0.2, 0.45, 1.0)], ["A", Vector3(0.17, 0, -0.03), Color(0.95, 0.15, 0.15)]]:
+		var cap := Props.cyl(_computer, 0.032, 0.032, 0.025, 12, Props.glow(b[2], 0.8), top + b[1] + Vector3(0, 0.01, 0), Vector3(0.22, 0, 0))
+		_arcade_buttons[b[0]] = cap
+		_arcade_spots[b[0]] = cap.position + Vector3(0, 0.02, 0)
+	var tip := _stick.position + Vector3(0, 0.09, 0)
+	_arcade_spots["U"] = tip + Vector3(0, 0.02, -0.07)
+	_arcade_spots["D"] = tip + Vector3(0, -0.02, 0.07)
+	_arcade_spots["L"] = tip + Vector3(-0.07, 0, 0)
+	_arcade_spots["R"] = tip + Vector3(0.07, 0, 0)
+	# the screen, set back and tilted up, in a black bezel
+	var tilt := Vector3(-0.28, 0, 0)
+	Props.box(_computer, Vector3(0.62, 0.5, 0.04), black, Vector3(0, 1.36, 0.16), tilt)
 	_screen_mat = Props.glow(Color(0.05, 0.12, 0.06), 1.0)
-	var glass := Props.box(_computer, Vector3(0.38, 0.3, 0.01), _screen_mat, Vector3(0, top_y + 0.25, 0.135))
+	var glass := Props.box(_computer, Vector3(0.5, 0.38, 0.01), _screen_mat, Vector3(0, 1.36, 0.185), tilt)
 	glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_screen_text = Label3D.new()
 	_screen_text.font = _font
-	_screen_text.font_size = 34
+	_screen_text.font_size = 40
 	_screen_text.pixel_size = 0.0011
-	_screen_text.width = 330.0
+	_screen_text.width = 420.0
 	_screen_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_screen_text.modulate = Color(0.45, 1.0, 0.5)
 	_screen_text.outline_size = 0
 	_screen_text.shaded = false
-	_screen_text.position = Vector3(0, top_y + 0.25, 0.142)
+	_screen_text.position = Vector3(0, 1.36, 0.195)
+	_screen_text.rotation = tilt
 	_computer.add_child(_screen_text)
-	var led := Props.ball(_computer, 0.008, 6, Props.glow(Color(0.3, 1.0, 0.3), 3.0), Vector3(0.18, top_y + 0.07, 0.135))
-	led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# a keyboard
-	Props.box(_computer, Vector3(0.44, 0.03, 0.15), beige, Vector3(-0.05, top_y + 0.04, 0.2))
-	# the arcade stick: a black box, a ball-top stick, A and B
-	var black := Props.plain(Color(0.08, 0.08, 0.09), 0.5)
-	Props.box(_computer, Vector3(0.36, 0.06, 0.16), black, Vector3(0.36, top_y + 0.055, 0.17))
-	_stick = Node3D.new()
-	_stick.position = Vector3(0.26, top_y + 0.085, 0.17)
-	_computer.add_child(_stick)
-	Props.cyl(_stick, 0.008, 0.008, 0.08, 6, Props.plain(Color(0.7, 0.7, 0.72), 0.3, 0.8), Vector3(0, 0.04, 0))
-	Props.ball(_stick, 0.024, 8, Props.plain(Color(0.9, 0.1, 0.1), 0.3), Vector3(0, 0.085, 0))
-	for b in [["B", Vector3(0.38, 0, 0.17), Color(0.2, 0.4, 1.0)], ["A", Vector3(0.46, 0, 0.17), Color(0.95, 0.15, 0.15)]]:
-		var cap := Props.cyl(_computer, 0.022, 0.022, 0.02, 10, Props.plain(b[2], 0.3), b[1] + Vector3(0, top_y + 0.09, 0))
-		_arcade_buttons[b[0]] = cap
-	# a little lamp of its own so you can see it
+	# the marquee: a lit sign across the top
+	Props.box(_computer, Vector3(0.62, 0.2, 0.12), Props.glow(Color(0.9, 0.35, 0.95), 1.4), Vector3(0, 1.78, 0.25))
+	var marquee := Label3D.new()
+	marquee.text = "SHOTGUN ARCADE"
+	marquee.font = _font
+	marquee.font_size = 64
+	marquee.pixel_size = 0.0016
+	marquee.modulate = Color(1.0, 0.95, 0.4)
+	marquee.outline_size = 16
+	marquee.outline_modulate = Color(0.2, 0.0, 0.25)
+	marquee.position = Vector3(0, 1.78, 0.315)
+	_computer.add_child(marquee)
+	# its glow on the floor and the wall
 	var glow_light := OmniLight3D.new()
-	glow_light.position = Vector3(0, top_y + 0.3, 0.45)
-	glow_light.light_color = Color(0.8, 0.95, 0.8)
-	glow_light.light_energy = 0.18
-	glow_light.omni_range = 1.2
+	glow_light.position = Vector3(0, 1.4, 0.6)
+	glow_light.light_color = Color(0.85, 0.6, 1.0)
+	glow_light.light_energy = 0.35
+	glow_light.omni_range = 1.6
 	_computer.add_child(glow_light)
 	computer_screen("", false)
+
+
+## The control on the cabinet under a tap (3D view pixels): "U" "D" "L" "R"
+## "A" "B", or "".
+func arcade_pick(at: Vector2) -> String:
+	if _computer == null:
+		return ""
+	var reach := get_viewport().get_visible_rect().size.y * 0.06
+	var best := ""
+	var best_d := reach
+	for k in _arcade_spots:
+		var p: Vector3 = _computer.to_global(_arcade_spots[k])
+		if camera.is_position_behind(p):
+			continue
+		var d := at.distance_to(camera.unproject_position(p))
+		if d < best_d:
+			best_d = d
+			best = k
+	return best
 
 
 ## What the computer's screen says. Off (dark, a padlock) when it's locked.
@@ -799,7 +843,7 @@ func _confetti(at: Vector3) -> void:
 func burst_at_computer() -> void:
 	if _computer == null:
 		return
-	var at := _computer.to_global(Vector3(0, 1.0, 0.2))
+	var at := _computer.to_global(Vector3(0, 1.4, 0.3))
 	for col in [Color(0.4, 1.0, 0.5), Color(1.0, 0.85, 0.3), Color(1.0, 0.35, 0.8)]:
 		_puffs(at, col, 6, 0.012, 0.3)
 	_pulse(at, Color(0.5, 1.0, 0.55), 3.0, 0.6)
@@ -816,10 +860,11 @@ func computer_press(button: String) -> void:
 		t.tween_property(cap, "position", up - Vector3(0, 0.012, 0), 0.04)
 		t.tween_property(cap, "position", up, 0.1)
 		return
-	var tilt: Vector3 = {"U": Vector3(-0.45, 0, 0), "D": Vector3(0.45, 0, 0), "L": Vector3(0, 0, 0.45), "R": Vector3(0, 0, -0.45)}.get(button, Vector3.ZERO)
+	var rest := Vector3(0.22, 0, 0) # the panel's slope
+	var tilt: Vector3 = rest + {"U": Vector3(-0.45, 0, 0), "D": Vector3(0.45, 0, 0), "L": Vector3(0, 0, 0.45), "R": Vector3(0, 0, -0.45)}.get(button, Vector3.ZERO)
 	var t2 := _stick.create_tween()
 	t2.tween_property(_stick, "rotation", tilt, 0.05)
-	t2.tween_property(_stick, "rotation", Vector3.ZERO, 0.15)
+	t2.tween_property(_stick, "rotation", rest, 0.15)
 
 
 ## The door swings open (or shut).

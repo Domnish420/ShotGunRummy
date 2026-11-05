@@ -901,13 +901,13 @@ var _computer_flash := "" # the last thing the screen said, kept till the next p
 func show_computer() -> void:
 	_keep_menu_name()
 	world.focus_station("computer")
-	var box := _station_panel("THE COMPUTER")
+	var box := _station_panel("THE ARCADE")
 	_computer_open = false
 	var kinds := Games.kinds()
 	if not Secrets.computer_unlocked(tried_kinds, kinds):
 		world.computer_screen("", false)
 		var missing := Secrets.missing_games(tried_kinds, kinds)
-		box.add_child(_label("It won't boot. Finish a match of every game at the table to power it up.", 26, Palette.INK, true))
+		box.add_child(_label("It won't start. Finish a match of every game at the table to power it up.", 26, Palette.INK, true))
 		box.add_child(_label("GAMES PLAYED: %d/%d" % [kinds.size() - missing.size(), kinds.size()], 30, FLOAT_YELLOW, true))
 		box.add_child(_label("Still to play: " + ", ".join(missing.map(func(k): return Games.label(k))), 22, Palette.DIM, true))
 		var back0 := _panel_button(box, "BACK", show_menu, 30)
@@ -919,30 +919,13 @@ func show_computer() -> void:
 	box.add_child(_code_label)
 	_code_note = _label("", 22, Palette.INK, true)
 	box.add_child(_code_note)
-	# the stick: a d-pad on the left, B and A on the right
-	var pad := HBoxContainer.new()
-	pad.alignment = BoxContainer.ALIGNMENT_CENTER
-	pad.add_theme_constant_override("separation", 30)
-	box.add_child(pad)
-	var dpad := GridContainer.new()
-	dpad.columns = 3
-	dpad.add_theme_constant_override("h_separation", 2)
-	dpad.add_theme_constant_override("v_separation", 0)
-	pad.add_child(dpad)
-	for cell in ["", "U", "", "L", "", "R", "", "D", ""]:
-		if cell == "":
-			var gap := Control.new()
-			gap.custom_minimum_size = Vector2(64, 60)
-			dpad.add_child(gap)
-		else:
-			var arrow: String = {"U": "▲", "D": "▼", "L": "◀", "R": "▶"}[cell]
-			var b := _bubble(arrow, _code_press.bind(cell), Palette.INK, 56)
-			b.custom_minimum_size = Vector2(64, 60)
-			dpad.add_child(b)
-	for ab in [["B", Color(0.4, 0.6, 1.0)], ["A", Color(1.0, 0.35, 0.3)]]:
-		var b2 := _bubble(ab[0], _code_press.bind(ab[0]), ab[1], 84)
-		b2.custom_minimum_size = Vector2(80, 120)
-		pad.add_child(b2)
+	box.add_child(_label("Push the stick and hit A and B on the cabinet.", 20, Palette.DIM, true))
+	# the controls are on the cabinet: taps on the 3D view land here
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_arcade_input)
+	screen.add_child(_full(touch))
+	screen.move_child(touch, 0) # under the panel
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 26)
@@ -965,6 +948,13 @@ func _update_code_screen() -> void:
 	if _computer_flash != "":
 		screen_text += "\n\n" + _computer_flash.get_slice("\n", 0) # the headline; the rest is below
 	world.computer_screen(screen_text)
+
+
+func _on_arcade_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var k: String = world.arcade_pick(_to_view(event.position))
+		if k != "":
+			_code_press(k)
 
 
 ## One press on the stick.

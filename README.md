@@ -39,14 +39,15 @@ thing itself) and you walk over:
   graphics, sound).
 - **GACHA**, the machine in the back corner.
 - **EXIT**, the door: leave the game, and it swings open as you go.
-- **COMPUTER**, the old beige one in the front-left corner, with an arcade
-  stick plugged in. It won't boot until you've finished a match of every
-  game. Then it takes cheat codes (see below).
+- **ARCADE**, the cabinet in the front-left corner. It won't start until
+  you've finished a match of every game. Then it takes cheat codes (see
+  below).
 
-### The computer: cheat codes and easter eggs
+### The arcade: cheat codes and easter eggs
 
-Type codes on the arcade stick: the d-pad (up, down, left, right) and the
-**A** and **B** buttons (on a computer, the arrow keys and A and B work too).
+Type codes on the cabinet itself: tap the joystick (up, down, left, right)
+and the **A** and **B** buttons on its control panel (on a computer, the arrow
+keys and A and B work too). Later on it will unlock secret cartridges as well.
 There are 14 codes. Each one unlocks a **secret skin** that never comes out
 of the gacha machine (decks, shotguns, hats and outfits), an **easter egg**,
 or both. You know the first one already: it's the most famous code in gaming.
