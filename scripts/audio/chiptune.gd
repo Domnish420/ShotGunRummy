@@ -300,11 +300,15 @@ static func make(name_: String) -> AudioStreamWAV:
 			for i in range(14):
 				_note(out, 900.0 + randf() * 1800.0, 0.012 + randf() * 0.01, "tri", 0.16 + randf() * 0.08)
 				_rest(out, 0.01 + randf() * 0.025)
-		"capsule_drop": # down the chute: clatter, then a thunk in the tray
-			for i in range(3):
-				_note(out, 700.0 - i * 120.0, 0.03, "noise", 0.22, -0.5)
-				_rest(out, 0.035)
-			_note(out, 140.0, 0.14, "square", 0.32, -0.6)
+		"capsule_drop": # rolling down the chute: a run of soft clatters
+			for i in range(6):
+				_note(out, 760.0 - i * 70.0, 0.035, "noise", 0.3, -0.4)
+				_rest(out, 0.05)
+		"capsule_land": # a solid plastic thunk in the tray
+			_note(out, 110.0, 0.16, "square", 0.45, -0.7)
+			_note(out, 900.0, 0.03, "noise", 0.25, -0.6)
+		"capsule_settle": # a softer tap as it comes to rest
+			_note(out, 160.0, 0.08, "square", 0.25, -0.6)
 		"capsule_wobble":
 			_note(out, 520.0, 0.05, "tri", 0.2, 0.25)
 			_note(out, 600.0, 0.05, "tri", 0.2, -0.25)

@@ -19,7 +19,7 @@ const GLOBE_R := 0.3
 const SLOT := Vector3(-0.08, 0.54, 0.24)
 const CHUTE_IN := Vector3(0.0, 0.3, 0.12)
 const CHUTE_OUT := Vector3(0.0, 0.25, 0.27)
-const TRAY := Vector3(0.0, 0.205, 0.36)
+const TRAY := Vector3(0.0, 0.25, 0.295) # resting in the tray, clear of its lip
 
 var busy := false
 var _capsules: Array = [] # [node, home position]
@@ -90,14 +90,14 @@ func _build() -> void:
 	add_child(sign)
 	# coin plate and slot
 	Props.box(self, Vector3(0.34, 0.15, 0.012), gold, Vector3(0, 0.51, 0.232))
-	Props.box(self, Vector3(0.06, 0.014, 0.01), black, SLOT + Vector3(0, 0, 0.004))
+	Props.box(self, Vector3(0.014, 0.06, 0.01), black, SLOT + Vector3(0, 0, 0.004)) # an upright slot
 	var price := Label3D.new()
 	price.text = "1 COIN"
 	price.font = sign.font
 	price.font_size = 40
 	price.pixel_size = 0.0014
 	price.modulate = Color(0.25, 0.08, 0.02)
-	price.position = SLOT + Vector3(0, -0.045, 0.01)
+	price.position = SLOT + Vector3(0, -0.06, 0.01)
 	add_child(price)
 	# the crank: a disc with a handle, on a pivot that turns
 	_crank = Node3D.new()
@@ -242,7 +242,7 @@ func put_coin_away() -> void:
 func hold_coin(at: Vector3) -> void:
 	coin_held = true
 	_coin.global_position = at
-	_coin.rotation = Vector3(PI / 2.0, 0, PI / 2.0) # edge on, ready for the slot
+	_coin.rotation = Vector3(0, 0, PI / 2.0) # standing on its edge, ready for the upright slot
 
 
 ## Let go away from the slot: it floats back.
@@ -258,7 +258,7 @@ func insert_coin() -> void:
 	coin_waiting = false
 	coin_held = false
 	var t := create_tween()
-	t.tween_property(_coin, "rotation", Vector3(PI / 2.0, 0, PI / 2.0), 0.06)
+	t.tween_property(_coin, "rotation", Vector3(0, 0, PI / 2.0), 0.06)
 	t.tween_property(_coin, "position", SLOT + Vector3(0, 0, 0.03), 0.12)
 	t.tween_property(_coin, "position", SLOT + Vector3(0, 0, -0.04), 0.1)
 	if t.is_running():
@@ -298,17 +298,29 @@ func drop(color: Color, wobbles: int) -> void:
 		if c.name == "Bottom":
 			(c as MeshInstance3D).material_override = Props.plain(color, 0.3)
 	_prize.position = CHUTE_IN
+	_prize.rotation = Vector3.ZERO
 	_prize.visible = true
+	# a smooth, gentle drop: it eases out of the chute, rolls down onto the
+	# tray, gives a soft little bounce and settles in the middle of it
+	var mouth := Vector3(0.0, 0.3, 0.235)
 	var td := create_tween()
-	td.tween_property(_prize, "position", CHUTE_OUT, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.06, -0.02), 0.12)
-	td.tween_property(_prize, "position", TRAY, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.025, 0.01), 0.08).set_ease(Tween.EASE_OUT)
-	td.tween_property(_prize, "position", TRAY + Vector3(0, 0, 0.02), 0.08).set_ease(Tween.EASE_IN)
-	td.parallel().tween_property(_prize, "rotation:x", TAU * 0.75, 0.5)
+	td.tween_property(_prize, "position", mouth, 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.0, -0.01), 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	td.tween_callback(sfx.emit.bind("capsule_land"))
+	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.022, 0.004), 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.0, 0.002), 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	td.tween_callback(sfx.emit.bind("capsule_settle"))
+	td.tween_property(_prize, "position", TRAY + Vector3(0, 0.006, 0.0), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	td.tween_property(_prize, "position", TRAY, 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	# it rolls as it goes, slowing to a stop
+	var roll := create_tween()
+	roll.tween_property(_prize, "rotation:x", TAU * 0.6, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	roll.tween_property(_prize, "rotation:x", TAU, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	sfx.emit("capsule_drop")
 	if td.is_running():
 		await td.finished
+	if roll.is_running():
+		await roll.finished
 	_prize.rotation = Vector3.ZERO
 	dropped.emit()
 

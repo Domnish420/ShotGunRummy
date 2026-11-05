@@ -141,6 +141,10 @@ var sort_btn: Button
 
 ## Plays a little sound: "tick", "swish", "clunk", "select" or
 ## "jingle:<cartridge>".
+## The gacha machine's own sounds, a bit louder than the rest.
+const SFX_BOOST := {"coin_in": 5.0, "crank": 4.0, "rattle": 4.0, "capsule_drop": 6.0, "capsule_land": 6.0, "capsule_settle": 5.0, "capsule_wobble": 5.0, "capsule_pop": 5.0}
+
+
 func _sound(name_: String) -> void:
 	if not sound_on:
 		return
@@ -162,14 +166,16 @@ func _sound(name_: String) -> void:
 		_jingle_player.stream = stream # a new tune cuts off the last one
 		_jingle_player.play()
 		return
+	var boost: float = SFX_BOOST.get(name_, 0.0)
 	for pl in _sfx_players:
 		if not pl.playing:
 			pl.stream = stream
+			pl.volume_db = -4.0 + boost
 			pl.play()
 			return
 	if _sfx_players.size() < 6:
 		var pl := AudioStreamPlayer.new()
-		pl.volume_db = -4.0
+		pl.volume_db = -4.0 + boost
 		add_child(pl)
 		_sfx_players.append(pl)
 		pl.stream = stream
@@ -2580,7 +2586,7 @@ func _skin_cell(id: String) -> VBoxContainer:
 	return cell
 
 
-func _set_card_skin(id: String) -> void:
+func _set_card_skin(id: String, stay := false) -> void:
 	if not Unlocks.is_unlocked("card", id, owned):
 		return
 	_sound("part")
@@ -2588,7 +2594,8 @@ func _set_card_skin(id: String) -> void:
 	CardArt.skin = CardSkins.get_skin(id)
 	_save_settings()
 	world.textures.build() # redraw the 3D cards in the new skin
-	show_card_skins()
+	if not stay:
+		show_card_skins()
 
 
 # ================================================================ shotgun skins
@@ -2689,7 +2696,7 @@ func _gun_cell(id: String) -> VBoxContainer:
 	return cell
 
 
-func _set_gun_skin(id: String) -> void:
+func _set_gun_skin(id: String, stay := false) -> void:
 	if not Unlocks.is_unlocked("gun", id, owned):
 		return
 	_sound("rack")
@@ -2698,7 +2705,8 @@ func _set_gun_skin(id: String) -> void:
 	if not setup_looks.is_empty():
 		setup_looks[0]["gun"] = id
 	_save_settings()
-	show_gun_skins()
+	if not stay:
+		show_gun_skins()
 
 
 # ================================================================ gacha
@@ -2962,6 +2970,8 @@ func _reveal_prize(prize: String) -> void:
 	if rarity == "legendary":
 		_flash(Palette.GOLD)
 	var box := _open_overlay(0.6, false, "reveal", true)
+	for c in screen.get_children():
+		c.visible = false # the machine's own words and buttons, under the prize (SPIN AGAIN brings them back)
 	var banner := _label(Gacha.RARITY_NAMES[rarity] + "!", 56 if rarity == "legendary" else 44, Gacha.RARITY_COLORS[rarity], true)
 	banner.add_theme_color_override("font_outline_color", Color.BLACK)
 	banner.add_theme_constant_override("outline_size", 8)
@@ -2980,16 +2990,39 @@ func _reveal_prize(prize: String) -> void:
 			var holder := CenterContainer.new()
 			holder.add_child(sp)
 			box.add_child(holder)
-			box.add_child(_button("USE THESE CARDS", _closing(func() -> void: _set_card_skin(str(pv[1])))))
+			_equip_button(box, "USE THESE CARDS", card_skin == str(pv[1]), func() -> void: _set_card_skin(str(pv[1]), true))
 		"gun":
 			var gp := GunPreview.new()
 			gp.skin_id = str(pv[1])
 			gp.custom_minimum_size = Vector2(0, 170)
 			box.add_child(gp)
-			box.add_child(_button("USE THIS SHOTGUN", _closing(func() -> void: _set_gun_skin(str(pv[1])))))
+			_equip_button(box, "USE THIS SHOTGUN", gun_skin == str(pv[1]), func() -> void: _set_gun_skin(str(pv[1]), true))
 		_:
-			box.add_child(_label("Find it in the character creator: CHARACTER, then +.", 22, Palette.INK, true))
+			_equip_button(box, "WEAR IT", my_look.get(pv[0]) == pv[1], func() -> void: _wear_part(str(pv[0]), pv[1]))
 	box.add_child(_button("SPIN AGAIN · %d LEFT" % coins if coins > 0 and not Gacha.remaining(owned).is_empty() else "BACK TO THE MACHINE", _closing(show_gacha)))
+
+
+## An equip button on the prize screen: it puts the prize on in the
+## background and says so, and you stay at the machine.
+func _equip_button(box: Container, word: String, already: bool, equip: Callable) -> void:
+	var b := _button("IN USE" if already else word, func() -> void: pass)
+	b.disabled = already
+	b.pressed.connect(func() -> void:
+		equip.call()
+		b.text = "IN USE"
+		b.disabled = true)
+	box.add_child(b)
+
+
+## A costume prize, straight onto your character.
+func _wear_part(part: String, value) -> void:
+	if not Unlocks.is_unlocked(part, value, owned):
+		return
+	_sound("part")
+	my_look[part] = value
+	if not setup_looks.is_empty():
+		setup_looks[0][part] = value
+	_save_settings()
 
 
 # ================================================================ unlocks
