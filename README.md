@@ -592,12 +592,15 @@ the top of `game.gd`.
 
 ### Item card art
 
-Every item card's face can be hand-drawn: put a 512 x 736 PNG (the whole
-face: picture, name, border) at `textures/items/<item id>.png` and it
-replaces the drawn face (a purple card with the item's emoji and name)
-everywhere. `godot --path . -s tools/export_item_faces.gd -- item_faces`
-writes the current faces, a blank template and a list of what each item does
-in each game, as a kit to draw from.
+Item cards are playing cards first. Give one its own picture by putting a
+512 x 512 PNG at `textures/items/<item id>_art.png` (the object on a dark
+background, no text): the game lays the card out round it like a court card,
+with its border, an inner frame, the item "suit" star in two corners and the
+picture in a framed panel in the middle. No name: the picture says what it is.
+(A full 512 x 736 face at `textures/items/<item id>.png` replaces the whole
+card instead.) `docs/item_card_prompts.md` has an art prompt for each item,
+and `godot --path . -s tools/export_item_faces.gd -- item_faces` writes the
+current faces and a list of what each item does in each game.
 
 ### Running the tests
 

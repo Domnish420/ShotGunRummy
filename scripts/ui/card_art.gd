@@ -395,24 +395,33 @@ static func _clip_line(a: Vector2, b: Vector2, r: Rect2) -> Array:
 	return [a + d * t0, a + d * t1]
 
 
-## Hand-drawn item faces: textures/items/<item id>.png (512x736, the whole
-## face of the card) replaces the drawn one when it's there.
+## Hand-drawn item art, either:
+##   textures/items/<item id>.png      the whole face of the card (512x736), or
+##   textures/items/<item id>_art.png  just the picture (512x512, the object on
+##                                      a dark background, no text): the game
+##                                      lays the card out round it like a court
+##                                      card (see _draw_item_card).
 static var _item_art := {}
 
 
-static func item_art(item_id: String) -> Texture2D:
-	if not _item_art.has(item_id):
-		var path := "res://textures/items/%s.png" % item_id
-		_item_art[item_id] = load(path) if ResourceLoader.exists(path) else null
-	return _item_art[item_id]
+static func item_art(item_id: String, suffix := "") -> Texture2D:
+	var k := item_id + suffix
+	if not _item_art.has(k):
+		var path := "res://textures/items/%s%s.png" % [item_id, suffix]
+		_item_art[k] = load(path) if ResourceLoader.exists(path) else null
+	return _item_art[k]
 
 
 static func _draw_item(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary, radius: int, compact: bool) -> void:
-	var art := item_art(str(card["item"]))
-	if art != null:
-		ci.draw_texture_rect(art, rect, false)
+	var whole := item_art(str(card["item"]))
+	if whole != null:
+		ci.draw_texture_rect(whole, rect, false)
 		return
 	var def: Dictionary = Items.def(card["item"])
+	var picture := item_art(str(card["item"]), "_art")
+	if picture != null:
+		_draw_item_card(ci, rect, radius, compact, picture)
+		return
 	ci.draw_style_box(Palette.box(Palette.ITEM_BG, Palette.PURPLE, 2, radius), rect)
 	var icon_fs := int(rect.size.x * (0.4 if compact else 0.46))
 	var icon_w := font.get_string_size(def["icon"], HORIZONTAL_ALIGNMENT_LEFT, -1, icon_fs).x
@@ -427,6 +436,30 @@ static func _draw_item(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary
 		fs -= 1
 	var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	ci.draw_string(font, Vector2(rect.get_center().x - w * 0.5, rect.end.y - rect.size.y * 0.08), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Palette.INK)
+
+
+## An item card with its own art, laid out like a playing card's court
+## card: the card's border and a thin inner frame, the item's "suit" mark (a
+## purple star) in the top-left and bottom-right corners, and the picture in
+## a framed panel in the middle. No words: the picture says what it is.
+static func _draw_item_card(ci: CanvasItem, rect: Rect2, radius: int, compact: bool, picture: Texture2D) -> void:
+	var w := rect.size.x
+	ci.draw_style_box(Palette.box(Palette.ITEM_BG, Palette.PURPLE, maxi(2, int(w * 0.02)), radius), rect)
+	var gold := Color(0.85, 0.7, 0.35)
+	if not compact:
+		# the thin inner frame
+		ci.draw_rect(rect.grow(-w * 0.06), Color(Palette.PURPLE, 0.7), false, maxf(1.0, w * 0.008))
+		# the corner marks: the item suit, top-left and (turned) bottom-right
+		var s := w * 0.07
+		draw_star(ci, rect.position + Vector2(w * 0.13, w * 0.15), s, Palette.PURPLE.lightened(0.25))
+		draw_star(ci, rect.end - Vector2(w * 0.13, w * 0.15), s, Palette.PURPLE.lightened(0.25))
+	# the picture, in its own framed panel
+	var side := w * (0.66 if not compact else 0.8)
+	var panel := Rect2(rect.get_center() - Vector2(side, side * 1.18) * 0.5, Vector2(side, side * 1.18))
+	ci.draw_rect(panel.grow(maxf(1.5, w * 0.012)), gold)
+	ci.draw_rect(panel, Color(0.04, 0.03, 0.04))
+	var pic := Rect2(panel.get_center() - Vector2(side, side) * 0.5, Vector2(side, side)).grow(-maxf(1.0, w * 0.01))
+	ci.draw_texture_rect(picture, pic, false)
 
 
 ## A four-pointed star with a dark outline, marking trump cards.
