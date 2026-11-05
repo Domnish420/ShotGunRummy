@@ -114,6 +114,8 @@ func _play_match() -> void:
 			break
 		_check_views(real)
 		rounds_seen[real.round_num] = true
+		if steps % 4000 == 0 and OS.get_cmdline_user_args().has("--progress"):
+			print("step %d round %d phase %s turn %d gun %s | overlays %s | status %s" % [steps, real.round_num, real.phase, real.turn, real.gun, phones.map(func(m): return m._overlay_kind if m.overlay_layer.get_child_count() > 0 else "-"), phones.map(func(m): return m.status_label.text.left(40) if m.status_label else "")])
 		var all_done := true
 		for main in phones:
 			if main.game == null or main.game.phase != "match_over" or main._overlay_kind != "match":
@@ -256,7 +258,7 @@ func _drive(main) -> void:
 		main.selected = Cards.ids_of(best["melds"][0])
 		main._meld_selected()
 		return
-	for c in (me.hand if game.can_place(seat) else []):
+	for c in (me.hand if game.can_place(seat) and game.can_lay_off(seat) else []): # meld of your own first
 		for m in game.melds:
 			if Cards.can_lay_off(m, [c], game.trump_rank):
 				main.selected = [c["id"]]
