@@ -142,7 +142,7 @@ var sort_btn: Button
 ## Plays a little sound: "tick", "swish", "clunk", "select" or
 ## "jingle:<cartridge>".
 ## The gacha machine's own sounds, a bit louder than the rest.
-const SFX_BOOST := {"coin_in": 5.0, "crank": 4.0, "rattle": 4.0, "capsule_drop": 6.0, "capsule_land": 6.0, "capsule_settle": 5.0, "capsule_wobble": 5.0, "capsule_pop": 5.0}
+const SFX_BOOST := {"roll_common": 3.0, "roll_rare": 3.0, "roll_epic": 3.0, "roll_legendary": 3.0, "coin_in": 5.0, "crank": 4.0, "rattle": 4.0, "capsule_drop": 6.0, "capsule_land": 6.0, "capsule_settle": 5.0, "capsule_wobble": 5.0, "capsule_pop": 5.0}
 
 
 func _sound(name_: String) -> void:
@@ -2910,6 +2910,8 @@ func _gacha_drop() -> void:
 	_set_gacha_step("drop")
 	var pv := Gacha.split(_gacha_prize)
 	var rarity := Gacha.rarity(pv[0], pv[1])
+	await world.gacha_machine.shake_out() # it rattles and shakes...
+	_sound("roll_" + rarity) # ...and a little jingle plays as it rolls out: grander the rarer
 	await world.gacha_machine.drop(Gacha.RARITY_COLORS[rarity], int(GACHA_WOBBLES[rarity]))
 	if _gacha_step == "drop" and world._gacha_view:
 		_set_gacha_step("tap")

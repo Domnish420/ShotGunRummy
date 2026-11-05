@@ -315,6 +315,31 @@ static func make(name_: String) -> AudioStreamWAV:
 		"capsule_pop": # it pops open
 			_note(out, 300.0, 0.04, "square", 0.3, 2.5)
 			_note(out, 5000.0, 0.09, "noise", 0.3, -0.7)
+		# the jingle as the capsule rolls out of the machine, one per rarity
+		"roll_common": # a little up-and-down tune
+			for st in [0, 4, 7, 4]:
+				_note(out, _hz(st + 3), 0.12, "tri", 0.3)
+			_note(out, _hz(12 + 3), 0.25, "tri", 0.3)
+		"roll_rare": # brighter, a step higher
+			for st in [0, 4, 7, 11, 12]:
+				_note(out, _hz(st + 5), 0.11, "pulse", 0.24)
+			_note(out, _hz(16 + 5), 0.18, "tri", 0.3)
+			_note(out, _hz(19 + 5), 0.35, "pulse", 0.22)
+		"roll_epic": # a minor run climbing two octaves
+			for st in [0, 3, 7, 10, 12, 15, 19, 22]:
+				_note(out, _hz(st + 2), 0.09, "square", 0.22)
+			_note(out, _hz(24 + 2), 0.15, "tri", 0.3)
+			_note(out, _hz(27 + 2), 0.5, "pulse", 0.24)
+		"roll_legendary": # a fanfare
+			for st in [0, 4, 7, 12]:
+				_note(out, _hz(st - 2), 0.1, "square", 0.24)
+			_rest(out, 0.04)
+			for st in [12, 12, 16, 19]:
+				_note(out, _hz(st - 2), 0.12, "pulse", 0.26)
+			_rest(out, 0.04)
+			_note(out, _hz(22), 0.14, "square", 0.26)
+			_note(out, _hz(24), 0.7, "pulse", 0.28)
+			_note(out, 6000.0, 0.15, "noise", 0.12, -0.5)
 		"prize_common":
 			for st in [0, 4, 7]:
 				_note(out, _hz(st + 3), 0.07, "square", 0.22)

@@ -19,7 +19,7 @@ const GLOBE_R := 0.3
 const SLOT := Vector3(-0.08, 0.54, 0.24)
 const CHUTE_IN := Vector3(0.0, 0.3, 0.12)
 const CHUTE_OUT := Vector3(0.0, 0.25, 0.27)
-const TRAY := Vector3(0.0, 0.25, 0.295) # resting in the tray, clear of its lip
+const TRAY := Vector3(0.0, 0.25, 0.37) # out on the tray, in front of the chute, clear of its lip
 
 var busy := false
 var _capsules: Array = [] # [node, home position]
@@ -108,8 +108,12 @@ func _build() -> void:
 	Props.ball(_crank, 0.016, 8, gold, Vector3(0, 0.045, 0.03))
 	# the chute and its tray
 	Props.box(self, Vector3(0.18, 0.12, 0.012), black, Vector3(0, 0.27, 0.232))
-	Props.box(self, Vector3(0.22, 0.02, 0.14), chrome, Vector3(0, 0.185, 0.3))
-	Props.box(self, Vector3(0.22, 0.05, 0.015), chrome, Vector3(0, 0.205, 0.37))
+	# the tray sticks well out in front of the chute, so a capsule that rolls
+	# out sits clearly on it
+	Props.box(self, Vector3(0.24, 0.02, 0.22), chrome, Vector3(0, 0.185, 0.34))
+	Props.box(self, Vector3(0.24, 0.05, 0.015), chrome, Vector3(0, 0.205, 0.45))
+	for x in [-0.12, 0.12]:
+		Props.box(self, Vector3(0.012, 0.05, 0.22), chrome, Vector3(x, 0.205, 0.34))
 	# the globe on a chrome collar, with a cap on top
 	Props.cyl(self, 0.22, 0.25, 0.07, 18, chrome, Vector3(0, 0.78, 0))
 	_globe = Node3D.new()
@@ -373,6 +377,28 @@ func _pop() -> void:
 		await tp.finished
 	await _wait(0.25)
 	busy = false
+
+
+## After the second turn: the whole machine rattles and shakes, the
+## capsules tumbling round the globe, before one drops.
+func shake_out() -> void:
+	var home := position
+	var t := create_tween()
+	for k in range(10):
+		var off := Vector3(randf_range(-0.012, 0.012), randf_range(0.0, 0.006), randf_range(-0.008, 0.008))
+		t.tween_property(self, "position", home + off, 0.05).set_trans(Tween.TRANS_SINE)
+		t.parallel().tween_property(self, "rotation:z", randf_range(-0.03, 0.03), 0.05)
+	t.tween_property(self, "position", home, 0.08)
+	t.parallel().tween_property(self, "rotation:z", 0.0, 0.08)
+	for k in range(4):
+		_jostle()
+		sfx.emit("rattle")
+		_flash_bulbs(Color(1.0, 0.85, 0.3), 1)
+		await _wait(0.16)
+	if t.is_running():
+		await t.finished
+	position = home
+	rotation.z = 0.0
 
 
 ## The capsules hop about inside the globe (one crank click's worth).
