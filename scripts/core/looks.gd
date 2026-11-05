@@ -33,6 +33,13 @@ const OUTFITS := [
 	{"name": "OVERALL BLUE", "color": Color(0.22, 0.38, 0.9)},
 	{"name": "CREEP GREEN", "color": Color(0.38, 0.78, 0.32)},
 	{"name": "GHOST PINK", "color": Color(1.0, 0.62, 0.8)},
+	{"name": "DISCO GLITTER", "color": Color(1.0, 0.95, 1.0)}, # secret code
+	{"name": "GLITCH", "color": Color(1.0, 0.2, 1.0)}, # secret code
+	{"name": "VAULT BLUE", "color": Color(0.25, 0.45, 0.95)},
+	{"name": "HERO TUNIC", "color": Color(0.3, 0.7, 0.25)},
+	{"name": "POWER SUIT", "color": Color(1.0, 0.45, 0.1)},
+	{"name": "SPARTAN OLIVE", "color": Color(0.45, 0.52, 0.3)},
+	{"name": "PLUMBER GREEN", "color": Color(0.2, 0.75, 0.3)},
 ]
 
 ## "own" = the model's own hat, helmet or hood (if it has one).
@@ -40,6 +47,8 @@ const HATS := {
 	"own": "THEIR OWN", "none": "NONE", "bowler": "BOWLER", "top_hat": "TOP HAT",
 	"cowboy": "COWBOY HAT", "flat_cap": "FLAT CAP", "beanie": "BEANIE",
 	"pumpkin": "PUMPKIN HEAD", "miner": "MINER'S HELMET", "gnome": "GNOME CAP", "crown": "ROYALE CROWN", "headset": "PARTY CHAT",
+	"fez": "FEZ", "bandana": "SNEAKY BANDANA", "trainer": "TRAINER CAP",
+	"propeller": "PROPELLER CAP", "party": "PARTY HAT", "halo": "RING OF LIGHT",
 }
 
 const FACES := {"none": "NONE", "cigarette": "CIGARETTE", "cigar": "CIGAR", "eyepatch": "EYEPATCH", "shades": "SHADES", "tash": "PLUMBER'S TASH", "visor": "HUD VISOR"}

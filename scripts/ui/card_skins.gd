@@ -12,7 +12,10 @@ const ORDER := ["classic", "felt", "candy", "blood", "wire", "pumpkin", "midnigh
 ## The retro decks: each one nods to a famous game with its own original art
 ## (no names, logos or characters), and unlocking it teaches you a bit of
 ## gaming history ("fact").
-const RETRO := ["overworld", "paddle", "missing", "diamond", "lava", "dust", "teams", "bricks", "test", "cheat", "crowbar", "rings", "maze", "lineclear", "goldcart", "shareware", "dungeon", "invaders", "kart", "hearts3", "harvest", "firstaid", "fireball", "bhop"]
+const RETRO := ["overworld", "paddle", "missing", "diamond", "lava", "dust", "teams", "bricks", "test", "cheat", "crowbar", "rings", "maze", "lineclear", "goldcart", "shareware", "dungeon", "invaders", "kart", "hearts3", "harvest", "firstaid", "fireball", "bhop", "duck", "frog", "asteroid", "barrel", "potion", "sword", "snake", "bomb", "cherry", "savedisk"]
+
+## Secret decks: only a code typed into the computer gives these (secrets.gd).
+const SECRET := ["cake", "devroom", "glitch"]
 
 const SKINS := {
 	"classic": {
@@ -276,6 +279,108 @@ const SKINS := {
 		"sprite": ["..W.W...", "..W.W...", "..WWW...", ".WWkWW..", ".WWWWW..", "..WWWW..", ".WWWWWW.", "..W..W.."],
 		"palette": {"W": Color(0.92, 0.9, 0.86), "k": Color(0.1, 0.08, 0.06)}, "repeat": 3,
 		"fact": "Bunny hopping began as a quirk of Quake's movement code that let good players build up speed by jumping.",
+	},
+	"duck": {
+		"name": "DUCK SEASON", "set": "retro",
+		"paper": Color(0.95, 0.97, 1.0), "edge": Color(0.3, 0.5, 0.25), "ink": Color(0.1, 0.12, 0.08), "red": Color(0.75, 0.15, 0.1),
+		"back": Color(0.4, 0.62, 1.0), "back_dark": Color(0.4, 0.62, 1.0), "back_edge": Color(0.3, 0.55, 0.2), "pattern": "sprite",
+		"sprite": ["........", "..GG....", ".GGKG...", "..GGYY..", "..BBB...", ".BBBBBW.", "..BBBB..", "........"],
+		"palette": {"G": Color(0.15, 0.55, 0.25), "K": Color(0.05, 0.05, 0.05), "Y": Color(1.0, 0.8, 0.15), "B": Color(0.55, 0.35, 0.2), "W": Color(0.97, 0.97, 0.95)}, "repeat": 3,
+		"fact": "Duck Hunt (1984) came with the NES Zapper. The dog that laughs when you miss is the most hated dog in gaming.",
+	},
+	"frog": {
+		"name": "ROAD CROSSING", "set": "retro",
+		"paper": Color(0.94, 0.95, 0.9), "edge": Color(0.25, 0.25, 0.27), "ink": Color(0.08, 0.08, 0.08), "red": Color(0.75, 0.12, 0.12),
+		"back": Color(0.3, 0.85, 0.3), "back_dark": Color(0.2, 0.2, 0.22), "back_edge": Color(0.95, 0.85, 0.2), "pattern": "sprite",
+		"sprite": ["........", ".G....G.", "GGGGGGGG", ".GKGGKG.", ".GGGGGG.", "..GGGG..", ".G.GG.G.", "G......G"],
+		"palette": {"G": Color(0.3, 0.85, 0.3), "K": Color(0.05, 0.05, 0.05)}, "repeat": 3,
+		"fact": "Frogger (1981) asks you to get a frog across a busy road, then a river full of logs and turtles.",
+	},
+	"asteroid": {
+		"name": "SPACE ROCKS", "set": "retro",
+		"paper": Color(0.1, 0.1, 0.12), "edge": Color(0.85, 0.85, 0.9), "ink": Color(0.92, 0.92, 0.95), "red": Color(1.0, 0.4, 0.4),
+		"back": Color(0.92, 0.92, 0.95), "back_dark": Color(0.02, 0.02, 0.04), "back_edge": Color(0.92, 0.92, 0.95), "pattern": "sprite",
+		"sprite": ["..WWWW..", ".W....W.", "W.....W.", "W......W", ".W.....W", "W.....W.", ".W..WW..", "..WW...."],
+		"palette": {"W": Color(0.92, 0.92, 0.95)}, "repeat": 3,
+		"fact": "Asteroids (1979) was drawn with glowing vector lines, not pixels. It became Atari's best-selling arcade game.",
+	},
+	"barrel": {
+		"name": "ROLLING BARRELS", "set": "retro",
+		"paper": Color(0.97, 0.93, 0.86), "edge": Color(0.75, 0.2, 0.3), "ink": Color(0.12, 0.07, 0.04), "red": Color(0.8, 0.15, 0.25),
+		"back": Color(0.85, 0.25, 0.35), "back_dark": Color(0.04, 0.03, 0.03), "back_edge": Color(0.85, 0.25, 0.35), "pattern": "sprite",
+		"sprite": ["..BBBB..", ".BbbbbB.", "BKKKKKKB", "BbbbbbbB", "BbbbbbbB", "BKKKKKKB", ".BbbbbB.", "..BBBB.."],
+		"palette": {"B": Color(0.55, 0.3, 0.12), "b": Color(0.8, 0.5, 0.2), "K": Color(0.2, 0.2, 0.22)}, "repeat": 3,
+		"fact": "Donkey Kong (1981) was Shigeru Miyamoto's first game as a designer.",
+	},
+	"potion": {
+		"name": "RED POTION", "set": "retro",
+		"paper": Color(0.96, 0.92, 0.85), "edge": Color(0.6, 0.1, 0.12), "ink": Color(0.12, 0.07, 0.05), "red": Color(0.8, 0.08, 0.12),
+		"back": Color(0.9, 0.12, 0.2), "back_dark": Color(0.16, 0.1, 0.22), "back_edge": Color(0.85, 0.7, 0.4), "pattern": "sprite",
+		"sprite": ["...WW...", "...kk...", "..kRRk..", ".kRRRRk.", ".kRWRRk.", ".kRRRRk.", "..kkkk..", "........"],
+		"palette": {"W": Color(0.85, 0.7, 0.4), "k": Color(0.75, 0.85, 0.95), "R": Color(0.9, 0.12, 0.2)}, "repeat": 3,
+		"fact": "The first Final Fantasy came out in Japan in 1987. Its heroes have been drinking potions ever since.",
+	},
+	"sword": {
+		"name": "TAKE THIS", "set": "retro",
+		"paper": Color(0.95, 0.95, 0.88), "edge": Color(0.25, 0.5, 0.2), "ink": Color(0.08, 0.1, 0.06), "red": Color(0.75, 0.15, 0.1),
+		"back": Color(0.9, 0.9, 0.95), "back_dark": Color(0.08, 0.06, 0.04), "back_edge": Color(1.0, 0.8, 0.2), "pattern": "sprite",
+		"sprite": ["......WW", ".....WW.", "....WW..", "...WW...", "Y.WW....", ".YW.....", ".BY.....", "B..Y...."],
+		"palette": {"W": Color(0.9, 0.9, 0.95), "Y": Color(1.0, 0.8, 0.2), "B": Color(0.5, 0.3, 0.15)}, "repeat": 3,
+		"fact": "In The Legend of Zelda (1986) an old man in a cave hands you a sword: \"It's dangerous to go alone! Take this.\"",
+	},
+	"snake": {
+		"name": "PHONE SNAKE", "set": "retro",
+		"paper": Color(0.78, 0.85, 0.55), "edge": Color(0.2, 0.25, 0.1), "ink": Color(0.1, 0.13, 0.05), "red": Color(0.35, 0.15, 0.05),
+		"back": Color(0.12, 0.16, 0.06), "back_dark": Color(0.62, 0.72, 0.35), "back_edge": Color(0.12, 0.16, 0.06), "pattern": "sprite",
+		"sprite": ["........", ".GGGGG..", ".G...G..", ".G.GGG..", ".G......", ".GGGGGG.", "......K.", "........"],
+		"palette": {"G": Color(0.12, 0.16, 0.06), "K": Color(0.3, 0.35, 0.15)}, "repeat": 3,
+		"fact": "Snake came built into Nokia phones from 1997, which made it one of the most-played games ever.",
+	},
+	"bomb": {
+		"name": "BOMB BLAST", "set": "retro",
+		"paper": Color(0.95, 0.95, 0.95), "edge": Color(0.2, 0.2, 0.25), "ink": Color(0.06, 0.06, 0.08), "red": Color(0.85, 0.15, 0.1),
+		"back": Color(0.1, 0.1, 0.12), "back_dark": Color(0.25, 0.55, 0.3), "back_edge": Color(1.0, 0.55, 0.1), "pattern": "sprite",
+		"sprite": [".....Y..", "....O.Y.", "...KO...", "..KKKK..", ".KKWKKK.", ".KWKKKK.", ".KKKKKK.", "..KKKK.."],
+		"palette": {"Y": Color(1.0, 0.9, 0.2), "O": Color(1.0, 0.5, 0.1), "K": Color(0.1, 0.1, 0.12), "W": Color(0.9, 0.9, 0.95)}, "repeat": 3,
+		"fact": "Bomberman first appeared in 1983, on home computers in Japan.",
+	},
+	"cherry": {
+		"name": "BONUS FRUIT", "set": "retro",
+		"paper": Color(0.97, 0.95, 0.9), "edge": Color(0.15, 0.2, 0.7), "ink": Color(0.06, 0.06, 0.12), "red": Color(0.85, 0.08, 0.12),
+		"back": Color(0.9, 0.1, 0.15), "back_dark": Color(0.03, 0.03, 0.12), "back_edge": Color(0.2, 0.35, 1.0), "pattern": "sprite",
+		"sprite": ["....GG..", "...G.G..", "..G...G.", ".G....G.", "RR...RR.", "RWR.RWR.", "RRR.RRR.", ".R...R.."],
+		"palette": {"G": Color(0.55, 0.35, 0.15), "R": Color(0.9, 0.1, 0.15), "W": Color(1.0, 0.85, 0.85)}, "repeat": 3,
+		"fact": "In Pac-Man (1980) the cherry is the first bonus fruit, worth 100 points.",
+	},
+	"savedisk": {
+		"name": "SAVE ICON", "set": "retro",
+		"paper": Color(0.94, 0.95, 0.97), "edge": Color(0.2, 0.25, 0.45), "ink": Color(0.06, 0.08, 0.15), "red": Color(0.75, 0.12, 0.15),
+		"back": Color(0.25, 0.3, 0.55), "back_dark": Color(0.85, 0.87, 0.9), "back_edge": Color(0.25, 0.3, 0.55), "pattern": "sprite",
+		"sprite": ["BBBBBBB.", "BWWWWGB.", "BWWWWGB.", "BBBBBBBB", "BBkkkkBB", "BBkSSkBB", "BBkSSkBB", "BBkkkkBB"],
+		"palette": {"B": Color(0.25, 0.3, 0.55), "W": Color(0.95, 0.95, 0.97), "G": Color(0.6, 0.62, 0.65), "k": Color(0.12, 0.14, 0.25), "S": Color(0.7, 0.72, 0.75)}, "repeat": 3,
+		"fact": "The floppy disk is still the save icon, long after anyone saved a game to one.",
+	},
+	"cake": {
+		"name": "THE CAKE", "set": "secret",
+		"paper": Color(0.96, 0.96, 0.97), "edge": Color(0.85, 0.5, 0.1), "ink": Color(0.1, 0.1, 0.12), "red": Color(0.8, 0.12, 0.15),
+		"back": Color(0.4, 0.22, 0.12), "back_dark": Color(0.88, 0.89, 0.9), "back_edge": Color(0.2, 0.55, 1.0), "pattern": "sprite",
+		"sprite": ["...Y....", "...R....", "..WWWW..", ".WRWWRW.", ".BBBBBB.", ".WWWWWW.", ".BBBBBB.", "........"],
+		"palette": {"Y": Color(1.0, 0.75, 0.15), "R": Color(0.85, 0.1, 0.15), "W": Color(0.98, 0.95, 0.92), "B": Color(0.4, 0.22, 0.12)}, "repeat": 3,
+		"fact": "Portal (2007) promised you cake at the end of the tests. The cake was a lie.",
+	},
+	"devroom": {
+		"name": "DEV ROOM", "set": "secret",
+		"paper": Color(0.92, 0.92, 0.92), "edge": Color(1.0, 0.55, 0.1), "ink": Color(0.15, 0.15, 0.15), "red": Color(0.9, 0.4, 0.05),
+		"back": Color(0.95, 0.95, 0.95), "back_dark": Color(1.0, 0.5, 0.08), "back_edge": Color(0.45, 0.45, 0.45), "pattern": "grid",
+		"fact": "Valve's level makers block out rooms with orange-and-grey grid textures before the real art goes in.",
+	},
+	"glitch": {
+		"name": "GLITCH CITY", "set": "secret",
+		"paper": Color(0.1, 0.05, 0.12), "edge": Color(1.0, 0.0, 1.0), "ink": Color(0.3, 1.0, 1.0), "red": Color(1.0, 0.2, 0.9),
+		"back": Color(1.0, 0.0, 1.0), "back_dark": Color(0.0, 0.0, 0.0), "back_edge": Color(0.0, 1.0, 1.0), "pattern": "sprite",
+		"sprite": ["MKcMMKcK", "KcMKKMcM", "cMKcMKKc", "MKKMcMKM", "KMcKMKcK", "cKMMKcMK", "MKcKcMKM", "KcMKMKcM"],
+		"palette": {"M": Color(1.0, 0.0, 1.0), "K": Color(0.0, 0.0, 0.0), "c": Color(0.0, 1.0, 1.0)}, "repeat": 4,
+		"fact": "Glitch City in Pokémon Red and Blue is a jumbled map of broken tiles, reached with a trick in the Safari Zone.",
 	},
 }
 

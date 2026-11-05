@@ -690,6 +690,10 @@ func _change_name() -> void:
 
 func show_menu() -> void:
 	_hide_settings()
+	_item_pick = {}
+	_hide_pick_bar()
+	if world != null:
+		world._item_pick = {}
 	_humans_out = false
 	session.leave()
 	session.stop_scan()
@@ -2291,7 +2295,7 @@ func show_card_skins() -> void:
 	for id in CardSkins.RETRO:
 		if Unlocks.is_unlocked("card", id, owned):
 			retro_open += 1
-	for section in [["CLASSIC DECKS", CardSkins.ORDER, ""], ["RETRO DECKS", CardSkins.RETRO, "Each one nods to a famous game. Unlock it to learn a bit of gaming history. (%d/%d)" % [retro_open, CardSkins.RETRO.size()]]]:
+	for section in [["CLASSIC DECKS", CardSkins.ORDER, ""], ["RETRO DECKS", CardSkins.RETRO, "Each one nods to a famous game. Unlock it to learn a bit of gaming history. (%d/%d)" % [retro_open, CardSkins.RETRO.size()]], ["SECRET DECKS", CardSkins.SECRET, "Never in the gacha machine. Find the codes for the computer."]]:
 		sections.add_child(_label(section[0], 32, Color(0.36, 0.06, 0.05), true))
 		if section[2] != "":
 			sections.add_child(_label(section[2], 18, Palette.CARD_INK, true))
@@ -2401,7 +2405,7 @@ func show_gun_skins() -> void:
 	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sections.add_theme_constant_override("separation", 10)
 	scroll.add_child(sections)
-	for section in [["CLASSIC", GunSkins.ORDER], ["RETRO", GunSkins.RETRO]]:
+	for section in [["CLASSIC", GunSkins.ORDER], ["RETRO", GunSkins.RETRO], ["SECRET", GunSkins.SECRET]]:
 		sections.add_child(_label(section[0], 30, Color(0.36, 0.06, 0.05), true))
 		var grid := GridContainer.new()
 		grid.columns = 2
@@ -3541,6 +3545,8 @@ func _on_table_input(event: InputEvent) -> void:
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
+	if _item_pick_tap(hit):
+		return
 	if mode_ui != null:
 		mode_ui.on_pick(hit)
 		return
@@ -3569,6 +3575,11 @@ func _on_table_input(event: InputEvent) -> void:
 
 
 func _refresh() -> void:
+	if not _item_pick.is_empty() and (game == null or not _my_turn() or game.turn != _item_pick_seat or overlay_layer.get_child_count() > 0):
+		_item_pick = {}
+		_hide_pick_bar()
+		if world != null:
+			world._item_pick = {}
 	_refresh_body()
 	_tint_actions()
 
@@ -3834,6 +3845,9 @@ func _discard_selected() -> void:
 
 
 func _use_selected_item() -> void:
+	if not _item_pick.is_empty():
+		_cancel_item_pick()
+		return
 	if selected_item == "" or not _my_turn():
 		return
 	var item := game.find_item(_me(), selected_item)
@@ -4027,55 +4041,80 @@ func _show_target_picker(item: Dictionary) -> void:
 	box.add_child(_button("CANCEL", _closing(_after_action)))
 
 
-## Pick a card for Sticky Fingers (from a meld) or Joker Paint (from your hand).
+## Pick a card for Sticky Fingers (from a meld), Joker Paint (from your
+## hand) and the like: no menu, you just tap the card at the table. The cards
+## you can pick glow; tap USE ITEM again (or CANCEL) to put the item away.
+var _item_pick := {} # the item being used while you pick its card
+var _item_pick_seat := -1 # whose turn it was
+var _pick_bar: Control
+
+
 func _show_card_picker(item: Dictionary) -> void:
-	var def := Items.def(item["item"])
-	var box := _open_overlay(0.94, true, "target")
-	box.add_child(_title(str(def["name"]).to_upper(), Palette.PURPLE.lightened(0.3)))
-	box.add_child(_label(def["text"], 26, Palette.INK, true))
 	var choices: Array = game.item_choices(_me(), item["item"])
-	if Items.needs(item["item"]) == "table_card":
-		box.add_child(_label("WHICH CARD?", 26, Palette.DIM, true))
-		for p in game.others(_me()):
-			var theirs := []
-			for c in p.hand:
-				if choices.has(c["id"]):
-					theirs.append(c)
-			if theirs.is_empty():
-				continue
-			box.add_child(_label("%s:" % p.name, 22, Palette.DIM))
-			box.add_child(_card_buttons(theirs, item))
-	elif Items.needs(item["item"]) == "meld_card":
-		box.add_child(_label("WHICH CARD?", 26, Palette.DIM, true))
-		for m in game.melds:
-			var mine := []
-			for c in m["cards"]:
-				if choices.has(c["id"]):
-					mine.append(c)
-			if mine.is_empty():
-				continue
-			var note := " (falls apart)" if m["cards"].size() <= 3 else ""
-			box.add_child(_label("%s'S MELD: %s%s" % [_name(m["owner"]), Cards.cards_text(m["cards"]), note], 22, Palette.DIM))
-			box.add_child(_card_buttons(mine, item))
-	else:
-		box.add_child(_label("WHICH CARD BECOMES A TRUMP?", 26, Palette.DIM, true))
-		var cards := []
-		for c in game.players[_me()].hand:
-			if choices.has(c["id"]):
-				cards.append(c)
-		box.add_child(_card_buttons(cards, item))
-	box.add_child(_button("CANCEL", _closing(_after_action)))
+	if choices.is_empty():
+		message = "Nothing to use it on."
+		_refresh()
+		return
+	_item_pick = item
+	_item_pick_seat = game.turn
+	world.set_item_pick(choices)
+	var def := Items.def(item["item"])
+	var where: String = {"hand_card": "IN YOUR HAND", "meld_card": "IN A MELD", "table_card": "IN SOMEONE'S HAND"}.get(Items.needs(item["item"]), "")
+	_show_pick_bar("%s: TAP A GLOWING CARD %s" % [str(def["name"]).to_upper(), where])
+	_sound("open")
 
 
-func _card_buttons(cards: Array, item: Dictionary) -> HFlowContainer:
-	var flow := HFlowContainer.new()
-	flow.add_theme_constant_override("h_separation", 8)
-	flow.add_theme_constant_override("v_separation", 8)
-	for c in cards:
-		var b := _button(Cards.card_name(c), _closing(_use_item.bind(item, -1, c["id"])))
-		b.custom_minimum_size = Vector2(110, 64)
-		flow.add_child(b)
-	return flow
+func _show_pick_bar(title: String) -> void:
+	_hide_pick_bar()
+	_pick_bar = VBoxContainer.new()
+	_pick_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	(_pick_bar as VBoxContainer).alignment = BoxContainer.ALIGNMENT_CENTER
+	add_child(_pick_bar)
+	move_child(_pick_bar, settings_layer.get_index()) # under the settings, over the table
+	var vs := get_viewport_rect().size
+	_pick_bar.position = Vector2(16, vs.y * 0.17)
+	_pick_bar.size = Vector2(vs.x - 32, 0)
+	_pick_bar.custom_minimum_size = Vector2(vs.x - 32, 0)
+	var head := _label(title, 34, FLOAT_YELLOW, true)
+	head.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+	head.add_theme_constant_override("outline_size", 12)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pick_bar.add_child(head)
+	var cancel := _bubble("CANCEL", _cancel_item_pick, Palette.RED, 40)
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_pick_bar.add_child(cancel)
+
+
+func _hide_pick_bar() -> void:
+	if _pick_bar != null and is_instance_valid(_pick_bar):
+		_pick_bar.queue_free()
+	_pick_bar = null
+
+
+func _cancel_item_pick() -> void:
+	if _item_pick.is_empty():
+		return
+	_item_pick = {}
+	_hide_pick_bar()
+	world.set_item_pick([])
+	_refresh()
+
+
+## A tap while picking: a glowing card uses the item on it; tapping the item
+## again puts it away. Returns true if the tap was used.
+func _item_pick_tap(hit: Dictionary) -> bool:
+	if _item_pick.is_empty():
+		return false
+	var kind: String = hit.get("kind", "")
+	if kind == "item_pick":
+		var item := _item_pick
+		_item_pick = {}
+		_hide_pick_bar()
+		world.set_item_pick([])
+		_use_item(item, -1, str(hit["id"]))
+	elif kind == "item":
+		_cancel_item_pick()
+	return true
 
 
 func _show_round_result() -> void:

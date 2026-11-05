@@ -22,6 +22,7 @@ const CardSkins = preload("res://scripts/ui/card_skins.gd")
 const LooksT = preload("res://scripts/core/looks.gd")
 const Gacha = preload("res://scripts/core/gacha.gd")
 const GunSkinsT = preload("res://scripts/core/gun_skins.gd")
+const Secrets = preload("res://scripts/core/secrets.gd")
 const FaceAnchors = preload("res://scripts/three/face_anchors.gd")
 
 var _failures := 0
@@ -43,7 +44,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_music", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1605,6 +1606,68 @@ func test_every_item_everywhere() -> void:
 
 ## Character parts, card skins and shotgun skins: a few free, the rest come
 ## out of the gacha machine.
+## The computer's codes: none sets off another, each gives its prizes, and
+## secret things stay locked (and out of the gacha) until their code.
+func test_secrets() -> void:
+	check(Secrets.suffix_free(), "no code ends with another code")
+	var seen := {}
+	for c in Secrets.CODES:
+		var code: String = c["code"]
+		check(not seen.has(code), "code %s is used once" % c["id"])
+		seen[code] = true
+		for ch in code:
+			check(Secrets.BUTTONS.has(ch), "code %s only uses the arcade buttons" % c["id"])
+		check(code.length() <= Secrets.MAX_INPUT, "code %s fits on the screen" % c["id"])
+		check(str(c["hint"]) != "" and str(c["message"]) != "", "code %s has a hint and a message" % c["id"])
+		# typing it (after some junk) finds exactly it
+		check(Secrets.match_input("LRAB" + code).get("id", "") == c["id"], "typing %s finds it" % c["id"])
+		# no shorter run of its own presses fires anything
+		for n in range(1, code.length()):
+			check(Secrets.match_input(code.left(n)).is_empty(), "%s doesn't fire early (%d presses)" % [c["id"], n])
+		for p in c["prizes"]:
+			var pv := Gacha.split(p)
+			if pv[0] == "egg":
+				check(Secrets.EGGS.has(pv[1]), "egg %s is defined" % pv[1])
+				continue
+			check(Secrets.is_secret(p), "%s is secret" % p)
+			check(not Gacha.pool().has(p), "%s never drops from the gacha" % p)
+			check(not Unlocks.is_unlocked(pv[0], pv[1], {}), "%s starts locked" % p)
+			check(Unlocks.need_text(pv[0], pv[1], {}) == "SECRET CODE", "%s says it needs a code" % p)
+			check(Gacha.prize_fact(p) != "", "%s teaches you something" % p)
+			match pv[0]:
+				"card":
+					check(CardSkins.SECRET.has(pv[1]) and CardSkins.SKINS.has(pv[1]), "secret deck %s is defined" % pv[1])
+				"gun":
+					check(GunSkinsT.SECRET.has(pv[1]) and GunSkinsT.SKINS.has(pv[1]), "secret gun %s is defined" % pv[1])
+				"hat":
+					check(Looks.HATS.has(pv[1]), "secret hat %s is defined" % pv[1])
+				"outfit":
+					check(int(pv[1]) < Looks.OUTFITS.size(), "secret outfit %s is defined" % pv[1])
+	for id in Secrets.EGGS:
+		var gives := false
+		for c in Secrets.CODES:
+			if c["prizes"].has("egg:" + id):
+				gives = true
+		check(gives, "some code finds egg %s" % id)
+	# redeeming
+	var owned := {}
+	var konami := Secrets.code_by_id("konami")
+	var fresh := Secrets.redeem(konami, owned)
+	check(fresh == ["gun:spreadshot"], "the famous code gives the spread shot (%s)" % [fresh])
+	check(Unlocks.is_unlocked("gun", "spreadshot", owned), "and it's yours")
+	check(Secrets.found(owned) == ["konami"], "the code is marked found")
+	check(Secrets.redeem(konami, owned).is_empty(), "entering it again gives nothing new")
+	# the computer boots after every game
+	var kinds := Games.kinds()
+	var tried := {}
+	for k in kinds.slice(0, kinds.size() - 1):
+		tried[k] = true
+	check(not Secrets.computer_unlocked(tried, kinds), "one game short: still locked")
+	check(Secrets.missing_games(tried, kinds) == [kinds[-1]], "it says which game is missing")
+	tried[kinds[-1]] = true
+	check(Secrets.computer_unlocked(tried, kinds), "every game played: it boots")
+
+
 func test_unlocks() -> void:
 	var none := {}
 	var pool := Gacha.pool()
@@ -1636,11 +1699,11 @@ func test_unlocks() -> void:
 		check(GunSkinsT.SKINS.has(id), "gun skin %s is defined" % id)
 		check(id == "standard" or pool.has("gun:" + id), "gun skin %s is in the machine" % id)
 	for id in GunSkinsT.SKINS:
-		check(GunSkinsT.ORDER.has(id) or GunSkinsT.RETRO.has(id), "gun skin %s shows in the picker" % id)
+		check(GunSkinsT.ORDER.has(id) or GunSkinsT.RETRO.has(id) or GunSkinsT.SECRET.has(id), "gun skin %s shows in the picker" % id)
 	for id in GunSkinsT.RETRO:
 		check(GunSkinsT.fact(id) != "", "retro shotgun %s has a fact" % id)
 	for k in Gacha.COSTUME_FACTS:
-		check(pool.has(k), "costume fact %s is for a prize in the machine" % k)
+		check(pool.has(k) or Secrets.is_secret(k), "costume fact %s is for a prize in the machine or a code" % k)
 	for k in ["hat:pumpkin", "hat:miner", "hat:gnome", "hat:crown", "hat:headset", "face:tash", "face:visor", "outfit:8", "outfit:11"]:
 		check(Gacha.prize_fact(k) != "", "retro costume %s has a fact" % k)
 	check(Unlocks.is_unlocked("card", "classic", none) and Unlocks.is_unlocked("gun", "standard", none), "classic cards and the standard shotgun are free")
@@ -1683,7 +1746,7 @@ func test_unlocks() -> void:
 	for id in CardSkins.RETRO:
 		check(CardSkins.fact(id) != "", "retro deck %s has a fact to unlock" % id)
 	for id in CardSkins.SKINS:
-		check(CardSkins.ORDER.has(id) or CardSkins.RETRO.has(id), "card skin %s shows in the picker" % id)
+		check(CardSkins.ORDER.has(id) or CardSkins.RETRO.has(id) or CardSkins.SECRET.has(id), "card skin %s shows in the picker" % id)
 		var sk: Dictionary = CardSkins.SKINS[id]
 		for k in ["name", "paper", "edge", "ink", "red", "back", "back_dark", "back_edge", "pattern"]:
 			check(sk.has(k), "card skin %s has %s" % [id, k])

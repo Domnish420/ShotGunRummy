@@ -132,6 +132,12 @@ func _run() -> void:
 						await _frames()
 						await _shot("03_item_selected")
 						main._use_selected_item()
+						if not main._item_pick.is_empty():
+							# no menu: the cards you can pick glow; tap one
+							await _frames()
+							await _shot("03c_item_pick")
+							var ids: Array = game.item_choices(seat, item["item"])
+							main._item_pick_tap({"kind": "item_pick", "id": ids[0]})
 						used_item = true
 						break
 				if main.overlay_layer.get_child_count() > 0:

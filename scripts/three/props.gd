@@ -524,6 +524,52 @@ static func _dress_head(head: Node3D, look: Dictionary) -> Array:
 				cyl(head, 0.12, 0.12, 0.02, 10, glow(Color(0.3, 1.0, 0.45), 2.0), Vector3(x * 1.1, 0.32, 0), Vector3(0, 0, PI / 2.0))
 			_rod(head, Vector3(0.62, 0.25, 0.08), Vector3(0.25, 0.0, 0.55), 0.02, plastic)
 			ball(head, 0.05, 6, plastic, Vector3(0.22, -0.01, 0.57))
+		"fez":
+			# a red fez with a black tassel
+			var red := plain(Color(0.78, 0.1, 0.1), 0.8)
+			cyl(head, 0.2, 0.26, 0.3, 12, red, Vector3(0, 0.98, 0.05), Vector3(-0.08, 0, 0.12))
+			_rod(head, Vector3(-0.02, 1.13, 0.04), Vector3(0.2, 1.0, 0.12), 0.015, plain(Color(0.08, 0.08, 0.08)))
+			ball(head, 0.04, 6, plain(Color(0.08, 0.08, 0.08)), Vector3(0.21, 0.97, 0.13))
+		"bandana":
+			# a long dark bandana tied round the forehead, its tails behind
+			var band := plain(Color(0.12, 0.13, 0.16), 0.9)
+			var ring := cyl(head, 0.62, 0.62, 0.16, 16, band, Vector3(0, 0.62, 0))
+			ring.scale = Vector3(1.0, 1.0, 1.05)
+			for sd in [-1.0, 1.0]:
+				_rod(head, Vector3(sd * 0.08, 0.62, -0.6), Vector3(sd * 0.3, 0.2, -0.95), 0.05, band)
+		"trainer":
+			# a red and white cap, peak to the front
+			var white := plain(Color(0.95, 0.95, 0.93), 0.8)
+			var crown_cap := ball(head, 0.6, 10, white, Vector3(0, 0.74, -0.02))
+			crown_cap.scale = Vector3(1, 0.55, 1.05)
+			var front := ball(head, 0.61, 10, plain(Color(0.88, 0.12, 0.12), 0.8), Vector3(0, 0.75, 0.04))
+			front.scale = Vector3(1, 0.52, 0.9)
+			box(head, Vector3(0.6, 0.05, 0.36), plain(Color(0.88, 0.12, 0.12), 0.8), Vector3(0, 0.72, 0.6), Vector3(0.12, 0, 0))
+		"propeller":
+			# a stripy beanie with a little propeller on top
+			var cap := ball(head, 0.6, 10, plain(Color(0.2, 0.45, 0.95), 0.8), Vector3(0, 0.72, -0.02))
+			cap.scale = Vector3(1, 0.6, 1)
+			ball(head, 0.08, 6, plain(Color(1.0, 0.85, 0.15), 0.8), Vector3(0, 1.08, -0.02)) # a yellow button
+			cyl(head, 0.025, 0.025, 0.2, 6, plain(Color(0.6, 0.6, 0.62), 0.3, 0.8), Vector3(0, 1.15, 0))
+			for k in range(2):
+				var blade := box(head, Vector3(0.5, 0.02, 0.1), plain(Color(0.9, 0.15, 0.15), 0.5), Vector3(0, 1.26, 0))
+				blade.rotation.y = k * PI / 2.0 + 0.3
+		"party":
+			# a pointed party hat, striped, with a pompom
+			var cone := cyl(head, 0.02, 0.36, 0.7, 12, plain(Color(0.95, 0.85, 0.2), 0.7), Vector3(0.05, 1.18, 0), Vector3(0, 0, -0.12))
+			cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			for k in range(3):
+				cyl(head, 0.3 - k * 0.1, 0.32 - k * 0.1, 0.06, 12, plain([Color(0.9, 0.15, 0.4), Color(0.2, 0.6, 1.0), Color(0.3, 0.85, 0.35)][k], 0.7), Vector3(0.05 - k * 0.03, 0.95 + k * 0.2, 0), Vector3(0, 0, -0.12))
+			ball(head, 0.09, 8, plain(Color(1.0, 1.0, 1.0), 0.9), Vector3(-0.03, 1.55, 0))
+		"halo":
+			# a glowing ring floating over the head
+			var ring_mat := glow(Color(1.0, 0.92, 0.55), 3.0)
+			var prev := Vector3(0.42, 1.25, 0)
+			for k in range(1, 17):
+				var a := k * TAU / 16.0
+				var next := Vector3(cos(a) * 0.42, 1.25, sin(a) * 0.42)
+				_rod(head, prev, next, 0.04, ring_mat)
+				prev = next
 	# face pieces sit on the head's anchors (face_anchors.gd), measured off
 	# each model, so they rest on the surface: no floating, no sinking in.
 	# The player picks the side, the angle and the height.

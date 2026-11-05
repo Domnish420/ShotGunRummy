@@ -10,6 +10,7 @@ extends RefCounted
 
 const Looks = preload("res://scripts/core/looks.gd")
 const GunSkins = preload("res://scripts/core/gun_skins.gd")
+const Secrets = preload("res://scripts/core/secrets.gd")
 
 const COIN_PER_ROUND := 1
 const COIN_PER_MATCH := 1 # on top of the round
@@ -38,6 +39,8 @@ const COSTUMES := {
 	"hat:pumpkin": "rare", "hat:miner": "rare", "hat:gnome": "epic", "hat:crown": "legendary", "hat:headset": "rare",
 	"face:tash": "rare", "face:visor": "epic",
 	"outfit:8": "rare", "outfit:9": "rare", "outfit:10": "rare", "outfit:11": "rare",
+	"hat:fez": "rare", "hat:bandana": "epic", "hat:trainer": "rare",
+	"outfit:14": "rare", "outfit:15": "rare", "outfit:16": "epic", "outfit:17": "rare", "outfit:18": "rare",
 }
 
 ## The bit of gaming history each retro costume piece teaches you.
@@ -53,6 +56,20 @@ const COSTUME_FACTS := {
 	"outfit:9": "Mario wears overalls so that you can see his arms swing in tiny sprites.",
 	"outfit:10": "Minecraft's creeper came from a coding slip: a pig model built tall instead of long.",
 	"outfit:11": "Pac-Man's shape was inspired by a pizza with a slice taken out.",
+	"hat:fez": "In Fez (2012), putting on the fez reveals that your flat 2D world is really 3D: you can turn it round.",
+	"hat:bandana": "In Metal Gear Solid (1998), finish the game the right way and you earn a bandana that gives you endless ammo.",
+	"hat:trainer": "Pokémon Red and Green came out in Japan in 1996, with 151 Pokémon to catch.",
+	"outfit:14": "Fallout's Vault Boy thumbs-up is a nod to old cartoons; the vault suits are always blue and yellow.",
+	"outfit:15": "Link's green tunic and cap first appeared in The Legend of Zelda in 1986.",
+	"outfit:16": "Metroid (1986) saved a surprise for the end: the hero inside the orange power suit, Samus, is a woman.",
+	"outfit:17": "Master Chief's armour in Halo is the MJOLNIR suit, and his real name is John-117.",
+	"outfit:18": "Luigi was made from Mario's sprite with a new colour, so two players could play at once.",
+	# secret: only a code gives these (secrets.gd)
+	"hat:propeller": "The Propeller Mushroom in New Super Mario Bros. Wii (2009) spun Mario up into the sky.",
+	"hat:party": "RuneScape's party hats came out of Christmas crackers in 2001 and became the rarest items in the game.",
+	"hat:halo": "Halo: Combat Evolved (2001) is named after the giant ring-shaped world it takes place on.",
+	"outfit:12": "Space Channel 5 (1999) was a whole game about dance-offs against aliens, in very shiny outfits.",
+	"outfit:13": "Pokémon Red and Blue's glitch Pokémon, MissingNo., could multiply the sixth item in your bag.",
 }
 
 const GUNS := {
@@ -62,6 +79,8 @@ const GUNS := {
 	"gun:gold": "legendary",
 	"gun:subject": "epic", "gun:gravity": "epic", "gun:physbeam": "epic", "gun:blockblaster": "rare",
 	"gun:boomstick": "legendary", "gun:plumber": "rare", "gun:speedblue": "rare", "gun:lightgun": "rare",
+	"gun:vault": "rare", "gun:plasma": "epic", "gun:bfg": "legendary", "gun:umbrella": "rare", "gun:splat": "epic",
+	"gun:keyblade": "epic", "gun:buster": "rare", "gun:celshade": "rare", "gun:lancer": "epic", "gun:hylian": "rare",
 }
 
 ## Card skins not listed here are common (retro decks default to rare).
@@ -102,9 +121,17 @@ static func rarity(part: String, value) -> String:
 	return str(pool().get(key(part, value), "common"))
 
 
-## Do you have it? Free things (not in the machine) always.
+## Do you have it? Free things (not in the machine, not secret) always.
+## Secret things only come from a code typed into the computer.
 static func owns(part: String, value, owned: Dictionary) -> bool:
-	return not in_machine(part, value) or owned.has(key(part, value))
+	var k := key(part, value)
+	if Secrets.is_secret(k):
+		return owned.has(k)
+	return not in_machine(part, value) or owned.has(k)
+
+
+static func is_secret(part: String, value) -> bool:
+	return Secrets.is_secret(key(part, value))
 
 
 ## What's left to win.
@@ -178,6 +205,8 @@ static func prize_name(k: String) -> String:
 			return "%s OUTFIT" % Looks.OUTFITS[int(pv[1])]["name"]
 		"eyes":
 			return "GLOWING EYES"
+		"egg":
+			return "EASTER EGG: %s" % str(Secrets.EGGS.get(pv[1], {}).get("name", str(pv[1]).to_upper()))
 	return k
 
 

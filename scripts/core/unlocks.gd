@@ -93,6 +93,8 @@ static func is_unlocked(part: String, value, owned: Dictionary) -> bool:
 static func need_text(part: String, value, owned: Dictionary) -> String:
 	if is_unlocked(part, value, owned):
 		return ""
+	if Gacha.is_secret(part, value):
+		return "SECRET CODE"
 	return "GACHA · %s" % Gacha.RARITY_NAMES[Gacha.rarity(part, value)]
 
 

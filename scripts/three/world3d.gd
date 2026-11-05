@@ -1124,10 +1124,34 @@ func sync(s: Dictionary) -> void:
 		if not seen.has(id):
 			_cards[id].queue_free()
 			_cards.erase(id)
+	_apply_item_pick()
 
 	_sync_gun(game, viewer)
 	_sync_spots(game, viewer)
 	_sync_dealer_chip(game, viewer)
+
+
+## Choosing a card for an item (Joker Paint, Sticky Fingers...): the cards
+## you can choose glow and a tap on one picks it ("item_pick", its card id).
+var _item_pick := {}
+
+
+func set_item_pick(ids: Array) -> void:
+	_item_pick = {}
+	for id in ids:
+		_item_pick[id] = true
+	if not _last.is_empty():
+		sync(_last) # put every other card back to normal
+	else:
+		_apply_item_pick()
+
+
+func _apply_item_pick() -> void:
+	for id in _item_pick:
+		if _cards.has(id):
+			var c: Card3D = _cards[id]
+			c.set_pickable("item_pick", id)
+			c.set_outline(_outline_mats["gold"])
 
 
 ## Hearts and Spades: the trick in the middle, each card in front of whoever
