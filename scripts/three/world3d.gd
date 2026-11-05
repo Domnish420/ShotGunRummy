@@ -1926,7 +1926,7 @@ func _build_shotgun() -> Node3D:
 	g.add_child(_grip_r)
 	_grip_l = Node3D.new()
 	_grip_l.name = "GripL"
-	_grip_l.position = Vector3(0.0, -0.07, -0.2)
+	_grip_l.position = Vector3(0.0, -0.06, -0.06)
 	g.add_child(_grip_l)
 	var flash := OmniLight3D.new()
 	flash.name = "Flash"
@@ -1972,18 +1972,25 @@ func _arm_ik(f: Dictionary) -> TwoBoneIK3D:
 	f["ik"] = null
 	var node: Node3D = f["node"]
 	var sk: Skeleton3D = node.find_child("Skeleton3D", true, false)
-	if sk == null or sk.find_bone("upperarm.r") < 0 or sk.find_bone("hand.l") < 0:
+	if sk == null or sk.find_bone("upperarm.r") < 0 or sk.find_bone("wrist.l") < 0:
 		return null
 	var ik := TwoBoneIK3D.new()
 	ik.setting_count = 2
+	ik.mutable_bone_axes = true
 	sk.add_child(ik)
-	var arms := [["r", _grip_r], ["l", _grip_l]]
+	# the elbows bend down and back, out to each side (a pole for each arm)
+	var arms := [["r", _grip_r, Vector3(-0.45, -0.1, 0.35)], ["l", _grip_l, Vector3(0.45, -0.1, 0.35)]]
 	for i in range(2):
 		var side: String = arms[i][0]
-		ik.set_root_bone_name(i, "upperarm." + side)
-		ik.set_middle_bone_name(i, "lowerarm." + side)
-		ik.set_end_bone_name(i, "hand." + side)
+		var pole := Node3D.new()
+		pole.position = Vector3(0, 0.35, 0) + arms[i][2]
+		node.add_child(pole)
+		# by index: the names don't resolve on a fresh modifier
+		ik.set_root_bone(i, sk.find_bone("upperarm." + side))
+		ik.set_middle_bone(i, sk.find_bone("lowerarm." + side))
+		ik.set_end_bone(i, sk.find_bone("wrist." + side)) # upperarm > lowerarm > wrist (> hand)
 		ik.set_target_node(i, ik.get_path_to(arms[i][1]))
+		ik.set_pole_node(i, ik.get_path_to(pole))
 	ik.influence = 0.0
 	f["ik"] = ik
 	return ik
@@ -2018,7 +2025,11 @@ func _holder_pose(holder: int, aim: Vector3) -> Transform3D:
 	if holder == _viewer:
 		origin = _cam_home * Vector3(0.15, -0.25, -0.5)
 	else:
-		origin = seat_position(holder, _viewer, n) * 0.82 + Vector3(0, 0.5, 0)
+		# in their hands: the stock's wrist at their chest, a little out in front
+		var seat := seat_position(holder, _viewer, n)
+		var chest := _head_of(holder) + Vector3(0, -0.2, 0) - seat.normalized() * 0.12
+		var b := Basis.looking_at(aim - chest, Vector3.UP)
+		return Transform3D(b, chest - b * _grip_r.position)
 	return Transform3D(Basis.looking_at(aim - origin, Vector3.UP), origin)
 
 
