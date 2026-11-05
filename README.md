@@ -78,8 +78,8 @@ straight flush in Poker. AI players with the gun take turns: each shoots
 whoever's been shot the least so far. (A Blackjack wins an item instead, and
 in Snap every player's first wrong snap adds a shell, up to one per player.)
 
-Once the gun's empty, the next round deals itself after 3 seconds (or press
-NEXT ROUND straight away).
+Once the gun's empty, the next round deals itself after 3 seconds, counted
+down big at the top of the screen (or press NEXT ROUND straight away).
 
 ### At the table
 
@@ -88,7 +88,9 @@ many cards you hold, and your **item cards are real cards in your hand**, at
 the right-hand end: tap one to pick it, then USE ITEM.
 
 **Items that need a card** (Joker Paint, Sticky Fingers, ...) don't open a
-menu: the cards you can pick glow, and you tap one. Tap the item again, or
+menu: the cards you can pick glow, and you tap one. **Items that pick a
+player** (Handcuffs, Spotlight, ...) work like the shotgun: everyone you can
+pick gets a red marker, and you tap them. Tap the item again, or
 CANCEL, to put it away.
 
 **Zoom** in on any part of the table to read it: pinch with two fingers on a

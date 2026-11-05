@@ -710,9 +710,11 @@ func show_menu() -> void:
 	_computer_open = false
 	_hide_settings()
 	_item_pick = {}
+	_item_pick_players = []
 	_hide_pick_bar()
 	if world != null:
 		world._item_pick = {}
+		world.mark_targets([])
 	_humans_out = false
 	session.leave()
 	session.stop_scan()
@@ -3780,7 +3782,7 @@ func _on_table_input(event: InputEvent) -> void:
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
-	if _item_pick_tap(hit):
+	if _item_pick_tap(hit, _to_view(event.position)):
 		return
 	if mode_ui != null:
 		mode_ui.on_pick(hit)
@@ -3826,9 +3828,11 @@ func refresh_later() -> void:
 func _refresh() -> void:
 	if not _item_pick.is_empty() and (game == null or not _my_turn() or game.turn != _item_pick_seat or overlay_layer.get_child_count() > 0):
 		_item_pick = {}
+		_item_pick_players = []
 		_hide_pick_bar()
 		if world != null:
 			world._item_pick = {}
+			world.mark_targets([])
 	_refresh_body()
 	_tint_actions()
 
@@ -4281,15 +4285,21 @@ func _show_reveal(title: String, card: Dictionary, text: String, then: Callable)
 	box.add_child(_button("CONTINUE", _closing(then)))
 
 
+## An item that picks a player (Handcuffs, Spotlight...): no menu, like the
+## shotgun: everyone you can pick gets a marker, and you tap them.
 func _show_target_picker(item: Dictionary) -> void:
+	var targets: Array = game.item_targets(_me(), item["item"])
+	if targets.is_empty():
+		message = "Nobody to use it on."
+		_refresh()
+		return
+	_item_pick = item
+	_item_pick_seat = game.turn
+	_item_pick_players = targets
+	world.mark_targets(targets)
 	var def := Items.def(item["item"])
-	var box := _open_overlay(0.94, false, "target")
-	box.add_child(_title(str(def["name"]).to_upper(), Palette.PURPLE.lightened(0.3)))
-	box.add_child(_label(def["text"], 26, Palette.INK, true))
-	box.add_child(_label("WHO?", 26, Palette.DIM, true))
-	for target in game.item_targets(_me(), item["item"]):
-		box.add_child(_button(_name(target), _closing(_use_item.bind(item, target))))
-	box.add_child(_button("CANCEL", _closing(_after_action)))
+	_show_pick_bar("%s: TAP A PLAYER" % str(def["name"]).to_upper())
+	_sound("open")
 
 
 ## Pick a card for Sticky Fingers (from a meld), Joker Paint (from your
@@ -4297,6 +4307,7 @@ func _show_target_picker(item: Dictionary) -> void:
 ## you can pick glow; tap USE ITEM again (or CANCEL) to put the item away.
 var _item_pick := {} # the item being used while you pick its card
 var _item_pick_seat := -1 # whose turn it was
+var _item_pick_players: Array = [] # an item that picks a player: who you can tap
 var _pick_bar: Control
 
 
@@ -4346,16 +4357,39 @@ func _cancel_item_pick() -> void:
 	if _item_pick.is_empty():
 		return
 	_item_pick = {}
+	_item_pick_players = []
+	world.mark_targets([])
 	_hide_pick_bar()
 	world.set_item_pick([])
 	_refresh()
 
 
+## Use the item being picked on this player, if they're one you can pick.
+func _item_pick_player(seat: int) -> bool:
+	if _item_pick.is_empty() or not _item_pick_players.has(seat):
+		return false
+	var item := _item_pick
+	_item_pick = {}
+	_item_pick_players = []
+	_hide_pick_bar()
+	world.mark_targets([])
+	_use_item(item, seat)
+	return true
+
+
 ## A tap while picking: a glowing card uses the item on it; tapping the item
 ## again puts it away. Returns true if the tap was used.
-func _item_pick_tap(hit: Dictionary) -> bool:
+func _item_pick_tap(hit: Dictionary, at := Vector2(-1, -1)) -> bool:
 	if _item_pick.is_empty():
 		return false
+	if not _item_pick_players.is_empty():
+		# picking a player: tap them (or the item again to put it away)
+		if hit.get("kind", "") == "item":
+			_cancel_item_pick()
+			return true
+		if at.x >= 0.0:
+			_item_pick_player(world.pick_seat(at))
+		return true
 	var kind: String = hit.get("kind", "")
 	if kind == "item_pick":
 		var item := _item_pick
@@ -4430,9 +4464,16 @@ func _add_next_round(box: VBoxContainer, auto: bool = false) -> void:
 		return
 	if not _online() or session.is_host():
 		if auto:
-			# the gun's empty: the next round deals itself in a few seconds
-			var count := _label("", 26, FLOAT_YELLOW, true)
-			box.add_child(count)
+			# the gun's empty: the next round deals itself in a few seconds,
+			# counted down big at the top of the screen
+			var count := _label("", 64, FLOAT_YELLOW, true)
+			count.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+			count.add_theme_constant_override("outline_size", 16)
+			count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			overlay_layer.add_child(count)
+			count.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+			count.offset_top = get_viewport_rect().size.y * 0.13
+			count.offset_bottom = count.offset_top + 80
 			_auto_next_round(count)
 		box.add_child(_button("NEXT ROUND", _next_round))
 	else:
@@ -4453,7 +4494,7 @@ func _auto_next_round(label: Label) -> void:
 	for left in range(AUTO_ROUND_SECONDS, 0, -1):
 		if not is_instance_valid(label):
 			return
-		label.text = "NEXT ROUND IN %d..." % left
+		label.text = "NEXT ROUND IN %d" % left
 		await get_tree().create_timer(1.0).timeout
 		if token != _auto_round_token or game == null or game.round_num != round_was:
 			return

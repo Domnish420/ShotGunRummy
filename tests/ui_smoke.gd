@@ -142,7 +142,12 @@ func _run() -> void:
 						await _frames()
 						await _shot("03_item_selected")
 						main._use_selected_item()
-						if not main._item_pick.is_empty():
+						if not main._item_pick_players.is_empty():
+							# no menu: tap the player
+							await _frames()
+							await _shot("03c_item_player")
+							main._item_pick_player(main._item_pick_players[0])
+						elif not main._item_pick.is_empty():
 							# no menu: the cards you can pick glow; tap one
 							await _frames()
 							await _shot("03c_item_pick")
