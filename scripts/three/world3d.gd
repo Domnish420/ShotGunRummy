@@ -100,6 +100,7 @@ const STATIONS := {
 	"bar": {"sign": Vector3(-2.45, 0.75, -0.85), "spot": Vector3(-2.45, 0.25, -0.85), "name": "BAR"},
 	"gacha": {"sign": Vector3(2.35, 0.95, -1.7), "spot": Vector3(2.35, 0.1, -1.7), "name": "GACHA"},
 	"door": {"sign": Vector3(0.9, 1.75, -3.0), "spot": Vector3(0.9, 0.25, -3.05), "name": "EXIT"},
+	"computer": {"sign": Vector3(-2.6, 0.75, 1.75), "spot": Vector3(-2.65, 0.15, 1.75), "name": "COMPUTER"},
 }
 var _gacha_light: SpotLight3D
 const PREVIEW_CAM := Vector3(-1.75, 1.15, 2.0) # from the spot: the gap beside the table
@@ -124,6 +125,7 @@ func _ready() -> void:
 	gacha_machine.burst.connect(func(at: Vector3, color: Color, count: int) -> void:
 		_puffs(at, color, count, 0.018, 0.3)
 		_pulse(at, color, 2.5))
+	_build_computer()
 	_cards_root = Node3D.new()
 	add_child(_cards_root)
 	_labels_root = Node3D.new()
@@ -468,8 +470,21 @@ func _flicker() -> void:
 	t.tween_interval(3.0)
 
 
+## Easter eggs (secrets.gd), switched by main.gd.
+var egg_disco := false: # the lamp cycles through the colours
+	set(v):
+		egg_disco = v
+		if not v and lamp != null:
+			lamp.light_color = Color(1.0, 0.85, 0.62)
+var egg_confetti := false # shotgun blasts burst into confetti
+var _disco_t := 0.0
+
+
 func _process(delta: float) -> void:
 	_spin_carousel(delta)
+	if egg_disco and lamp != null:
+		_disco_t += delta
+		lamp.light_color = Color.from_hsv(fmod(_disco_t * 0.35, 1.0), 0.75, 1.0)
 	if not _preview.is_empty():
 		_preview["node"].rotate_y(delta * 0.5)
 		return
@@ -669,6 +684,136 @@ func focus_station(id: String) -> void:
 		"door":
 			camera.fov = 56.0 if not _landscape else 48.0
 			_move_camera(Transform3D(Basis(), Vector3(0.75, 0.45, -1.0)).looking_at(Vector3(0.9, 0.3, -3.1), Vector3.UP), 0.7)
+		"computer":
+			# close up on the screen, with it in the top half (the stick's below)
+			camera.fov = 50.0 if not _landscape else 44.0
+			var scr := COMPUTER_POS + Vector3(0.0, 0.99, 0.0)
+			_move_camera(Transform3D(Basis(), scr + Vector3(0.95, -0.05, 0.0)).looking_at(scr + Vector3(0, -0.22, 0), Vector3.UP), 0.7)
+
+
+# ================================================================ the computer
+
+## An old beige computer on a desk in the front left corner, with an arcade
+## stick plugged in. It boots once you've played every game (secrets.gd);
+## codes typed on the stick unlock secret skins and easter eggs.
+const COMPUTER_POS := Vector3(-2.75, FLOOR_Y, 1.75)
+var _computer: Node3D
+var _screen_text: Label3D
+var _screen_mat: StandardMaterial3D
+var _stick: Node3D # the joystick, tilts as you press the arrows
+var _arcade_buttons := {} # "A"/"B" -> the button cap
+
+
+func _build_computer() -> void:
+	_computer = Node3D.new()
+	_computer.name = "Computer"
+	_computer.position = COMPUTER_POS
+	_computer.rotation.y = PI / 2.0 # faces into the room (+X)
+	add_child(_computer)
+	var wood := Props.tex_mat("wood", Color(0.42, 0.3, 0.2), 2.0)
+	var top_y := 0.74
+	Props.box(_computer, Vector3(1.1, 0.05, 0.6), wood, Vector3(0, top_y, 0))
+	for x in [-0.5, 0.5]:
+		for z in [-0.25, 0.25]:
+			Props.box(_computer, Vector3(0.05, top_y, 0.05), wood, Vector3(x, top_y * 0.5, z))
+	var beige := Props.plain(Color(0.82, 0.78, 0.66), 0.6)
+	# the CRT: a deep beige box, a bezel and the glass
+	Props.box(_computer, Vector3(0.46, 0.4, 0.42), beige, Vector3(0, top_y + 0.24, -0.08))
+	Props.box(_computer, Vector3(0.3, 0.3, 0.2), beige, Vector3(0, top_y + 0.22, -0.34))
+	Props.box(_computer, Vector3(0.2, 0.04, 0.2), beige, Vector3(0, top_y + 0.045, -0.08))
+	_screen_mat = Props.glow(Color(0.05, 0.12, 0.06), 1.0)
+	var glass := Props.box(_computer, Vector3(0.38, 0.3, 0.01), _screen_mat, Vector3(0, top_y + 0.25, 0.135))
+	glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_screen_text = Label3D.new()
+	_screen_text.font = _font
+	_screen_text.font_size = 34
+	_screen_text.pixel_size = 0.0011
+	_screen_text.width = 330.0
+	_screen_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_screen_text.modulate = Color(0.45, 1.0, 0.5)
+	_screen_text.outline_size = 0
+	_screen_text.shaded = false
+	_screen_text.position = Vector3(0, top_y + 0.25, 0.142)
+	_computer.add_child(_screen_text)
+	var led := Props.ball(_computer, 0.008, 6, Props.glow(Color(0.3, 1.0, 0.3), 3.0), Vector3(0.18, top_y + 0.07, 0.135))
+	led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# a keyboard
+	Props.box(_computer, Vector3(0.44, 0.03, 0.15), beige, Vector3(-0.05, top_y + 0.04, 0.2))
+	# the arcade stick: a black box, a ball-top stick, A and B
+	var black := Props.plain(Color(0.08, 0.08, 0.09), 0.5)
+	Props.box(_computer, Vector3(0.36, 0.06, 0.16), black, Vector3(0.36, top_y + 0.055, 0.17))
+	_stick = Node3D.new()
+	_stick.position = Vector3(0.26, top_y + 0.085, 0.17)
+	_computer.add_child(_stick)
+	Props.cyl(_stick, 0.008, 0.008, 0.08, 6, Props.plain(Color(0.7, 0.7, 0.72), 0.3, 0.8), Vector3(0, 0.04, 0))
+	Props.ball(_stick, 0.024, 8, Props.plain(Color(0.9, 0.1, 0.1), 0.3), Vector3(0, 0.085, 0))
+	for b in [["B", Vector3(0.38, 0, 0.17), Color(0.2, 0.4, 1.0)], ["A", Vector3(0.46, 0, 0.17), Color(0.95, 0.15, 0.15)]]:
+		var cap := Props.cyl(_computer, 0.022, 0.022, 0.02, 10, Props.plain(b[2], 0.3), b[1] + Vector3(0, top_y + 0.09, 0))
+		_arcade_buttons[b[0]] = cap
+	# a little lamp of its own so you can see it
+	var glow_light := OmniLight3D.new()
+	glow_light.position = Vector3(0, top_y + 0.3, 0.45)
+	glow_light.light_color = Color(0.8, 0.95, 0.8)
+	glow_light.light_energy = 0.18
+	glow_light.omni_range = 1.2
+	_computer.add_child(glow_light)
+	computer_screen("", false)
+
+
+## What the computer's screen says. Off (dark, a padlock) when it's locked.
+func computer_screen(text: String, on: bool = true) -> void:
+	if _screen_text == null:
+		return
+	_screen_mat.emission = Color(0.05, 0.14, 0.07) if on else Color(0.02, 0.02, 0.02)
+	_screen_mat.albedo_color = _screen_mat.emission
+	_screen_text.modulate = Color(0.45, 1.0, 0.5) if on else Color(1.0, 0.35, 0.3)
+	_screen_text.text = text if on else "LOCKED"
+
+
+## PARTY POPPERS: a burst of coloured paper that flutters down.
+func _confetti(at: Vector3) -> void:
+	var colors := [Color(1.0, 0.25, 0.3), Color(1.0, 0.85, 0.2), Color(0.3, 0.8, 1.0), Color(0.4, 1.0, 0.45), Color(1.0, 0.45, 0.95), Color(1.0, 0.6, 0.15)]
+	for i in range(40):
+		var bit := BoxMesh.new()
+		bit.size = Vector3(0.018, 0.002, 0.012)
+		var mi := _mesh(bit, _glow(colors[i % colors.size()], 0.6), at)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.rotation = Vector3(randf() * TAU, randf() * TAU, randf() * TAU)
+		add_child(mi)
+		var out := Vector3(randf_range(-1, 1), randf_range(0.3, 1.2), randf_range(-1, 1)).normalized() * randf_range(0.2, 0.45)
+		var land := at + Vector3(out.x * 1.6, -0.25 - randf() * 0.2, out.z * 1.6)
+		var t := mi.create_tween()
+		t.tween_property(mi, "position", at + out, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(mi, "rotation", mi.rotation + Vector3(6, 4, 2), 1.8)
+		t.tween_property(mi, "position", land, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		t.tween_callback(mi.queue_free)
+
+
+## A code went in: sparks fly off the screen.
+func burst_at_computer() -> void:
+	if _computer == null:
+		return
+	var at := _computer.to_global(Vector3(0, 1.0, 0.2))
+	for col in [Color(0.4, 1.0, 0.5), Color(1.0, 0.85, 0.3), Color(1.0, 0.35, 0.8)]:
+		_puffs(at, col, 6, 0.012, 0.3)
+	_pulse(at, Color(0.5, 1.0, 0.55), 3.0, 0.6)
+
+
+## The stick and buttons move when you press them.
+func computer_press(button: String) -> void:
+	if _stick == null:
+		return
+	if _arcade_buttons.has(button):
+		var cap: Node3D = _arcade_buttons[button]
+		var up := cap.position
+		var t := cap.create_tween()
+		t.tween_property(cap, "position", up - Vector3(0, 0.012, 0), 0.04)
+		t.tween_property(cap, "position", up, 0.1)
+		return
+	var tilt: Vector3 = {"U": Vector3(-0.45, 0, 0), "D": Vector3(0.45, 0, 0), "L": Vector3(0, 0, 0.45), "R": Vector3(0, 0, -0.45)}.get(button, Vector3.ZERO)
+	var t2 := _stick.create_tween()
+	t2.tween_property(_stick, "rotation", tilt, 0.05)
+	t2.tween_property(_stick, "rotation", Vector3.ZERO, 0.15)
 
 
 ## The door swings open (or shut).
@@ -896,12 +1041,20 @@ func _sync_figures(game, viewer: int) -> void:
 func _card(id: String, card_size: Vector2, spawn: Transform3D) -> Card3D:
 	if _cards.has(id):
 		var known: Card3D = _cards[id]
-		known.resize(card_size) # a card moving from the table to a hand changes size
+		var was: Vector2 = known._size
+		if was != card_size and was.x > 0.0:
+			# a card moving from the table to a hand changes size: it keeps
+			# looking the same size where it is and grows (or shrinks) on the way
+			known.resize(card_size)
+			var k := was.x / card_size.x
+			known.transform = Transform3D(known.transform.basis.orthonormalized().scaled(Vector3.ONE * k), known.transform.origin)
 		return known
 	var c := Card3D.new()
 	_cards_root.add_child(c)
 	c.setup(card_size, _back_mat)
-	c.transform = spawn
+	# fresh cards come off the deck (table-sized) and grow into whatever they become
+	var r := TABLE_CARD.x / card_size.x
+	c.transform = Transform3D(spawn.basis.orthonormalized().scaled(Vector3.ONE * r), spawn.origin) if absf(r - 1.0) > 0.01 else spawn
 	_cards[id] = c
 	return c
 
@@ -920,13 +1073,17 @@ func _flat(pos: Vector3, yaw: float, face_up: bool) -> Transform3D:
 ## A face-up card leaning back towards you. Cards in a pile all lean the same
 ## way: `spin` turns a card round in its own plane (a messy pile, a fan) so it
 ## never cuts through the card under it, and `layer` lifts it clear of them.
-const LAYER_GAP := 0.0035
+const LAYER_GAP := 0.004
 
 
 func _leaned(pos: Vector3, yaw: float, spin: float, layer: int) -> Transform3D:
 	var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -PI / 2.0 + FACE_LEAN) * Basis(Vector3.BACK, spin)
-	# lift it so its lowest corner still rests on the table, however it's turned
-	var reach := absf(cos(spin)) * TABLE_CARD.y * 0.5 + absf(sin(spin)) * TABLE_CARD.x * 0.5
+	# lift it so its lowest corner clears the table, however it's turned. Every
+	# card gets the lift of the most-turned one in a messy pile (spin 0.3), so
+	# piles stack by their layers alone: an older card turned further can't
+	# poke up through a newer one.
+	var turn := maxf(absf(spin), 0.3)
+	var reach := absf(cos(turn)) * TABLE_CARD.y * 0.5 + absf(sin(turn)) * TABLE_CARD.x * 0.5
 	var lift := Vector3(0, sin(FACE_LEAN) * reach, 0)
 	return Transform3D(b, pos + lift + b.z * (LAYER_GAP * layer))
 
@@ -1023,6 +1180,8 @@ func sync(s: Dictionary) -> void:
 	elif game.kind == "president":
 		_president_pile(seen, game, stock_xf)
 		pile = []
+	elif game.kind == "blackjack":
+		pile = [] # no discard pile in blackjack: spent cards go out of play
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
 		var c: Dictionary = pile[i]
@@ -1884,6 +2043,8 @@ func _bang(target: int) -> void:
 	var t := create_tween()
 	t.tween_property(flash, "light_energy", 0.0, 0.25)
 	t.parallel().tween_callback(func() -> void: puff.visible = false).set_delay(0.06)
+	if egg_confetti:
+		_confetti(_head_of(target))
 	if target == _viewer:
 		shake(0.06)
 	elif _figures.has(target):

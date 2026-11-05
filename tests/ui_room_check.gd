@@ -43,10 +43,14 @@ func _initialize() -> void:
 	w._yaw = 0.0
 	await _frames(40)
 	# each station: aim at it, tap its sign, and you go there
-	var aims := {"table": 0.0, "door": -0.2, "bar": 0.9, "gacha": -0.75, "wardrobe": -1.45}
-	var expect := {"table": "table", "door": "door", "bar": "bar", "gacha": "gacha", "wardrobe": "wardrobe"}
+	var aims := {"table": 0.0, "door": -0.2, "bar": 0.9, "gacha": -0.75, "wardrobe": -1.45, "computer": 1.34}
+	var expect := {"table": "table", "door": "door", "bar": "bar", "gacha": "gacha", "wardrobe": "wardrobe", "computer": "computer"}
 	for k in aims:
 		w._yaw = aims[k]
+		w._view_yaw = aims[k] # no slow turn round: straight there
+		w._room_hold = 0.0
+		if w._cam_tween != null and w._cam_tween.is_valid():
+			w._cam_tween.kill() # the walk back from the last station
 		w._pitch = -0.1
 		await _frames(40)
 		var sign_at: Vector2 = w.camera.unproject_position(w.STATIONS[k]["sign"])

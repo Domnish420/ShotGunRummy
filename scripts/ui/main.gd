@@ -74,7 +74,8 @@ var stats := {} # your stats, for unlocks (see unlocks.gd)
 var tried_kinds := {} # kind -> true: cartridges you've finished a match of
 var card_skin := "classic" # how your cards look (see card_skins.gd)
 var gun_skin := "standard" # how the shotgun looks in your hands (see gun_skins.gd)
-var owned := {} # gacha prizes you've won (see gacha.gd)
+var owned := {} # gacha prizes you've won (see gacha.gd), and codes found (secrets.gd)
+var eggs_on := {} # easter egg -> on/off (only eggs you've found count)
 var coins := 0 # gacha coins: one for every round you win, a bonus for the match
 var _last_shooter := -1 # who fired the last shell, for knockouts
 var tutorial_offered := false
@@ -179,6 +180,7 @@ func _ready() -> void:
 	theme = Palette.make_theme()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_load_settings()
+	_apply_eggs.call_deferred() # once the room's built
 
 	# the 3D table renders small, then is scaled up with crisp pixels and the
 	# gritty post-processing shader
@@ -515,6 +517,7 @@ func _load_settings() -> void:
 		custom_looks.append(Looks.clean(c))
 	stats = Unlocks.clean_stats(cfg.get_value("progress", "stats", {}))
 	tried_kinds = cfg.get_value("progress", "tried", {})
+	eggs_on = cfg.get_value("progress", "eggs_on", {})
 	if cfg.has_section_key("progress", "owned"):
 		owned = cfg.get_value("progress", "owned", {})
 		coins = maxi(0, int(cfg.get_value("progress", "coins", 0)))
@@ -554,6 +557,7 @@ func _save_settings() -> void:
 	cfg.set_value("profile", "cards", card_skin)
 	cfg.set_value("profile", "gun", gun_skin)
 	cfg.set_value("progress", "owned", owned)
+	cfg.set_value("progress", "eggs_on", eggs_on)
 	cfg.set_value("progress", "coins", coins)
 	cfg.save(SETTINGS_PATH)
 
@@ -689,6 +693,7 @@ func _change_name() -> void:
 
 
 func show_menu() -> void:
+	_computer_open = false
 	_hide_settings()
 	_item_pick = {}
 	_hide_pick_bar()
@@ -798,6 +803,8 @@ func _go_station(id: String) -> void:
 			show_gacha()
 		"door":
 			show_door()
+		"computer":
+			show_computer()
 
 
 ## A dark panel along the bottom (the room shows above it). Returns its box.
@@ -863,6 +870,206 @@ func show_bar() -> void:
 		box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 18, Palette.DIM, true))
 	var back := _panel_button(box, "BACK", show_menu, 24)
 	Palette.accent(back, Palette.DIM)
+
+
+# ================================================================ the computer
+
+const Secrets = preload("res://scripts/core/secrets.gd")
+var _code_input := "" # the presses so far (U D L R A B)
+var _code_label: Label
+var _code_note: Label
+var _computer_open := false
+var _computer_flash := "" # the last thing the screen said, kept till the next press
+
+
+## The computer in the corner: once every game's been played it boots, and
+## its arcade stick takes cheat codes for secret skins and easter eggs.
+func show_computer() -> void:
+	_keep_menu_name()
+	world.focus_station("computer")
+	var box := _station_panel("THE COMPUTER")
+	_computer_open = false
+	var kinds := Games.kinds()
+	if not Secrets.computer_unlocked(tried_kinds, kinds):
+		world.computer_screen("", false)
+		var missing := Secrets.missing_games(tried_kinds, kinds)
+		box.add_child(_label("It won't boot. Finish a match of every game at the table to power it up.", 26, Palette.INK, true))
+		box.add_child(_label("GAMES PLAYED: %d/%d" % [kinds.size() - missing.size(), kinds.size()], 30, FLOAT_YELLOW, true))
+		box.add_child(_label("Still to play: " + ", ".join(missing.map(func(k): return Games.label(k))), 22, Palette.DIM, true))
+		var back0 := _panel_button(box, "BACK", show_menu, 30)
+		Palette.accent(back0, Palette.DIM)
+		return
+	_computer_open = true
+	_code_input = ""
+	_code_label = _label("", 40, Color(0.45, 1.0, 0.5), true)
+	box.add_child(_code_label)
+	_code_note = _label("", 22, Palette.INK, true)
+	box.add_child(_code_note)
+	# the stick: a d-pad on the left, B and A on the right
+	var pad := HBoxContainer.new()
+	pad.alignment = BoxContainer.ALIGNMENT_CENTER
+	pad.add_theme_constant_override("separation", 30)
+	box.add_child(pad)
+	var dpad := GridContainer.new()
+	dpad.columns = 3
+	dpad.add_theme_constant_override("h_separation", 2)
+	dpad.add_theme_constant_override("v_separation", 0)
+	pad.add_child(dpad)
+	for cell in ["", "U", "", "L", "", "R", "", "D", ""]:
+		if cell == "":
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(64, 60)
+			dpad.add_child(gap)
+		else:
+			var arrow: String = {"U": "▲", "D": "▼", "L": "◀", "R": "▶"}[cell]
+			var b := _bubble(arrow, _code_press.bind(cell), Palette.INK, 56)
+			b.custom_minimum_size = Vector2(64, 60)
+			dpad.add_child(b)
+	for ab in [["B", Color(0.4, 0.6, 1.0)], ["A", Color(1.0, 0.35, 0.3)]]:
+		var b2 := _bubble(ab[0], _code_press.bind(ab[0]), ab[1], 84)
+		b2.custom_minimum_size = Vector2(80, 120)
+		pad.add_child(b2)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 26)
+	box.add_child(row)
+	row.add_child(_bubble("EGGS", show_eggs, Palette.GOLD, 34))
+	row.add_child(_bubble("HINTS", show_code_hints, Color(0.55, 0.85, 1.0), 34))
+	row.add_child(_bubble("BACK", show_menu, Palette.DIM, 34))
+	_computer_flash = ""
+	_update_code_screen()
+
+
+func _update_code_screen() -> void:
+	var found := Secrets.found(owned).size()
+	var typed := Secrets.pretty(_code_input) if _code_input != "" else ""
+	if _code_label != null and is_instance_valid(_code_label):
+		_code_label.text = (typed + " _") if typed != "" else "ENTER A CODE"
+	if _code_note != null and is_instance_valid(_code_note):
+		_code_note.text = _computer_flash if _computer_flash != "" else "CODES FOUND: %d/%d" % [found, Secrets.CODES.size()]
+	var screen_text := "SHOTGUN OS 1.0\nCODES FOUND %d/%d\n\n> %s_" % [found, Secrets.CODES.size(), typed]
+	if _computer_flash != "":
+		screen_text += "\n\n" + _computer_flash.get_slice("\n", 0) # the headline; the rest is below
+	world.computer_screen(screen_text)
+
+
+## One press on the stick.
+func _code_press(button: String) -> void:
+	if not _computer_open:
+		return
+	world.computer_press(button)
+	_sound("type")
+	_computer_flash = ""
+	_code_input = (_code_input + button).right(Secrets.MAX_INPUT)
+	var code := Secrets.match_input(_code_input)
+	if not code.is_empty():
+		_code_input = ""
+		_enter_code(code)
+		return
+	_update_code_screen()
+
+
+func _enter_code(code: Dictionary) -> void:
+	var was_found := owned.has("code:" + code["id"])
+	var fresh := Secrets.redeem(code, owned)
+	for p in fresh:
+		if str(p).begins_with("egg:"):
+			eggs_on[str(p).trim_prefix("egg:")] = true # a new egg starts switched on
+	_save_settings()
+	_apply_eggs()
+	_sound("prize_legendary" if not was_found else "ding")
+	var lines := ["CODE ACCEPTED: %s" % code["name"], str(code["message"])]
+	if was_found:
+		lines.append("(You found this one already.)")
+	for p in fresh:
+		lines.append("UNLOCKED: " + Gacha.prize_name(p))
+	_computer_flash = "\n".join(lines)
+	_update_code_screen()
+	world.burst_at_computer()
+
+
+## The easter eggs you've found: switch each on or off.
+func show_eggs() -> void:
+	_computer_open = false
+	var box := _station_panel("EASTER EGGS")
+	for id in Secrets.EGGS:
+		var e: Dictionary = Secrets.EGGS[id]
+		if Secrets.egg_found(id, owned):
+			var on := bool(eggs_on.get(id, false))
+			var b := _bubble("%s: %s" % [e["name"], "ON" if on else "OFF"], _toggle_egg.bind(id), Palette.GOLD if on else Palette.DIM, 34)
+			box.add_child(b)
+			box.add_child(_label(e["text"], 20, Palette.INK, true))
+		else:
+			box.add_child(_label("??? (find its code)", 26, Palette.DIM, true))
+	box.add_child(_bubble("BACK", show_computer, Palette.DIM, 34))
+
+
+func _toggle_egg(id: String) -> void:
+	eggs_on[id] = not bool(eggs_on.get(id, false))
+	_save_settings()
+	_apply_eggs()
+	show_eggs()
+
+
+var _egg_filter: ColorRect
+
+
+## Switches the easter eggs you've found on or off, as eggs_on says.
+func egg_on(id: String) -> bool:
+	return Secrets.egg_found(id, owned) and bool(eggs_on.get(id, false))
+
+
+func _apply_eggs() -> void:
+	if world != null:
+		world.egg_disco = egg_on("disco")
+		world.egg_confetti = egg_on("confetti")
+	var mode := 1 if egg_on("pocket") else (2 if egg_on("noir") else 0)
+	if mode == 0:
+		if _egg_filter != null:
+			_egg_filter.visible = false
+		return
+	if _egg_filter == null:
+		_egg_filter = ColorRect.new()
+		_egg_filter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var m := ShaderMaterial.new()
+		m.shader = load("res://shaders/egg_filter.gdshader")
+		_egg_filter.material = m
+		add_child(_full(_egg_filter))
+	move_child(_egg_filter, get_child_count() - 1) # over everything
+	_egg_filter.visible = true
+	(_egg_filter.material as ShaderMaterial).set_shader_parameter("mode", mode)
+
+
+## The codes: found ones in full, the rest as riddles.
+func show_code_hints() -> void:
+	_computer_open = false
+	var box := _station_panel("README.TXT")
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, get_viewport_rect().size.y * 0.42)
+	box.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 10)
+	scroll.add_child(list)
+	for c in Secrets.CODES:
+		if owned.has("code:" + c["id"]):
+			list.add_child(_label("%s  %s" % [c["name"], Secrets.pretty(c["code"])], 24, Color(0.45, 1.0, 0.5), true))
+		else:
+			list.add_child(_label("???  (%d presses)" % str(c["code"]).length(), 24, FLOAT_YELLOW, true))
+			list.add_child(_label(c["hint"], 20, Palette.INK, true))
+	box.add_child(_bubble("BACK", show_computer, Palette.DIM, 34))
+
+
+## Arrow keys and A/B on a keyboard work the stick too.
+func _computer_key(event: InputEvent) -> bool:
+	if not _computer_open or not (event is InputEventKey) or not event.pressed or event.echo:
+		return false
+	var map := {KEY_UP: "U", KEY_DOWN: "D", KEY_LEFT: "L", KEY_RIGHT: "R", KEY_A: "A", KEY_B: "B"}
+	if map.has(event.keycode):
+		_code_press(map[event.keycode])
+		return true
+	return false
 
 
 ## The door: leave the game.
@@ -3240,6 +3447,9 @@ var _pinch_ended := 0
 
 ## Two fingers on the table: spread them to zoom in there, pinch to zoom out.
 func _input(event: InputEvent) -> void:
+	if _computer_key(event):
+		get_viewport().set_input_as_handled()
+		return
 	if not (event is InputEventScreenTouch or event is InputEventScreenDrag):
 		return
 	if event is InputEventScreenTouch:
@@ -3317,6 +3527,8 @@ func _drive_ai(delta: float) -> void:
 		_ai_wait = 0.5
 		return
 	_ai_wait = float(AI_PACE.get(act[0], 1.0))
+	if egg_on("turbo"):
+		_ai_wait *= 0.45 # TURBO: too much coffee
 	if demo_stage == "watch":
 		_ai_wait *= 1.5 # slow enough to follow
 	elif _people_alive() == 0:
