@@ -609,6 +609,8 @@ func _float_text(node: Node) -> void:
 			l.add_theme_color_override("font_color", Color(1.0, 0.42, 0.22) if title else (Color(1.0, 0.45, 0.4) if col.r > 0.5 else FLOAT_YELLOW))
 		var fs := l.get_theme_font_size("font_size")
 		var big := mini(fs * 2, 52) if fs < 50 else mini(int(fs * 1.25), 96)
+		if _in_grid(l):
+			big = mini(int(fs * 1.4), 34) # two to a row: room to breathe
 		l.add_theme_font_size_override("font_size", big)
 		l.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
 		l.add_theme_constant_override("outline_size", 12 if big < 60 else 18)
@@ -634,11 +636,23 @@ func _float_text(node: Node) -> void:
 		for k in ["normal", "hover", "pressed", "focus", "disabled"]:
 			node.add_theme_stylebox_override(k, StyleBoxEmpty.new()) # no ink blocks
 		# big bubble words; a bit smaller when several share a row
-		var crowded: bool = node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3
+		var crowded: bool = (node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3) or _in_grid(node)
 		var fs: int = node.get_theme_font_size("font_size")
 		node.add_theme_font_size_override("font_size", mini(int(fs * (1.15 if crowded else 1.6)), 64))
 	for child in node.get_children():
 		_float_text(child)
+	# things added to it later (a list filled in after it's on screen) too
+	if node is Container and not node.child_entered_tree.is_connected(_float_text):
+		node.child_entered_tree.connect(_float_text)
+
+
+func _in_grid(n: Node) -> bool:
+	var p := n.get_parent()
+	while p != null and p != screen:
+		if p is GridContainer:
+			return true
+		p = p.get_parent()
+	return false
 
 
 func _paper_button(text: String, on_press: Callable, font_size: int = 32) -> Button:
