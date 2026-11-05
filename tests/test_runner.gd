@@ -901,23 +901,24 @@ func test_bj_winner() -> void:
 	check(g.phase == "shoot" and g.gun["holder"] == g.dealer and g.gun["shells"] == 2, "everyone bust: the dealer gets 2 shells without playing")
 
 
-## A Blackjack shoots the dealer the moment it's dealt.
+## A Blackjack (not the dealer's) wins an item the moment it's dealt: no
+## shots. Holding one protects you from the shotgun.
 func test_bj_blackjack_shot() -> void:
-	var shots := 0
 	var found := false
 	for seed in range(1, 400):
 		var g := Blackjack.new()
 		g.setup(["A", "B", "C", "D"], {}, seed)
-		var kinds := []
-		g.event.connect(func(kind, _d): kinds.append(kind))
+		var got := []
+		g.event.connect(func(kind, d): if kind == "blackjack_item": got.append(d["seat"]))
 		g.start_round()
-		for k in kinds:
-			if k == "blackjack_shot":
-				shots += 1
-		if kinds.has("blackjack_shot"):
+		if not got.is_empty():
 			found = true
-			check(g.players[g.dealer].hp < g.players[g.dealer].max_hp, "the dealer took the free shot")
-			check(shots % 2 == 0 and shots >= 2, "a natural 21 is an instant win: two shots (%d)" % shots)
+			var s: int = got[0]
+			check(s != g.dealer, "only a player who isn't the dealer wins one")
+			check(g.players[s].items.size() >= 1, "the Blackjack won an item")
+			check(g.players[g.dealer].hp == g.players[g.dealer].max_hp, "no shots at the dealer")
+			check(g.protected(s), "a Blackjack protects them")
+			check(not g.shoot(g.dealer, s)["ok"], "the dealer can't shoot someone holding a Blackjack")
 			break
 	check(found, "some deal has a Blackjack")
 	# by item: Shakedown leaves a player with 2 cards making 21
@@ -928,9 +929,10 @@ func test_bj_blackjack_shot() -> void:
 		them = g.next_alive(them)
 	g.players[them].hand = cards("AH KC 5D")
 	var hp: int = g.players[g.dealer].hp
+	var items_before: int = g.players[them].items.size()
 	g.players[me].items = [{"id": "I-shakedown-1", "item": "shakedown"}]
 	check(g.use_item(me, "I-shakedown-1", them)["ok"], "shakedown")
-	check(g.players[g.dealer].hp == hp - 2, "a Blackjack made by an item shoots the dealer twice too")
+	check(g.players[g.dealer].hp == hp and g.players[them].items.size() == items_before + 1, "a Blackjack made by an item wins an item too, no shots")
 
 
 func test_bj_items() -> void:
@@ -1528,7 +1530,9 @@ func test_items_scarce() -> void:
 				if c.has("item"):
 					total += 1
 			for p in g.players:
-				check(p.items.is_empty(), "%s: nobody starts with items" % kind)
+				# (a Blackjack dealt to a player wins them one straight away)
+				var bj_win: bool = kind == "blackjack" and p.seat != g.dealer and g.is_blackjack(p.seat)
+				check(p.items.is_empty() or (bj_win and p.items.size() == 1), "%s: nobody starts with items" % kind)
 				for c in p.hand:
 					if c.has("item"):
 						total += 1

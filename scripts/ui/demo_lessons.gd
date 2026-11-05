@@ -34,7 +34,7 @@ const GAMES := {
 		["hit", "HIT: take another card. As many as you like."],
 		["stand", "STAND: happy with your total, and your turn's over. 21 or 5 cards stands for you."],
 		["bust", "BUST: over 21 and you lose to the dealer, whatever they get."],
-		["blackjack_shot", "BLACKJACK: 21 with your first 2 cards. You shoot the dealer, free, straight away!"],
+		["blackjack_item", "BLACKJACK: 21 with your first 2 cards. You win an item straight away, and nobody can shoot you this round!"],
 		["round_end", "THE DEALER plays last. Beat them and you're safe. Lose, and the dealer gets a shell for you, and can only shoot players who lost."],
 	],
 	"gofish": [

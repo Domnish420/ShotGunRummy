@@ -17,7 +17,8 @@ extends "res://scripts/core/game.gd"
 ##   highest total). The same hand is a push.
 ## - The dealer gets 1 shell for each player who lost (max 3), and can only
 ##   shoot players who lost.
-## - The moment a player has a Blackjack, they shoot the dealer, free.
+## - A player (not the dealer) who gets a Blackjack wins an item, and can't
+##   be shot this round.
 
 func _init() -> void:
 	kind = "blackjack"
@@ -196,33 +197,24 @@ func _next_turn() -> void:
 	_finish_round()
 
 
-## A Blackjack shoots the dealer straight away, free: no shells used.
+## A Blackjack, when you're not the dealer, wins you an item straight away
+## (one per round). No shots: holding it protects you instead (protected()).
 ## Checked after the deal and whenever an item reshuffles hands.
 func _blackjack_shots() -> void:
 	if not options["shotgun"]:
 		return
 	for s in _order:
 		var p: Player = players[s]
-		var d: Player = players[dealer]
-		if s == dealer or not p.alive or not d.alive or _shot_dealer.has(s) or not is_blackjack(s):
+		if s == dealer or not p.alive or _shot_dealer.has(s) or not is_blackjack(s):
 			continue
 		_shot_dealer[s] = true
-		if protected(dealer):
-			# the dealer has a Blackjack too: it protects them, no free shot
-			_emit("blackjack_blocked", {"shooter": s, "target": dealer})
+		var deck := Items.create_item_deck()
+		if deck.is_empty():
 			continue
-		# a natural 21 is an instant win: two shots at the dealer
-		for k in range(_shells(true)):
-			if not d.alive or phase == "match_over":
-				break
-			_emit("blackjack_shot", {"shooter": s, "target": dealer, "damage": 1})
-			damage(dealer, 1, "blackjack")
-		if phase == "match_over":
-			return
-		if not d.alive:
-			if phase == "play":
-				_finish_round() # no dealer, no round
-			return
+		var pick: Dictionary = deck[rng.randi_range(0, deck.size() - 1)].duplicate()
+		pick["id"] = "I-%s-bj%d-%d" % [pick["item"], round_num, s] # its own card
+		p.items.append(pick)
+		_emit("blackjack_item", {"seat": s, "item": pick["item"]})
 
 
 ## How strong a hand is, to compare it with the dealer's.

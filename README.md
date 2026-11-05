@@ -373,8 +373,8 @@ the game ends for everyone. When exporting an app for Android, tick the
   first 2 cards) beats a **five-card Charlie** (5 cards without going bust),
   which beats the higher total. The same hand is a push. If every player
   busts, the dealer wins without playing.
-- **Blackjack shoots.** The moment you have a Blackjack, you shoot the
-  dealer twice, free (no shells used), unless the dealer has a Blackjack too.
+- **Blackjack wins an item.** Get a Blackjack when you're not the dealer and
+  you win an item straight away (no shots).
 - **A Blackjack protects you.** Holding one, nobody can shoot you that round,
   not even a dealer with a Blackjack of their own.
 - **The shotgun.** The dealer gets 1 shell for every player who lost (2 at most)

@@ -2418,9 +2418,9 @@ func _on_game_event(kind: String, d: Dictionary) -> void:
 			_check_humans_out()
 		"blackjack_blocked":
 			_log("%s has a Blackjack, but so does the dealer, %s: no free shot." % [_name(d["shooter"]), _name(d["target"])])
-		"blackjack_shot":
-			_log("BLACKJACK! %s shoots the dealer, %s." % [_name(d["shooter"]), _name(d["target"])])
-			_blackjack_shot_fx(int(d["shooter"]), int(d["target"]))
+		"blackjack_item":
+			_log("BLACKJACK! %s wins an item: %s." % [_name(d["seat"]), Items.def(d["item"])["name"]])
+			_blackjack_item_fx(int(d["seat"]))
 		"gun_passed":
 			_log("%s picks up the shotgun: %d shell%s." % [_name(d["seat"]), d["shells"], "" if d["shells"] == 1 else "s"])
 		"stock_reshuffled":
@@ -3068,9 +3068,9 @@ func _event_sound(kind: String, d: Dictionary) -> void:
 			get_tree().create_timer(0.55).timeout.connect(_sound.bind("blast" if d.get("hit", false) else "click"))
 			if not d.get("hit", false):
 				get_tree().create_timer(0.9).timeout.connect(_sound.bind("survive"))
-		"blackjack_shot":
+		"blackjack_item":
 			_sound("sparkle")
-			get_tree().create_timer(0.3).timeout.connect(_sound.bind("blast"))
+			get_tree().create_timer(0.3).timeout.connect(_sound.bind("pick_item"))
 		"match_end":
 			_sound("fanfare")
 		# Blackjack
@@ -3245,24 +3245,19 @@ const BLACKJACK_RULES := [
 	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
 	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
 	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
-	"BLACKJACK SHOOTS. A Blackjack is an instant win: the moment you have one, you shoot the dealer twice, free.",
+	"BLACKJACK. 21 with your first 2 cards. If you're not the dealer, it wins you an item straight away, and while you hold it nobody can shoot you this round (not even a dealer with a Blackjack).",
 	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (2 at most) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
 ]
 
 
-## A Blackjack's free shot at the dealer, played once the cards are dealt.
-func _blackjack_shot_fx(shooter: int, target: int) -> void:
+## A Blackjack's item, shown once the cards are dealt.
+func _blackjack_item_fx(seat: int) -> void:
 	if world.dealing:
 		await world.deal_finished
 	if game == null:
 		return
-	world.announce("BLACKJACK!\n%s SHOOTS THE DEALER" % _name(shooter))
-	world.fire(shooter, target)
-	if target == _me():
-		_flash(Palette.RED)
-		_shake()
-	else:
-		_flash(Color.WHITE)
+	world.announce("BLACKJACK!\n%s WINS AN ITEM" % _name(seat))
+	_flash(Palette.GOLD)
 
 
 ## The tutorial's tip line.
