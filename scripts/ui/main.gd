@@ -621,6 +621,7 @@ func _float_text(node: Node) -> void:
 		e.add_theme_color_override("font_placeholder_color", Color(1.0, 0.86, 0.25, 0.45))
 		e.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
 		e.add_theme_constant_override("outline_size", 10)
+		e.add_theme_font_size_override("font_size", maxi(e.get_theme_font_size("font_size"), 36) + 12)
 		var line := Palette.box(Color(0, 0, 0, 0.25), FLOAT_YELLOW, 0, 0, 6)
 		line.border_width_bottom = 3
 		e.add_theme_stylebox_override("normal", line)
@@ -636,7 +637,7 @@ func _float_text(node: Node) -> void:
 		for k in ["normal", "hover", "pressed", "focus", "disabled"]:
 			node.add_theme_stylebox_override(k, StyleBoxEmpty.new()) # no ink blocks
 		# big bubble words; a bit smaller when several share a row
-		var crowded: bool = (node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3) or _in_grid(node)
+		var crowded: bool = (node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3 and node.text.strip_edges().length() > 2) or _in_grid(node)
 		var fs: int = node.get_theme_font_size("font_size")
 		node.add_theme_font_size_override("font_size", mini(int(fs * (1.15 if crowded else 1.6)), 64))
 	for child in node.get_children():
@@ -851,7 +852,23 @@ func _station_panel(title: String) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
+	box.child_entered_tree.connect(_station_text)
 	return box
+
+
+## Nothing on a station's panel too small to read on a phone: words at
+## least 22, buttons at least 34 (and anything added to it later too).
+func _station_text(node: Node) -> void:
+	if node is Button:
+		var b := node as Button
+		b.add_theme_font_size_override("font_size", maxi(b.get_theme_font_size("font_size"), 34))
+	elif node is Label:
+		var l := node as Label
+		l.add_theme_font_size_override("font_size", maxi(l.get_theme_font_size("font_size"), 22))
+	for c in node.get_children():
+		_station_text(c)
+	if node is Container and not node.child_entered_tree.is_connected(_station_text):
+		node.child_entered_tree.connect(_station_text)
 
 
 ## A soft, see-through backing for floating words (no hard box).
@@ -1516,9 +1533,9 @@ func show_solo() -> void:
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	count_row.add_theme_constant_override("separation", 16)
 	count_row.add_child(_tag("OPPONENTS", 30, Palette.CARD_INK))
-	count_row.add_child(_button(" - ", _change_solo_count.bind(-1)))
+	count_row.add_child(_button("-", _change_solo_count.bind(-1), 52))
 	count_row.add_child(_tag(str(solo_opponents), 40, Palette.CARD_INK))
-	count_row.add_child(_button(" + ", _change_solo_count.bind(1)))
+	count_row.add_child(_button("+", _change_solo_count.bind(1), 52))
 	box.add_child(count_row)
 	box.add_child(_label("DIFFICULTY", 26, Palette.CARD_INK, true))
 	var level_row := HBoxContainer.new()
@@ -1974,11 +1991,16 @@ func show_creator() -> void:
 		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
 	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), owned)
 	box.add_child(_tag("OUTFIT: %s%s" % [Looks.OUTFITS[int(_editing["outfit"])]["name"], "" if outfit_need == "" else "  🔒 " + outfit_need], 24, Palette.DIM if outfit_need == "" else Palette.PINK))
-	var swatches := HBoxContainer.new()
-	swatches.add_theme_constant_override("separation", 6)
+	# two neat rows of swatches (there are too many outfits for one row)
+	var swatches := GridContainer.new()
+	swatches.columns = int(ceil(Looks.OUTFITS.size() / 2.0))
+	swatches.add_theme_constant_override("h_separation", 5)
+	swatches.add_theme_constant_override("v_separation", 5)
 	for i in range(Looks.OUTFITS.size()):
 		var sw := Button.new()
-		sw.custom_minimum_size = Vector2(0, 52)
+		sw.custom_minimum_size = Vector2(0, 46)
+		sw.add_theme_font_size_override("font_size", 18)
+		sw.clip_text = true
 		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var col_c: Color = Looks.OUTFITS[i]["color"]
 		var edge := Palette.AMBER if i == int(_editing["outfit"]) else Palette.BUTTON_EDGE
@@ -2097,16 +2119,16 @@ func show_setup() -> void:
 	box.add_theme_constant_override("separation", 10)
 	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
-	box.add_child(_label("The undersigned agree to a game of %s." % ("Blackjack" if game_kind == "blackjack" else "Rummy") + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
+	box.add_child(_label("The undersigned agree to a game of %s." % Games.label(game_kind).capitalize() + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
 
 	var count_row := HBoxContainer.new()
 	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	count_row.add_theme_constant_override("separation", 16)
 	box.add_child(count_row)
 	count_row.add_child(_tag("PLAYERS", 30, Palette.CARD_INK))
-	count_row.add_child(_button(" - ", _change_count.bind(-1)))
+	count_row.add_child(_button("-", _change_count.bind(-1), 52))
 	count_row.add_child(_tag(str(player_names.size()), 40, Palette.CARD_INK))
-	count_row.add_child(_button(" + ", _change_count.bind(1)))
+	count_row.add_child(_button("+", _change_count.bind(1), 52))
 
 	_name_edits = []
 	for i in range(player_names.size()):
@@ -2496,6 +2518,7 @@ func show_card_skins() -> void:
 	_keep_menu_name()
 	world.hide_gacha()
 	world.hide_carousel()
+	world.set_preview_shown(false) # the character would show through the floating grid
 	var box := _paper(660.0)
 	box.add_child(_label("CARD SKINS", 52, Color(0.36, 0.06, 0.05), true))
 	var scroll := ScrollContainer.new()
@@ -2609,6 +2632,7 @@ func show_gun_skins() -> void:
 	_keep_menu_name()
 	world.hide_gacha()
 	world.hide_carousel()
+	world.set_preview_shown(false) # the character would show through the floating grid
 	var box := _paper(660.0)
 	box.add_child(_label("SHOTGUN SKINS", 48, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("Everyone at the table sees yours when the gun's in your hands.", 18, Palette.CARD_INK, true))
@@ -3655,6 +3679,12 @@ func _build_table() -> void:
 	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	status_label.add_theme_constant_override("outline_size", 8)
 	status_label.custom_minimum_size = Vector2(0, 62)
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# a soft dark band behind it, so it reads over the players' name tags
+	var band := Palette.box(Color(0.02, 0.015, 0.01, 0.55), Color(0, 0, 0, 0), 0, 14, 6)
+	band.content_margin_left = 14
+	band.content_margin_right = 14
+	status_label.add_theme_stylebox_override("normal", band)
 	col.add_child(status_label)
 
 	go_out_label = _label("", 30, Palette.GOLD, true)
@@ -4172,7 +4202,9 @@ func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "
 	_close_overlay()
 	_overlay_kind = kind
 	if hud != null and is_instance_valid(hud):
-		hud.visible = not bottom
+		hud.visible = false # the overlay's words, not the top bar's, while it's up
+	if world != null:
+		world.set_tags_shown(false) # nor the players' name tags
 	var bg := ColorRect.new()
 	if kind != "pass" and kind != "rules" and kind != "log":
 		opacity = minf(opacity, 0.62) # the table shows through; the words float over it
@@ -4194,10 +4226,16 @@ func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sc.add_child(box)
 	elif bottom:
-		# docked at the bottom so the 3D table stays in view
-		box.alignment = BoxContainer.ALIGNMENT_END
-		box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		margin.add_child(box)
+		# docked at the bottom so the 3D table stays in view, on a soft dark
+		# backing so it reads over the cards in your hand
+		var outer := VBoxContainer.new()
+		outer.alignment = BoxContainer.ALIGNMENT_END
+		outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(outer)
+		var backing := PanelContainer.new()
+		backing.add_theme_stylebox_override("panel", _soft_panel())
+		outer.add_child(backing)
+		backing.add_child(box)
 	else:
 		var center := CenterContainer.new()
 		margin.add_child(center)
@@ -4214,6 +4252,8 @@ func _close_overlay() -> void:
 	_overlay_kind = ""
 	if hud != null and is_instance_valid(hud):
 		hud.visible = true
+	if world != null:
+		world.set_tags_shown(true)
 
 
 func _closing(then: Callable) -> Callable:

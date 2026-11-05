@@ -543,6 +543,12 @@ func _aim_preview() -> void:
 	camera.look_at_from_position(PREVIEW_SPOT + PREVIEW_CAM, at, Vector3.UP)
 
 
+## The wardrobe's character, hidden behind a floating menu (the camera stays).
+func set_preview_shown(on: bool) -> void:
+	if not _preview.is_empty():
+		_preview["node"].visible = on
+
+
 func hide_preview() -> void:
 	if not _preview.is_empty():
 		_preview["node"].queue_free()
@@ -954,6 +960,16 @@ func hide_gacha() -> void:
 
 
 ## Menu mode: an empty table and a slowly moving camera.
+## The players' name tags, off while an overlay's words are over the table.
+var _tags_shown := true
+
+
+func set_tags_shown(on: bool) -> void:
+	_tags_shown = on
+	for s in _figures:
+		_figures[s]["label"].visible = on
+
+
 ## The station signs over the room, off while a menu's words are up.
 func set_signs(on: bool) -> void:
 	for k in _signs:
@@ -1018,7 +1034,7 @@ func _figure(seat: int, look: Dictionary) -> Dictionary:
 	label.outline_modulate = Color(0, 0, 0, 0.9)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
-	label.position = Vector3(0, 0.95, 0.12)
+	label.position = Vector3(0, 0.95, -0.22) # a little in towards the table, so it stays on screen
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	node.add_child(label)
 	return {"node": node, "head": head, "eyes": eyes, "label": label, "anim": anim, "dead": false, "seat": seat}
@@ -1083,6 +1099,10 @@ func _sync_figures(game, viewer: int) -> void:
 			lines.append("OUT")
 		var label: Label3D = f["label"]
 		label.text = "\n".join(lines)
+		# on a wide screen their heads are near the top, under the status line:
+		# there the tag sits lower, out in front of them like a nameplate
+		label.position = Vector3(0, 0.5, -0.5) if _landscape else Vector3(0, 0.95, -0.22)
+		label.visible = _tags_shown
 		var turn_now: bool = game.is_turn_of(p.seat)
 		label.modulate = Palette.AMBER if turn_now else (Palette.INK if p.alive else Palette.DIM)
 
@@ -1303,7 +1323,7 @@ func sync(s: Dictionary) -> void:
 	var hn := hand_cards.size()
 	var n_all := hn + my_items.size()
 	var hand_z := -1.0 if _landscape else -0.62
-	var hand_y := -0.225 if _landscape else -0.27
+	var hand_y := -0.19 if _landscape else -0.27 # (landscape: clear of the buttons below)
 	var vp := get_viewport().get_visible_rect().size
 	# how wide the screen is at the hand's distance (the fov is across the
 	# screen when the camera keeps its width, up and down when it keeps height)
@@ -1311,14 +1331,17 @@ func sync(s: Dictionary) -> void:
 	if camera.keep_aspect == Camera3D.KEEP_HEIGHT:
 		half_w *= vp.x / maxf(1.0, vp.y)
 	var gap := HAND_CARD.x * 0.35 if hn > 0 and not my_items.is_empty() else 0.0
-	var room := maxf(0.0, half_w * 2.0 * 0.94 - HAND_CARD.x - gap) # centre to centre, end to end
+	# a wide screen doesn't need the fan to run edge to edge: keep it in the middle
+	var room := maxf(0.0, half_w * 2.0 * (0.62 if _landscape else 0.94) - HAND_CARD.x - gap) # centre to centre, end to end
 	var step := minf(HAND_CARD.x * 0.62, room / maxf(1.0, n_all - 1))
 	var span := step * maxf(0.0, n_all - 1) + gap
-	const ARC := 1.6 # the fan's radius: bigger is flatter
+	var ARC := 1.6 * absf(hand_z) / 0.62 # the fan's radius (bigger is flatter), the same curve at any distance
 	for i in range(n_all):
 		var is_item := i >= hn
 		var c: Dictionary = my_items[i - hn] if is_item else hand_cards[i]
 		var x := -span * 0.5 + i * step + (gap if is_item else 0.0)
+		if hn == 0:
+			x += half_w * 0.45 # no hand (Snap): your items sit off to the right of your pile
 		var theta := x / ARC
 		var picked: bool = (c["id"] == s["selected_item"]) if is_item else s["selected"].has(c["id"])
 		var basis := Basis(Vector3.FORWARD, theta)
