@@ -83,6 +83,10 @@ NEXT ROUND straight away).
 
 ### At the table
 
+**Your hand** is a neat fan along the bottom, sized to fit the screen however
+many cards you hold, and your **item cards are real cards in your hand**, at
+the right-hand end: tap one to pick it, then USE ITEM.
+
 **Items that need a card** (Joker Paint, Sticky Fingers, ...) don't open a
 menu: the cards you can pick glow, and you tap one. Tap the item again, or
 CANCEL, to put it away.

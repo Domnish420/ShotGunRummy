@@ -1295,40 +1295,52 @@ func sync(s: Dictionary) -> void:
 			pos.y = TABLE_TOP + 0.002
 			_place(seen, items[i]["id"], items[i], ITEM_CARD, _flat(pos, yaw, false), false, true, "", "", "", false, stock_xf)
 
-	# your hand, held in front of the camera
+	# your hand, held in front of the camera: a neat fan on a gentle arc,
+	# sized to fit the screen however many cards you hold, with your item
+	# cards at the right-hand end (after a little gap), real cards in your hand
 	var hand_cards: Array = s["hand"]
+	var my_items: Array = game.players[viewer].items
 	var hn := hand_cards.size()
-	var hstep := minf(0.086, 0.6 / maxf(1.0, hn))
-	for i in range(hn):
-		var c: Dictionary = hand_cards[i]
-		var mid := (hn - 1) * 0.5
-		var lift := 0.035 if s["selected"].has(c["id"]) else 0.0
-		var hand_z := -1.0 if _landscape else -0.62
-		var hand_y := -0.225 if _landscape else -0.27
-		var local := Transform3D(Basis(Vector3.FORWARD, (i - mid) * 0.05), Vector3((i - mid) * hstep, hand_y - absf(i - mid) * 0.006 + lift, hand_z + i * 0.0025))
+	var n_all := hn + my_items.size()
+	var hand_z := -1.0 if _landscape else -0.62
+	var hand_y := -0.225 if _landscape else -0.27
+	var vp := get_viewport().get_visible_rect().size
+	# how wide the screen is at the hand's distance (the fov is across the
+	# screen when the camera keeps its width, up and down when it keeps height)
+	var half_w := tan(deg_to_rad(camera.fov) * 0.5) * absf(hand_z)
+	if camera.keep_aspect == Camera3D.KEEP_HEIGHT:
+		half_w *= vp.x / maxf(1.0, vp.y)
+	var gap := HAND_CARD.x * 0.35 if hn > 0 and not my_items.is_empty() else 0.0
+	var room := maxf(0.0, half_w * 2.0 * 0.94 - HAND_CARD.x - gap) # centre to centre, end to end
+	var step := minf(HAND_CARD.x * 0.62, room / maxf(1.0, n_all - 1))
+	var span := step * maxf(0.0, n_all - 1) + gap
+	const ARC := 1.6 # the fan's radius: bigger is flatter
+	for i in range(n_all):
+		var is_item := i >= hn
+		var c: Dictionary = my_items[i - hn] if is_item else hand_cards[i]
+		var x := -span * 0.5 + i * step + (gap if is_item else 0.0)
+		var theta := x / ARC
+		var picked: bool = (c["id"] == s["selected_item"]) if is_item else s["selected"].has(c["id"])
+		var basis := Basis(Vector3.FORWARD, theta)
+		var pos := Vector3(ARC * sin(theta), hand_y + ARC * (cos(theta) - 1.0), hand_z + i * 0.0025)
+		if picked:
+			pos += basis.y * 0.035 # a selected card rises out of the fan
+		var local := Transform3D(basis, pos)
 		if s.get("hide_hand", false):
 			local.basis = local.basis * Basis(Vector3.UP, PI) # backs toward you
 		var outline := ""
-		if s["selected"].has(c["id"]):
+		if picked:
 			outline = "selected"
-		elif s["meld_hints"].has(c["id"]):
+		elif not is_item and s["meld_hints"].has(c["id"]):
 			outline = "gold"
-		elif c["id"] == s["lit"]:
+		elif not is_item and c["id"] == s["lit"]:
 			outline = "amber"
-		_place(seen, c["id"], c, HAND_CARD, cam * local, true, false, "hand", c["id"], outline, game.is_trump(c), stock_xf)
-		if s["lay_hints"].has(c["id"]) and not s["selected"].has(c["id"]):
-			_label_at("+", (cam * local).origin + cam.basis.y * -0.092, 34, Palette.GOLD, true)
-
-	# your items, a row above your hand
-	var my_items: Array = game.players[viewer].items
-	for i in range(my_items.size()):
-		var c: Dictionary = my_items[i]
-		var x := (i - (my_items.size() - 1) * 0.5) * 0.085
-		var local := Transform3D(Basis(), Vector3(x + (0.62 if _landscape else 0.0), -0.16 if _landscape else -0.13, -0.98 if _landscape else -0.64))
-		if s.get("hide_hand", false):
-			local.basis = local.basis * Basis(Vector3.UP, PI)
-		var outline := "selected" if c["id"] == s["selected_item"] else ""
-		_place(seen, c["id"], c, ITEM_CARD, cam * local, true, false, "item", c["id"], outline, false, stock_xf)
+		if is_item:
+			_place(seen, c["id"], c, HAND_CARD, cam * local, true, false, "item", c["id"], outline, false, stock_xf)
+		else:
+			_place(seen, c["id"], c, HAND_CARD, cam * local, true, false, "hand", c["id"], outline, game.is_trump(c), stock_xf)
+			if s["lay_hints"].has(c["id"]) and not picked:
+				_label_at("+", (cam * local).origin + (cam * local).basis.y * -0.092, 34, Palette.GOLD, true)
 
 	for id in _cards.keys():
 		if not seen.has(id):
