@@ -590,6 +590,15 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 Tunable numbers (hand size, health, items per turn, shells) are in `options` at
 the top of `game.gd`.
 
+### Item card art
+
+Every item card's face can be hand-drawn: put a 512 x 736 PNG (the whole
+face: picture, name, border) at `textures/items/<item id>.png` and it
+replaces the drawn face (a purple card with the item's emoji and name)
+everywhere. `godot --path . -s tools/export_item_faces.gd -- item_faces`
+writes the current faces, a blank template and a list of what each item does
+in each game, as a kit to draw from.
+
 ### Running the tests
 
 ```

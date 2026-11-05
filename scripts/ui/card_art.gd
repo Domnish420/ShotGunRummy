@@ -395,7 +395,23 @@ static func _clip_line(a: Vector2, b: Vector2, r: Rect2) -> Array:
 	return [a + d * t0, a + d * t1]
 
 
+## Hand-drawn item faces: textures/items/<item id>.png (512x736, the whole
+## face of the card) replaces the drawn one when it's there.
+static var _item_art := {}
+
+
+static func item_art(item_id: String) -> Texture2D:
+	if not _item_art.has(item_id):
+		var path := "res://textures/items/%s.png" % item_id
+		_item_art[item_id] = load(path) if ResourceLoader.exists(path) else null
+	return _item_art[item_id]
+
+
 static func _draw_item(ci: CanvasItem, font: Font, rect: Rect2, card: Dictionary, radius: int, compact: bool) -> void:
+	var art := item_art(str(card["item"]))
+	if art != null:
+		ci.draw_texture_rect(art, rect, false)
+		return
 	var def: Dictionary = Items.def(card["item"])
 	ci.draw_style_box(Palette.box(Palette.ITEM_BG, Palette.PURPLE, 2, radius), rect)
 	var icon_fs := int(rect.size.x * (0.4 if compact else 0.46))

@@ -1309,7 +1309,7 @@ func sync(s: Dictionary) -> void:
 			var fan := (i - hand.size() * 0.5) * 0.06
 			var xf := _leaned(pos, 0.0, yaw + fan, i) if shown else _flat(pos, yaw + fan, false)
 			_place(seen, hand[i]["id"], hand[i], OPP_CARD, xf, shown, true, "", "", "", game.is_trump(hand[i]) if shown else false, stock_xf)
-		var items: Array = p.items
+		var items: Array = [] if game.phase in ["round_over", "shoot", "match_over"] else p.items
 		for i in range(items.size()):
 			var pos := _toward_center(seat_pos, 0.2) + side * (0.22 + i * 0.06)
 			pos.y = TABLE_TOP + 0.002
@@ -1319,7 +1319,10 @@ func sync(s: Dictionary) -> void:
 	# sized to fit the screen however many cards you hold, with your item
 	# cards at the right-hand end (after a little gap), real cards in your hand
 	var hand_cards: Array = s["hand"]
-	var my_items: Array = game.players[viewer].items
+	# once the round's over (the result, the gun) items can't be used: they
+	# leave the table (they're cleared when the next round deals)
+	var round_done: bool = game.phase in ["round_over", "shoot", "match_over"]
+	var my_items: Array = [] if round_done else game.players[viewer].items
 	var hn := hand_cards.size()
 	var n_all := hn + my_items.size()
 	var hand_z := -1.0 if _landscape else -0.62
