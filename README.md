@@ -602,6 +602,16 @@ card instead.) `docs/item_card_prompts.md` has an art prompt for each item,
 and `godot --path . -s tools/export_item_faces.gd -- item_faces` writes the
 current faces and a list of what each item does in each game.
 
+### 3D items
+
+Use an item and its card flies to the middle of the table, turns away, and a
+little low-poly 3D version of it pops out and acts out what it does: the
+cigarette lights and smokes, the pill bottle tips over, the blank shell puffs
+dust, the saw throws sparks, the beer foams over, the phone flips open, the
+cuffs snap shut, the fist punches, the dice tumble to double sixes, the
+revolver's cylinder spins, the flashbang goes off... They're built in
+`scripts/three/item_models.gd`, one builder and one animation per item.
+
 ### Running the tests
 
 ```
