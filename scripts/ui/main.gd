@@ -4941,12 +4941,13 @@ func _settings_changed() -> void:
 
 func _build_settings() -> void:
 	_clear(settings_layer)
+	if world != null:
+		world.set_tags_shown(false) # the players' name tags would show through the words
 	var vs := get_viewport_rect().size
 	var phone := vs.x < 700.0
 	var panel := PanelContainer.new()
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.03, 0.02, 0.02, 0.78)
-	st.set_corner_radius_all(28)
+	# no box: just the words floating over the room or the table
+	var st := StyleBoxEmpty.new()
 	st.content_margin_left = 20
 	st.content_margin_right = 20
 	st.content_margin_top = 12
@@ -4954,6 +4955,7 @@ func _build_settings() -> void:
 	panel.add_theme_stylebox_override("panel", st)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	settings_layer.add_child(panel)
+	panel.child_entered_tree.connect(_float_settings_text)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
@@ -5057,6 +5059,19 @@ func _build_settings() -> void:
 	place.call_deferred() # again once its rows have their real sizes
 
 
+## With no box behind them, every word in the settings gets a thick dark
+## edge so it reads over whatever's behind (and anything added later too).
+func _float_settings_text(node: Node) -> void:
+	if node is Label or node is Button:
+		var c := node as Control
+		c.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.01))
+		c.add_theme_constant_override("outline_size", maxi(c.get_theme_constant("outline_size"), 12))
+	for ch in node.get_children():
+		_float_settings_text(ch)
+	if node is Container and not node.child_entered_tree.is_connected(_float_settings_text):
+		node.child_entered_tree.connect(_float_settings_text)
+
+
 ## A row: the setting's name on the left, its control on the right.
 func _set_row(rows: Container, label: String, hint: String = "") -> HBoxContainer:
 	var row := HBoxContainer.new()
@@ -5068,7 +5083,7 @@ func _set_row(rows: Container, label: String, hint: String = "") -> HBoxContaine
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(l)
 	if hint != "":
-		rows.add_child(_label(hint, 17, Palette.DIM))
+		rows.add_child(_label(hint, 19, Color(0.82, 0.78, 0.7)))
 	return row
 
 
@@ -5130,6 +5145,8 @@ func _close_settings() -> void:
 func _hide_settings() -> void:
 	if settings_layer != null:
 		_clear(settings_layer)
+	if world != null and overlay_layer != null and overlay_layer.get_child_count() == 0:
+		world.set_tags_shown(true)
 
 
 func _settings_open() -> bool:
