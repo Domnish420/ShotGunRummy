@@ -18,7 +18,6 @@ const Palette = preload("res://scripts/ui/palette.gd")
 const CardTextures = preload("res://scripts/three/card_textures.gd")
 const Card3D = preload("res://scripts/three/card3d.gd")
 const Props = preload("res://scripts/three/props.gd")
-const ItemModels = preload("res://scripts/three/item_models.gd")
 const Looks = preload("res://scripts/core/looks.gd")
 const GunSkins = preload("res://scripts/core/gun_skins.gd")
 const Gacha3D = preload("res://scripts/three/gacha3d.gd")
@@ -1683,9 +1682,6 @@ func play_item(item_id: String, user: int, target: int = -1) -> void:
 	card.transform = Transform3D(facing.scaled(Vector3(0.4, 0.4, 0.4)), start)
 	var big := Transform3D(facing.scaled(Vector3(1.9, 1.9, 1.9)), center)
 
-	if ItemModels.has(item_id):
-		_play_item_model(item_id, user, target, color, card, light, facing, center, big)
-		return
 	var t := card.create_tween()
 	t.tween_property(card, "transform", big, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.parallel().tween_property(light, "light_energy", 1.5, 0.4)
@@ -1705,55 +1701,6 @@ func play_item(item_id: String, user: int, target: int = -1) -> void:
 	t.tween_callback(card.queue_free)
 	# taps wait for the animation; a timer makes sure they never wait forever
 	get_tree().create_timer(2.2).timeout.connect(func() -> void: fx_busy = false)
-
-
-## An item with a 3D model (item_models.gd): the card flies to the middle,
-## turns away and shrinks as the 3D item pops out of it, which plays its own
-## animation, then shrinks away (or flies to whoever it was used on).
-func _play_item_model(item_id: String, user: int, target: int, color: Color, card: Card3D, light: OmniLight3D, facing: Basis, center: Vector3, big: Transform3D) -> void:
-	var model := ItemModels.build(item_id)
-	var holder := Node3D.new()
-	add_child(holder)
-	holder.transform = Transform3D(facing, center)
-	holder.add_child(model)
-	model.scale = Vector3.ONE * 0.01
-	var lamp_on := OmniLight3D.new() # a little light of its own so it reads
-	lamp_on.light_color = Color(1.0, 0.92, 0.8)
-	lamp_on.light_energy = 0.2
-	lamp_on.omni_range = 0.6
-	lamp_on.position = Vector3(0.1, 0.2, 0.35)
-	holder.add_child(lamp_on)
-	var rim := OmniLight3D.new() # and the cards' purple rim light
-	rim.light_color = Color(0.6, 0.35, 1.0)
-	rim.light_energy = 0.8
-	rim.omni_range = 0.5
-	rim.position = Vector3(-0.15, 0.05, -0.2)
-	holder.add_child(rim)
-
-	var t := card.create_tween()
-	t.tween_property(card, "transform", big, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(light, "light_energy", 1.5, 0.4)
-	# the card turns away and shrinks as the item comes out of it
-	t.tween_property(card, "transform", Transform3D(facing * Basis(Vector3.UP, PI * 0.5) * Basis().scaled(Vector3.ONE * 0.6), center), 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.tween_callback(card.queue_free)
-	var length := ItemModels.animate(model, item_id, self)
-	var m := model.create_tween()
-	m.tween_interval(0.5)
-	m.tween_property(model, "scale", Vector3.ONE * 1.05, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# a gentle bob while it plays
-	m.tween_property(model, "position:y", 0.015, maxf(0.2, length * 0.5)).set_trans(Tween.TRANS_SINE)
-	m.tween_property(model, "position:y", 0.0, maxf(0.2, length * 0.5)).set_trans(Tween.TRANS_SINE)
-	m.tween_callback(_item_extra.bind(item_id, user, target, color))
-	if target >= 0:
-		var to := _head_of(target) if target != _viewer else _cam_home * Vector3(0, -0.05, -0.5)
-		m.tween_property(holder, "global_position", to, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		m.parallel().tween_property(model, "scale", Vector3.ONE * 0.3, 0.3)
-		m.tween_callback(_pulse.bind(to, color, 2.5))
-	else:
-		m.tween_property(model, "scale", Vector3.ONE * 1.25, 0.12)
-		m.tween_property(model, "scale", Vector3.ONE * 0.01, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	m.tween_callback(holder.queue_free)
-	get_tree().create_timer(0.9 + length + 0.6).timeout.connect(func() -> void: fx_busy = false)
 
 
 ## A quick flash of coloured light at a spot.
