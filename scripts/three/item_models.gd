@@ -17,8 +17,63 @@ static func has(item_id: String) -> bool:
 const ALL := ["cigarettes", "medicine", "blank", "saw", "beer", "magnifier", "phone", "handcuffs", "adrenaline", "shakedown", "switcheroo", "bad_trade", "chaos", "spotlight", "flashbang", "revolver", "double_down", "sticky_fingers", "dumpster_dive", "garbage_day", "tarot", "joker_paint"]
 
 
+## A model made outside the game (Meshy, Blender...): models/items/<id>.glb.
+## It replaces the built-in one, scaled to fit and centred automatically.
+static func imported_path(item_id: String) -> String:
+	return "res://models/items/%s.glb" % item_id
+
+
+static func is_imported(item_id: String) -> bool:
+	return ResourceLoader.exists(imported_path(item_id))
+
+
+## Puts an imported model in a holder, fitted into a SIZE box and centred.
+const SIZE := 0.24
+
+
+static func _imported(item_id: String) -> Node3D:
+	var scene = load(imported_path(item_id))
+	if not (scene is PackedScene):
+		return null
+	var inner: Node3D = scene.instantiate()
+	var holder := Node3D.new()
+	holder.name = item_id
+	var fit := _node(holder, "Fit")
+	fit.add_child(inner)
+	# measure it, then scale and centre it
+	var box := AABB()
+	var first := true
+	for mi in inner.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var xf := inner.transform.affine_inverse() * m.global_transform if m.is_inside_tree() else _to_root(inner, m)
+		var b: AABB = xf * m.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	var biggest := maxf(box.size.x, maxf(box.size.y, box.size.z))
+	if biggest > 0.0:
+		var k := SIZE / biggest
+		fit.scale = Vector3.ONE * k
+		fit.position = -box.get_center() * k
+	return holder
+
+
+## A mesh's transform relative to `root`, before it's in the scene tree.
+static func _to_root(root: Node3D, n: Node3D) -> Transform3D:
+	var xf := n.transform
+	var p := n.get_parent()
+	while p != null and p != root:
+		if p is Node3D:
+			xf = (p as Node3D).transform * xf
+		p = p.get_parent()
+	return xf
+
+
 ## The model for `item_id`, or null.
 static func build(item_id: String) -> Node3D:
+	if is_imported(item_id):
+		var imp := _imported(item_id)
+		if imp != null:
+			return imp
 	if not has(item_id):
 		return null
 	var builder := Callable(load("res://scripts/three/item_models.gd"), "_" + item_id)
@@ -32,6 +87,8 @@ static func build(item_id: String) -> Node3D:
 static func animate(model: Node3D, item_id: String, fx: Node3D) -> float:
 	if not has(item_id):
 		return 0.0
+	if model.has_node("Fit"):
+		return _animate_imported(model, item_id, fx)
 	var anim := Callable(load("res://scripts/three/item_models.gd"), "_animate_" + item_id)
 	return float(anim.call(model, fx))
 
@@ -1043,3 +1100,177 @@ static func _animate_joker_paint(model: Node3D, _fx: Node3D) -> float:
 	w.tween_property(mask, "rotation:z", -0.12, 0.15)
 	w.tween_property(mask, "rotation:z", 0.0, 0.12)
 	return 1.9
+
+
+
+# ================================================================ imported models
+
+## How each imported item moves in its quick 2-3 second turn (with its own
+## sound, played by the game): a move for the whole thing, and an effect.
+## A part the model has, by name, gets its own move too (see PARTS).
+const MOVES := {
+	"cigarettes": ["turn", "smoke"], "medicine": ["tip", "pills"], "blank": ["spin", "dust"],
+	"saw": ["saw", "sparks"], "beer": ["shake", "foam"], "magnifier": ["sweep", "glint"],
+	"phone": ["buzz", "glow"], "handcuffs": ["snap", ""], "adrenaline": ["turn", "drips"],
+	"shakedown": ["punch", "burst"], "switcheroo": ["spin_z", ""], "bad_trade": ["pump", ""],
+	"chaos": ["whirl", ""], "spotlight": ["turn", "glow"], "flashbang": ["shake", "flash"],
+	"revolver": ["turn", ""], "double_down": ["tumble", ""], "sticky_fingers": ["turn", "drips"],
+	"dumpster_dive": ["shake", "cards"], "garbage_day": ["tip", "junk"], "tarot": ["bob", "sparkles"],
+	"joker_paint": ["turn", "splats"],
+}
+
+## Named parts in a model that move on their own: a node whose name contains
+## the key (any case) gets that motion. E.g. a "Cylinder" spins, a "Lid" opens.
+const PARTS := {
+	"cylinder": "spin_z", "lid": "open", "flap": "open", "plunger": "push", "pin": "pop_off",
+	"lever": "pop_off", "spoon": "pop_off", "die": "tumble", "dice": "tumble", "blade": "saw",
+	"ring": "spin_y", "swirl": "spin_y",
+}
+
+
+static func _animate_imported(model: Node3D, item_id: String, fx: Node3D) -> float:
+	var fit: Node3D = model.get_node("Fit")
+	var move: Array = MOVES.get(item_id, ["turn", ""])
+	_move(fit, str(move[0]))
+	for n in fit.find_children("*", "Node3D", true, false):
+		var low := str(n.name).to_lower()
+		for k in PARTS:
+			if low.contains(k):
+				_move(n, PARTS[k], true)
+				break
+	var e := model.create_tween()
+	e.tween_interval(0.6)
+	e.tween_callback(_effect.bind(model, str(move[1]), fx))
+	return 2.2
+
+
+static func _move(n: Node3D, how: String, part: bool = false) -> void:
+	var home := n.position
+	var rot := n.rotation
+	var t := n.create_tween()
+	if not part:
+		t.tween_interval(0.3)
+	match how:
+		"turn":
+			t.tween_property(n, "rotation:y", rot.y + 0.6, 0.9).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "rotation:y", rot.y - 0.3, 0.9).set_trans(Tween.TRANS_SINE)
+		"spin":
+			t.tween_property(n, "rotation:y", rot.y + TAU, 1.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		"spin_y":
+			t.tween_property(n, "rotation:y", rot.y + TAU * 2.0, 1.6).set_trans(Tween.TRANS_SINE)
+		"spin_z":
+			t.tween_property(n, "rotation:z", rot.z + TAU * 2.0, 1.4).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		"whirl":
+			t.tween_property(n, "rotation:y", rot.y + TAU * 3.0, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		"tip":
+			t.tween_property(n, "rotation:z", rot.z + 0.2, 0.12)
+			t.tween_property(n, "rotation:z", rot.z - 0.1, 0.12)
+			t.tween_property(n, "rotation:z", rot.z + 1.2, 0.35).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+		"shake", "buzz":
+			var a := 0.012 if how == "shake" else 0.005
+			for i in range(10):
+				t.tween_property(n, "position", home + Vector3(randf_range(-a, a), randf_range(-a, a), 0), 0.04)
+				t.parallel().tween_property(n, "rotation:z", rot.z + randf_range(-0.12, 0.12), 0.04)
+			t.tween_property(n, "position", home, 0.05)
+			t.parallel().tween_property(n, "rotation:z", rot.z, 0.05)
+		"saw":
+			for i in range(6):
+				t.tween_property(n, "position:x", home.x + 0.03, 0.09).set_trans(Tween.TRANS_SINE)
+				t.tween_property(n, "position:x", home.x - 0.03, 0.09).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "position:x", home.x, 0.08)
+		"sweep":
+			t.tween_property(n, "position:x", home.x - 0.04, 0.4).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "position:x", home.x + 0.04, 0.6).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "position:x", home.x, 0.3).set_trans(Tween.TRANS_SINE)
+		"snap":
+			t.tween_property(n, "rotation:z", rot.z + 0.5, 0.3).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "rotation:z", rot.z - 0.1, 0.08).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+			t.tween_property(n, "scale", n.scale * 1.12, 0.05)
+			t.tween_property(n, "scale", n.scale, 0.1)
+		"punch":
+			t.tween_property(n, "position:z", home.z - 0.1, 0.35).set_trans(Tween.TRANS_SINE)
+			t.tween_property(n, "position:z", home.z + 0.1, 0.08).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+			t.tween_property(n, "position:z", home.z, 0.4).set_trans(Tween.TRANS_BACK)
+		"pump":
+			for i in range(3):
+				t.tween_property(n, "position:y", home.y + 0.02, 0.1)
+				t.tween_property(n, "position:y", home.y - 0.02, 0.1)
+			t.tween_property(n, "position:y", home.y, 0.1)
+		"tumble":
+			var from := home + Vector3(0, 0.15, -0.04)
+			n.position = from
+			t.tween_property(n, "position", home, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+			t.parallel().tween_property(n, "rotation", rot + Vector3(TAU, TAU * 1.5, 0), 0.5)
+		"bob":
+			for i in range(2):
+				t.tween_property(n, "position:y", home.y + 0.015, 0.45).set_trans(Tween.TRANS_SINE)
+				t.tween_property(n, "position:y", home.y, 0.45).set_trans(Tween.TRANS_SINE)
+		"open":
+			t.tween_interval(0.4)
+			t.tween_property(n, "rotation:x", rot.x - 1.6, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		"push":
+			t.tween_interval(0.4)
+			t.tween_property(n, "position", home - n.transform.basis.y.normalized() * 0.03 / maxf(0.001, n.global_transform.basis.get_scale().x), 0.6)
+		"pop_off":
+			t.tween_interval(0.4)
+			t.tween_property(n, "position", home + Vector3(0.06, 0.08, 0.03) / maxf(0.001, n.global_transform.basis.get_scale().x), 0.25).set_ease(Tween.EASE_OUT)
+			t.parallel().tween_property(n, "rotation:z", rot.z + 3.0, 0.25)
+			t.tween_callback(func() -> void: n.visible = false)
+
+
+## The effect bits for an imported item, in world space round the model.
+static func _effect(model: Node3D, kind: String, fx: Node3D) -> void:
+	if not is_instance_valid(model) or not is_instance_valid(fx):
+		return
+	var c := model.global_position
+	var up := Vector3(0, 0.12, 0)
+	match kind:
+		"smoke":
+			for i in range(10):
+				_fling(fx, c + up * 0.9 + Vector3(0.02, 0, 0), Vector3(sin(i) * 0.04, 0.15 + i * 0.01, 0.01), 0.016, Color(0.72, 0.72, 0.7), 1.0 + i * 0.05)
+		"pills":
+			for i in range(6):
+				_fling(fx, c, Vector3(-0.08 - randf() * 0.1, -0.08, randf_range(-0.03, 0.06)), 0.016, [Color(0.8, 0.22, 0.12), Color(0.75, 1.0, 0.8)][i % 2], 0.9)
+		"dust":
+			for i in range(7):
+				_fling(fx, c + up, Vector3(randf_range(-0.05, 0.05), 0.06, 0), 0.014, Color(0.6, 0.56, 0.5), 0.8)
+		"sparks":
+			for i in range(14):
+				_fling(fx, c - up * 0.4, Vector3(randf_range(-0.1, 0.1), -0.06 - randf() * 0.06, randf_range(0.0, 0.05)), 0.008, Color(1.0, 0.75, 0.3), 0.45, true)
+		"foam":
+			for i in range(12):
+				_fling(fx, c + up, Vector3(randf_range(-0.05, 0.05), randf_range(-0.12, 0.04), 0.02), 0.018, Color(0.92, 0.88, 0.72), 0.7)
+		"glint", "glow", "sparkles":
+			for i in range(8):
+				var a := i * TAU / 8.0
+				_fling(fx, c, Vector3(cos(a) * 0.08, sin(a) * 0.08 + 0.03, 0.02), 0.01, Color(1.0, 0.95, 0.8) if kind != "sparkles" else Color(0.9, 0.75, 1.0), 0.6, true)
+		"drips":
+			for i in range(5):
+				_fling(fx, c - up * 0.5, Vector3(randf_range(-0.01, 0.01), -0.13, 0), 0.012, Color(0.85, 1.0, 0.3) if model.name == "adrenaline" else Color(0.95, 0.65, 0.15), 0.6 + i * 0.08, model.name == "adrenaline")
+		"burst":
+			for i in range(10):
+				var a := i * TAU / 10.0
+				_fling(fx, c + Vector3(0, 0, 0.05), Vector3(cos(a), sin(a), 0.2) * 0.1, 0.012, Color(1.0, 0.9, 0.5), 0.35, true)
+		"flash":
+			var m := _g(Color(1, 1, 1), 6.0)
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.albedo_color.a = 0.85
+			var flash := Props.ball(fx, 0.05, 10, m, fx.to_local(c))
+			var l := OmniLight3D.new()
+			l.light_energy = 12.0
+			l.omni_range = 2.5
+			flash.add_child(l)
+			var ft := flash.create_tween()
+			ft.tween_property(flash, "scale", Vector3.ONE * 3.5, 0.15)
+			ft.parallel().tween_property(l, "light_energy", 0.0, 0.5)
+			ft.tween_property(m, "albedo_color:a", 0.0, 0.3)
+			ft.tween_callback(flash.queue_free)
+		"cards":
+			for i in range(3):
+				_fling(fx, c + up * 0.5, Vector3(-0.06 + i * 0.06, 0.15, 0.06), 0.04, Color(0.95, 0.93, 0.88), 0.9)
+		"junk":
+			for i in range(6):
+				_fling(fx, c, Vector3(0.1 + randf() * 0.1, -0.08, randf_range(-0.04, 0.06)), 0.03, [Color(0.55, 0.45, 0.3), Color(0.1, 0.1, 0.12), Color(0.8, 0.78, 0.7)][i % 3], 0.9)
+		"splats":
+			for i in range(6):
+				_fling(fx, c + Vector3(randf_range(-0.05, 0.05), randf_range(-0.05, 0.05), 0.06), Vector3(0, 0, 0.01), 0.025, [Color(0.9, 0.15, 0.15), Color(0.95, 0.85, 0.15), Color(0.2, 0.45, 0.95)][i % 3], 1.2)
