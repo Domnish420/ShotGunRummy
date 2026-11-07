@@ -35,8 +35,18 @@ thing itself) and you walk over:
 - **WARDROBE**, on the right wall: its doors swing open and your character
   steps out in front of it to be dressed. Card skins and shotgun skins are in
   here too.
-- **BAR**, by the bottle shelf under the pink neon: settings (your name,
-  graphics, sound).
+- **BAR**, by the bottle shelf under the pink neon: the **SETTINGS** menu
+  (also on the top bar during a game, where it floats over the table and the
+  game carries on). Five tabs:
+  - **DISPLAY**: graphics (PS2 / PS3 / SHARP), fullscreen (PC), screen shake,
+    flashes, table zoom.
+  - **AUDIO**: sound, master volume, effects volume, music, music volume,
+    cartridge jingles.
+  - **GAMEPLAY**: hints, AI speed (slow / normal / fast), auto next round,
+    sort hand by suit or rank, hide hands between turns.
+  - **PROFILE**: your name, card skin, shotgun skin and character (each opens
+    its screen from the room), and your stats.
+  - **EXTRAS**: switch the easter eggs you've found on and off.
 - **GACHA**, the machine in the back corner.
 - **EXIT**, the door: leave the game, and it swings open as you go.
 - **ARCADE**, the cabinet in the front-left corner. It won't start until

@@ -1585,8 +1585,12 @@ func zoomed() -> bool:
 ## view's pixels), or back out (steps < 0) towards your seat. The camera moves
 ## along the line through that spot, so it stays under your finger or the
 ## mouse; your hand stays where it is on screen.
+var zoom_on := true # the TABLE ZOOM setting
+var shake_on := true # the SCREEN SHAKE setting
+
+
 func zoom_at(at: Vector2, steps: float) -> void:
-	if _room or _menu_mode or not _preview.is_empty() or _last.is_empty() or dealing or _gun_pose != "rest":
+	if not zoom_on or _room or _menu_mode or not _preview.is_empty() or _last.is_empty() or dealing or _gun_pose != "rest":
 		return
 	var old := _cam_view
 	if steps > 0.0:
@@ -2323,6 +2327,8 @@ func _bang(target: int) -> void:
 
 
 func shake(amount: float = 0.03) -> void:
+	if not shake_on:
+		return
 	var t := create_tween()
 	for i in range(6):
 		var off := Vector3(randf_range(-amount, amount), randf_range(-amount, amount), 0)

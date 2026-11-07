@@ -76,6 +76,17 @@ var card_skin := "classic" # how your cards look (see card_skins.gd)
 var gun_skin := "standard" # how the shotgun looks in your hands (see gun_skins.gd)
 var owned := {} # gacha prizes you've won (see gacha.gd), and codes found (secrets.gd)
 var eggs_on := {} # easter egg -> on/off (only eggs you've found count)
+# the SETTINGS menu (see _build_settings)
+var master_vol := 8 # 0..10
+var sfx_vol := 8
+var music_vol := 7
+var jingles_on := true # the little tune on each cartridge
+var screen_shake := true
+var flashes := true # the screen flashing white/red on shots
+var fullscreen := false
+var ai_speed := "NORMAL" # SLOW, NORMAL, FAST
+var auto_next := true # deal the next round by itself after the gun
+var table_zoom := true # pinch / mouse wheel zoom at the table
 var coins := 0 # gacha coins: one for every round you win, a bonus for the match
 var _last_shooter := -1 # who fired the last shell, for knockouts
 var tutorial_offered := false
@@ -159,10 +170,13 @@ func _sound(name_: String) -> void:
 	if stream == null:
 		return
 	if name_.begins_with("jingle:"):
+		if not jingles_on:
+			return
 		if _jingle_player == null:
 			_jingle_player = AudioStreamPlayer.new()
 			_jingle_player.volume_db = -18.0 # a quarter of the loudness: a little jingle under the music
 			add_child(_jingle_player)
+		_jingle_player.volume_db = -18.0 + _vol_db(sfx_vol)
 		_jingle_player.stream = stream # a new tune cuts off the last one
 		_jingle_player.play()
 		return
@@ -170,12 +184,12 @@ func _sound(name_: String) -> void:
 	for pl in _sfx_players:
 		if not pl.playing:
 			pl.stream = stream
-			pl.volume_db = -4.0 + boost
+			pl.volume_db = -4.0 + boost + _vol_db(sfx_vol)
 			pl.play()
 			return
 	if _sfx_players.size() < 6:
 		var pl := AudioStreamPlayer.new()
-		pl.volume_db = -4.0 + boost
+		pl.volume_db = -4.0 + boost + _vol_db(sfx_vol)
 		add_child(pl)
 		_sfx_players.append(pl)
 		pl.stream = stream
@@ -266,7 +280,7 @@ func _on_music_finished() -> void:
 	var id := _music_id
 	await get_tree().create_timer(MUSIC_GAP).timeout
 	if id == _music_id and sound_on and music_on and _music_player != null and not _music_player.playing:
-		_music_player.volume_db = MUSIC_DB
+		_music_player.volume_db = _music_db()
 		_music_player.play()
 
 
@@ -313,7 +327,7 @@ func _play_music(id: String, force: bool = false) -> void:
 		id = "room"
 	if _music_player == null:
 		_music_player = AudioStreamPlayer.new()
-		_music_player.volume_db = MUSIC_DB
+		_music_player.volume_db = _music_db()
 		add_child(_music_player)
 		_music_player.finished.connect(_on_music_finished)
 	if not (sound_on and music_on):
@@ -342,7 +356,7 @@ func _play_music(id: String, force: bool = false) -> void:
 		_music_player.stream = next
 		_music_player.volume_db = -40.0
 		_music_player.play())
-	t.tween_property(_music_player, "volume_db", MUSIC_DB, 0.8)
+	t.tween_property(_music_player, "volume_db", _music_db(), 0.8)
 
 
 ## How sharp the 3D is: a share of the screen's resolution.
@@ -470,12 +484,16 @@ func _flags(p) -> String:
 
 
 func _flash(color: Color) -> void:
+	if not flashes:
+		return
 	flash_rect.color = Color(color, 0.9)
 	var t := create_tween()
 	t.tween_property(flash_rect, "color:a", 0.0, 0.45)
 
 
 func _shake() -> void:
+	if not screen_shake:
+		return
 	world.shake()
 	Input.vibrate_handheld(250)
 
@@ -517,6 +535,19 @@ func _load_settings() -> void:
 	solo_level = str(cfg.get_value("solo", "level", "normal"))
 	profile_name = cfg.get_value("profile", "name", "")
 	graphics = cfg.get_value("video", "graphics", "PS3")
+	master_vol = int(cfg.get_value("audio", "master", 8))
+	sfx_vol = int(cfg.get_value("audio", "sfx", 8))
+	music_vol = int(cfg.get_value("audio", "music_vol", 7))
+	jingles_on = bool(cfg.get_value("audio", "jingles", true))
+	screen_shake = bool(cfg.get_value("video", "shake", true))
+	flashes = bool(cfg.get_value("video", "flashes", true))
+	fullscreen = bool(cfg.get_value("video", "fullscreen", false))
+	ai_speed = str(cfg.get_value("game", "ai_speed", "NORMAL"))
+	auto_next = bool(cfg.get_value("game", "auto_next", true))
+	table_zoom = bool(cfg.get_value("game", "zoom", true))
+	sort_by_rank = bool(cfg.get_value("game", "sort_by_rank", false))
+	hints = bool(cfg.get_value("game", "hints", true))
+	_apply_settings.call_deferred()
 	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
 	custom_looks = []
 	for c in cfg.get_value("profile", "customs", []):
@@ -556,6 +587,18 @@ func _save_settings() -> void:
 	cfg.set_value("solo", "level", solo_level)
 	cfg.set_value("profile", "name", profile_name)
 	cfg.set_value("video", "graphics", graphics)
+	cfg.set_value("audio", "master", master_vol)
+	cfg.set_value("audio", "sfx", sfx_vol)
+	cfg.set_value("audio", "music_vol", music_vol)
+	cfg.set_value("audio", "jingles", jingles_on)
+	cfg.set_value("video", "shake", screen_shake)
+	cfg.set_value("video", "flashes", flashes)
+	cfg.set_value("video", "fullscreen", fullscreen)
+	cfg.set_value("game", "ai_speed", ai_speed)
+	cfg.set_value("game", "auto_next", auto_next)
+	cfg.set_value("game", "zoom", table_zoom)
+	cfg.set_value("game", "sort_by_rank", sort_by_rank)
+	cfg.set_value("game", "hints", hints)
 	cfg.set_value("profile", "look", my_look)
 	cfg.set_value("profile", "customs", custom_looks)
 	cfg.set_value("progress", "stats", stats)
@@ -892,23 +935,12 @@ func _panel_button(box: Container, text: String, on_press: Callable, size: int =
 ## The bar: settings over a drink.
 func show_bar() -> void:
 	world.focus_station("bar")
-	var box := _station_panel("THE BAR")
-	box.add_child(_label("Pull up a stool. Settings are on the house.", 20, Palette.DIM, true))
-	_panel_button(box, "NAME: %s" % profile_name, _change_name)
-	_panel_button(box, "GRAPHICS: %s" % graphics, func() -> void:
-		_cycle_graphics_only()
-		show_bar())
-	_panel_button(box, "SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
-		_toggle_sound()
-		show_bar())
-	_panel_button(box, "MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
-		_toggle_music()
-		show_bar())
-	box.add_child(_label("New to a game? Every cartridge at the table has a DEMO.", 18, Palette.DIM, true))
-	if not OS.has_feature("web"):
-		box.add_child(_label("Lobbies work between phones on the same Wi-Fi.", 18, Palette.DIM, true))
-	var back := _panel_button(box, "BACK", show_menu, 24)
-	Palette.accent(back, Palette.DIM)
+	_clear(screen)
+	_close_overlay()
+	_settings_from_bar = true
+	_settings_tab = "DISPLAY" if _settings_tab == "" else _settings_tab
+	_sound("open")
+	_build_settings()
 
 
 # ================================================================ the computer
@@ -3600,6 +3632,7 @@ func _drive_ai(delta: float) -> void:
 	_ai_wait = float(AI_PACE.get(act[0], 1.0))
 	if egg_on("turbo"):
 		_ai_wait *= 0.45 # TURBO: too much coffee
+	_ai_wait *= float({"SLOW": 1.6, "NORMAL": 1.0, "FAST": 0.55}.get(ai_speed, 1.0))
 	if demo_stage == "watch":
 		_ai_wait *= 1.5 # slow enough to follow
 	elif _people_alive() == 0:
@@ -4538,7 +4571,7 @@ func _add_next_round(box: VBoxContainer, auto: bool = false) -> void:
 		box.add_child(_label("The demo carries on by itself...", 24, Palette.DIM, true))
 		return
 	if not _online() or session.is_host():
-		if auto:
+		if auto and auto_next:
 			# the gun's empty: the next round deals itself in a few seconds,
 			# counted down big at the top of the screen
 			var count := _label("", 64, FLOAT_YELLOW, true)
@@ -4859,58 +4892,239 @@ func _show_log() -> void:
 var settings_layer: Control
 
 
-## Settings without leaving the table: graphics, sound, music, hints. They
-## float over the table in bubble letters and the game carries on underneath:
-## the AIs keep playing, the round goes on.
+## The SETTINGS menu: a panel of tabs (DISPLAY, AUDIO, GAMEPLAY, PROFILE,
+## EXTRAS), the same at the bar and at the table. At the table it floats over
+## the game, which carries on underneath.
+const SETTINGS_TABS := ["DISPLAY", "AUDIO", "GAMEPLAY", "PROFILE", "EXTRAS"]
+var _settings_tab := ""
+var _settings_from_bar := false
+
+
 func _show_settings() -> void:
 	_sound("open")
+	_settings_from_bar = false
+	if _settings_tab == "":
+		_settings_tab = "DISPLAY"
+	_build_settings()
+
+
+## dB for a 0..10 volume (0 is silent).
+static func _vol_db(v: int) -> float:
+	return -80.0 if v <= 0 else linear_to_db(v / 10.0)
+
+
+func _music_db() -> float:
+	return MUSIC_DB + _vol_db(music_vol)
+
+
+## Puts the settings into effect (after loading, and after every change).
+func _apply_settings() -> void:
+	AudioServer.set_bus_volume_db(0, _vol_db(master_vol))
+	if _music_player != null and _music_player.playing:
+		_music_player.volume_db = _music_db()
+	if world != null:
+		world.shake_on = screen_shake
+		world.zoom_on = table_zoom
+		if not table_zoom:
+			world.zoom_reset()
+	if not OS.has_feature("mobile") and not OS.has_feature("web") and DisplayServer.get_name() != "headless":
+		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+		if DisplayServer.window_get_mode() != want and not (want == DisplayServer.WINDOW_MODE_WINDOWED and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED):
+			DisplayServer.window_set_mode(want)
+
+
+func _settings_changed() -> void:
+	_save_settings()
+	_apply_settings()
 	_build_settings()
 
 
 func _build_settings() -> void:
 	_clear(settings_layer)
 	var vs := get_viewport_rect().size
+	var phone := vs.x < 700.0
 	var panel := PanelContainer.new()
 	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.03, 0.02, 0.02, 0.55)
+	st.bg_color = Color(0.03, 0.02, 0.02, 0.78)
 	st.set_corner_radius_all(28)
-	st.content_margin_left = 24
-	st.content_margin_right = 24
-	st.content_margin_top = 14
-	st.content_margin_bottom = 14
+	st.content_margin_left = 20
+	st.content_margin_right = 20
+	st.content_margin_top = 12
+	st.content_margin_bottom = 12
 	panel.add_theme_stylebox_override("panel", st)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	settings_layer.add_child(panel)
 	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 2)
+	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
-	var big := 40 if vs.x < 700.0 else 46
-	var title := Label.new()
-	title.text = "SETTINGS"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", big + 6)
-	title.add_theme_color_override("font_color", Palette.GOLD)
+	var title := _label("SETTINGS", 52 if phone else 56, Palette.GOLD, true)
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.02))
 	title.add_theme_constant_override("outline_size", 14)
 	col.add_child(title)
-	col.add_child(_bubble("GRAPHICS: %s" % graphics, func() -> void:
-		_cycle_graphics_only()
-		_build_settings(), Palette.INK, big))
-	col.add_child(_bubble("SOUND: %s" % ("ON" if sound_on else "OFF"), func() -> void:
-		_toggle_sound()
-		_build_settings(), Palette.AMBER if sound_on else Palette.DIM, big))
-	col.add_child(_bubble("MUSIC: %s" % ("ON" if music_on else "OFF"), func() -> void:
-		_toggle_music()
-		_build_settings(), Palette.AMBER if music_on else Palette.DIM, big))
-	col.add_child(_bubble("HINTS: %s" % ("ON" if hints else "OFF"), func() -> void:
-		_toggle_hints()
-		_build_settings(), Color(0.55, 0.85, 1.0) if hints else Palette.DIM, big))
-	col.add_child(_bubble("BACK", _hide_settings, Palette.RED, big))
-	# centred, a little above the middle so your hand stays in view
-	var sz := panel.get_combined_minimum_size()
-	panel.size = sz
-	panel.position = Vector2((vs.x - sz.x) * 0.5, maxf(70.0, vs.y * 0.4 - sz.y * 0.5))
+	# the tabs
+	var tabs := HFlowContainer.new()
+	tabs.alignment = FlowContainer.ALIGNMENT_CENTER
+	tabs.add_theme_constant_override("h_separation", 18)
+	col.add_child(tabs)
+	for tab in SETTINGS_TABS:
+		var on: bool = tab == _settings_tab
+		var b := _bubble(tab, func() -> void:
+			_settings_tab = tab
+			_sound("tick")
+			_build_settings(), Palette.GOLD if on else Palette.DIM, 30 if phone else 32)
+		tabs.add_child(b)
+	var line := ColorRect.new()
+	line.color = Color(Palette.GOLD, 0.35)
+	line.custom_minimum_size = Vector2(0, 2)
+	col.add_child(line)
+	# the tab's settings
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 2)
+	col.add_child(rows)
+	match _settings_tab:
+		"DISPLAY":
+			_set_choice(rows, "GRAPHICS", graphics, GRAPHICS.keys(), func(v: String) -> void: graphics = v; _fit_view(), "PS2: chunky and gritty. PS3: crisper. SHARP: full resolution.")
+			if not OS.has_feature("mobile") and not OS.has_feature("web"):
+				_set_toggle(rows, "FULLSCREEN", fullscreen, func(v: bool) -> void: fullscreen = v)
+			_set_toggle(rows, "SCREEN SHAKE", screen_shake, func(v: bool) -> void: screen_shake = v, "The camera jolts when you're shot.")
+			_set_toggle(rows, "FLASHES", flashes, func(v: bool) -> void: flashes = v, "The screen flashing on shots and big moments.")
+			_set_toggle(rows, "TABLE ZOOM", table_zoom, func(v: bool) -> void: table_zoom = v, "Pinch, or the mouse wheel, to zoom in on the table.")
+		"AUDIO":
+			_set_toggle(rows, "SOUND", sound_on, func(v: bool) -> void:
+				sound_on = v
+				if not v and _jingle_player != null:
+					_jingle_player.stop()
+				_play_music(_music_id, true), "Everything: effects and music.")
+			_set_volume(rows, "MASTER VOLUME", master_vol, func(v: int) -> void: master_vol = v)
+			_set_volume(rows, "EFFECTS", sfx_vol, func(v: int) -> void: sfx_vol = v)
+			_set_toggle(rows, "MUSIC", music_on, func(v: bool) -> void:
+				music_on = v
+				_play_music(_music_id, true))
+			_set_volume(rows, "MUSIC VOLUME", music_vol, func(v: int) -> void: music_vol = v)
+			_set_toggle(rows, "CARTRIDGE JINGLES", jingles_on, func(v: bool) -> void: jingles_on = v, "The little tune when you pick a cartridge.")
+		"GAMEPLAY":
+			_set_toggle(rows, "HINTS", hints, func(v: bool) -> void:
+				hints = v
+				if game != null:
+					_refresh(), "Gold outlines on cards that make melds, and tips.")
+			_set_choice(rows, "AI SPEED", ai_speed, ["SLOW", "NORMAL", "FAST"], func(v: String) -> void: ai_speed = v, "How quickly the AI players take their turns.")
+			_set_toggle(rows, "AUTO NEXT ROUND", auto_next, func(v: bool) -> void: auto_next = v, "Deal the next round by itself 3 seconds after the gun's empty.")
+			_set_choice(rows, "SORT HAND BY", "RANK" if sort_by_rank else "SUIT", ["SUIT", "RANK"], func(v: String) -> void:
+				sort_by_rank = v == "RANK"
+				if game != null:
+					_refresh())
+			_set_toggle(rows, "HIDE HANDS", hide_hands, func(v: bool) -> void: hide_hands = v, "Passing one phone round: hide your hand between turns.")
+		"PROFILE":
+			var name_row := _set_row(rows, "NAME")
+			if game == null:
+				name_row.add_child(_bubble(profile_name, func() -> void:
+					_hide_settings()
+					_change_name(), FLOAT_YELLOW, 32))
+			else:
+				name_row.add_child(_tag(profile_name, 30, FLOAT_YELLOW))
+			var cards_row := _set_row(rows, "CARDS")
+			cards_row.add_child(_settings_link(CardSkins.skin_name(card_skin), show_card_skins))
+			var gun_row := _set_row(rows, "SHOTGUN")
+			gun_row.add_child(_settings_link(GunSkins.skin_name(gun_skin), show_gun_skins))
+			var char_row := _set_row(rows, "CHARACTER")
+			char_row.add_child(_settings_link(str(my_look.get("name", "CUSTOM")), _open_customiser))
+			if game != null:
+				rows.add_child(_label("Change your name and look back in the room.", 20, Palette.DIM, true))
+			rows.add_child(_label("MATCHES %d · WON %d · ROUNDS WON %d · KNOCKOUTS %d · COINS %d" % [int(stats.get("matches", 0)), int(stats.get("match_wins", 0)), int(stats.get("round_wins", 0)), int(stats.get("knockouts", 0)), coins], 20, Palette.INK, true))
+		"EXTRAS":
+			var any := false
+			for id in Secrets.EGGS:
+				if Secrets.egg_found(id, owned):
+					any = true
+					_set_toggle(rows, str(Secrets.EGGS[id]["name"]), bool(eggs_on.get(id, false)), func(v: bool) -> void:
+						eggs_on[id] = v
+						_apply_eggs(), str(Secrets.EGGS[id]["text"]))
+			if not any:
+				rows.add_child(_label("Easter eggs you find show up here. Look for codes at the arcade.", 22, Palette.DIM, true))
+			rows.add_child(_label("CODES FOUND: %d/%d" % [Secrets.found(owned).size(), Secrets.CODES.size()], 22, Palette.INK, true))
+	var back := _bubble("BACK", _close_settings, Palette.RED, 40)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(back)
+	var w := minf(vs.x - 20.0, 660.0)
+	panel.custom_minimum_size = Vector2(w, 0)
+	var place := func() -> void:
+		if not is_instance_valid(panel):
+			return
+		var sz := panel.get_combined_minimum_size()
+		panel.size = sz
+		panel.position = Vector2((vs.x - sz.x) * 0.5, maxf(40.0, (vs.y - sz.y) * (0.5 if _settings_from_bar else 0.35)))
+	place.call()
+	place.call_deferred() # again once its rows have their real sizes
+
+
+## A row: the setting's name on the left, its control on the right.
+func _set_row(rows: Container, label: String, hint: String = "") -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	rows.add_child(row)
+	var l := _tag(label, 30, Palette.INK)
+	l.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+	l.add_theme_constant_override("outline_size", 8)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	if hint != "":
+		rows.add_child(_label(hint, 17, Palette.DIM))
+	return row
+
+
+func _set_toggle(rows: Container, label: String, value: bool, set_to: Callable, hint: String = "") -> void:
+	var row := _set_row(rows, label, hint)
+	row.add_child(_bubble("ON" if value else "OFF", func() -> void:
+		set_to.call(not value)
+		_settings_changed(), Color(0.45, 1.0, 0.5) if value else Palette.DIM, 34))
+
+
+func _set_choice(rows: Container, label: String, value: String, options: Array, set_to: Callable, hint: String = "") -> void:
+	var row := _set_row(rows, label, hint)
+	var at := options.find(value)
+	row.add_child(_bubble("◀", func() -> void:
+		set_to.call(options[posmod(at - 1, options.size())])
+		_settings_changed(), Palette.DIM, 30))
+	var v := _tag(value, 30, FLOAT_YELLOW)
+	v.custom_minimum_size = Vector2(110, 0)
+	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(v)
+	row.add_child(_bubble("▶", func() -> void:
+		set_to.call(options[posmod(at + 1, options.size())])
+		_settings_changed(), Palette.DIM, 30))
+
+
+func _set_volume(rows: Container, label: String, value: int, set_to: Callable) -> void:
+	var row := _set_row(rows, label)
+	row.add_child(_bubble("-", func() -> void:
+		set_to.call(maxi(0, value - 1))
+		_settings_changed()
+		_sound("tick"), Palette.DIM, 34))
+	var bar := _tag("■".repeat(value) + "□".repeat(10 - value), 22, Palette.AMBER)
+	bar.custom_minimum_size = Vector2(150, 0)
+	bar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(bar)
+	row.add_child(_bubble("+", func() -> void:
+		set_to.call(mini(10, value + 1))
+		_settings_changed()
+		_sound("tick"), Palette.DIM, 34))
+
+
+## A setting that opens another screen (only from the room, not mid-game).
+func _settings_link(text: String, go: Callable) -> Control:
+	if game != null:
+		return _tag(text, 26, FLOAT_YELLOW)
+	return _bubble(text + " ▶", func() -> void:
+		_hide_settings()
+		go.call(), FLOAT_YELLOW, 28)
+
+
+## BACK: at the bar, back to the room; at the table, back to the game.
+func _close_settings() -> void:
+	_hide_settings()
+	if _settings_from_bar:
+		_settings_from_bar = false
+		show_menu()
 
 
 func _hide_settings() -> void:
