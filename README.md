@@ -108,8 +108,8 @@ phone, or roll the mouse wheel over the spot on PC. Your hand stays in front of
 you while you're zoomed, and the view goes back to your seat when the round
 ends or the gun comes out.
 
-**SETTINGS** on the top bar changes graphics, sound, music and hints without
-leaving the game; **MENU** pauses (restart, new players, back to the room).
+**MENU** is the only thing on the top bar: it pauses, and holds the **RULES**,
+**SETTINGS**, restart, new players and back to the room.
 Playing against AIs on one phone, once every person at the table is out the
 match ends for you there and then (**YOU'RE OUT**), so there's no watching the
 AIs finish it.

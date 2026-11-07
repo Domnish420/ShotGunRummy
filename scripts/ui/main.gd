@@ -3733,11 +3733,7 @@ func _build_table() -> void:
 	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	round_label.clip_text = true
 	top.add_child(round_label)
-	for b in [_button("LOG", _show_log, 22), _button("RULES", _show_rules, 22), _button("SETTINGS", func() -> void:
-		if _settings_open():
-			_hide_settings()
-		else:
-			_show_settings(), 22), _button("MENU", _show_menu, 22)]:
+	for b in [_button("MENU", _show_menu, 26)]: # rules, settings and the rest are in here
 		b.custom_minimum_size = Vector2(0, 46)
 		Palette.accent(b, Palette.AMBER)
 		top.add_child(b)
@@ -4863,16 +4859,8 @@ func _show_rules() -> void:
 		lines.append("NORMAL MODE. No items and no shotgun: win the round to score, and the first to %d rounds wins the match." % game.options["rounds_to_win"])
 	for line in lines:
 		box.add_child(_label(line, 24, Palette.INK))
-	if not game.options["shotgun"]:
-		box.add_child(_button("BACK", _closing(_after_action)))
-		return
-	box.add_child(_label("ITEMS (use as many as you like, any time in your turn)", 28, Palette.PURPLE.lightened(0.3)))
-	for id in Items.DEFS:
-		var d: Dictionary = Items.def(id)
-		if int(d["copies"]) <= 0:
-			continue
-		box.add_child(_label("%s %s ×%d: %s" % [d["icon"], d["name"], d["copies"], d["text"]], 24, Palette.INK))
-	box.add_child(_button("BACK", _closing(_after_action)))
+	# (no item list: each item card says what it does when you pick it)
+	box.add_child(_button("BACK", _show_menu))
 
 
 func _pause_sound() -> void:
@@ -5157,6 +5145,7 @@ func _show_menu() -> void:
 	var box := _open_overlay(0.94, false, "menu")
 	box.add_child(_title("PAUSED"))
 	box.add_child(_button("RESUME", _closing(_after_action)))
+	box.add_child(_button("RULES", _show_rules))
 	box.add_child(_button("SETTINGS", _show_settings))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
