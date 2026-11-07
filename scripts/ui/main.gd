@@ -4886,6 +4886,7 @@ var settings_layer: Control
 const SETTINGS_TABS := ["DISPLAY", "AUDIO", "GAMEPLAY", "PROFILE", "EXTRAS"]
 var _settings_tab := ""
 var _settings_from_bar := false
+var _settings_from_menu := false # opened from the pause menu: BACK returns to it
 
 
 func _show_settings() -> void:
@@ -5128,6 +5129,10 @@ func _close_settings() -> void:
 	if _settings_from_bar:
 		_settings_from_bar = false
 		show_menu()
+	elif _settings_from_menu:
+		_settings_from_menu = false
+		if game != null:
+			_show_menu()
 
 
 func _hide_settings() -> void:
@@ -5146,7 +5151,10 @@ func _show_menu() -> void:
 	box.add_child(_title("PAUSED"))
 	box.add_child(_button("RESUME", _closing(_after_action)))
 	box.add_child(_button("RULES", _show_rules))
-	box.add_child(_button("SETTINGS", _show_settings))
+	box.add_child(_button("SETTINGS", func() -> void:
+		_close_overlay() # the menu goes; BACK brings it back
+		_settings_from_menu = true
+		_show_settings()))
 	if _online():
 		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
 		box.add_child(_button("LEAVE THE GAME", show_menu))
