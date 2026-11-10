@@ -102,7 +102,7 @@ const GAMES := {
 		["start", "CRAZY EIGHTS. The aim: be first to get rid of every card. Play one card a turn on the pile: it must match the top card's SUIT or RANK."],
 		["crazy8_play:eight=true", "WHISKEY! An eight is wild: play it on anything and call the suit the next player has to match."],
 		["draw", "Nothing fits (or you'd rather keep it)? Tap the STOCK to draw one. Then play, or PASS."],
-		["crazy8_play:barrel=true", "DOUBLE BARREL: a 2 makes the next player draw 2, unless they stack another 2 on it and pass the lot along. The Ace of Spades is LAST ORDERS: draw 4."],
+		["crazy8_play:barrel=true", "+2: a 2 makes the next player draw 2, unless they stack another 2 on it. It goes round in turn, +4, +6, +8, until someone can't stack and draws the lot. The Ace of Spades is LAST ORDERS: +4."],
 		["turn_skipped:cuffed=true", "CUFFED: a Jack skips the next player."],
 		["reverse", "KICK BACK: a Queen turns play round the other way."],
 		["last_shot_called", "LAST SHOT! Call it as you play your second-last card. Forget, and the table catches you: draw 2."],

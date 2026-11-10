@@ -8,7 +8,7 @@ extends "res://scripts/core/game.gd"
 ##   Can't (or won't)? DRAW one. Then play, or PASS.
 ## - Eights are wild (WHISKEY): play one on anything and call the suit.
 ## - The saloon cards:
-##     2  DOUBLE BARREL  the next player draws 2, unless they stack a 2 (or
+##     2  +2             the next player draws 2, unless they stack a 2 (or
 ##                       the Ace of Spades) on it and pass the lot along
 ##     A♠ LAST ORDERS    the next player draws 4 (stacks the same way)
 ##     J  CUFFED         the next player is skipped
@@ -18,7 +18,7 @@ extends "res://scripts/core/game.gd"
 ## - First out wins the round and gets the shotgun: 1 shell, or 2 for going
 ##   out on a saloon card or an eight.
 
-const ACTIONS := {2: "DOUBLE BARREL", 11: "CUFFED", 12: "KICK BACK", 8: "WHISKEY"}
+const ACTIONS := {2: "+2", 11: "CUFFED", 12: "KICK BACK", 8: "WHISKEY"}
 
 var called_suit := "" # the suit an eight called, until the next card
 var direction := 1 # 1 = to the left, -1 = back round the other way
@@ -235,7 +235,7 @@ func play(seat: int, card_id: String, suit: String = "") -> Dictionary:
 	called_suit = suit if eight else ""
 	p.ultimatum = false
 	_dry = 0
-	_emit("crazy8_play", {"seat": seat, "card": card, "suit": called_suit, "eight": eight, "barrel": stacks(card)})
+	_emit("crazy8_play", {"seat": seat, "card": card, "suit": called_suit, "eight": eight, "barrel": stacks(card), "stack": pending_draw + (4 if is_last_orders(card) else 2) if stacks(card) else 0})
 	if p.hand.is_empty():
 		_finish_round(seat, is_action(card))
 		return _ok()

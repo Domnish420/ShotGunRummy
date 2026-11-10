@@ -1342,7 +1342,9 @@ func sync(s: Dictionary) -> void:
 		var xf := _leaned(discard_base, 0.0, yaw, i - from)
 		var top_one := i == pile.size() - 1
 		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] and game.kind == "rummy" else "", game.is_trump(c), stock_xf)
-	if game.kind == "crazy8" and str(game.get("called_suit")) != "":
+	if game.kind == "crazy8" and int(game.get("pending_draw")) > 0:
+		_label_at("+%d STACKED" % game.pending_draw, discard_base + Vector3(0, 0.01, 0.15), 34, Palette.RED)
+	elif game.kind == "crazy8" and str(game.get("called_suit")) != "":
 		_label_at("CALLED: %s" % {"S": "♠ SPADES", "H": "♥ HEARTS", "D": "♦ DIAMONDS", "C": "♣ CLUBS"}[game.called_suit], discard_base + Vector3(0, 0.01, 0.15), 30, Palette.GOLD)
 	elif game.kind == "rummy" or not pile.is_empty():
 		_label_at("PILE" if game.kind == "crazy8" else "DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)

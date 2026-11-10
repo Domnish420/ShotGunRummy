@@ -68,8 +68,8 @@ func _my_throw() -> bool:
 
 ## Every frame: start aiming when it's your throw and the board's ready.
 func _tick() -> void:
-	if main.game == null or not is_instance_valid(aim):
-		return
+	if main.game == null or not is_instance_valid(aim) or main.mode_ui != self or main.round_label == null or not is_instance_valid(main.round_label) or not is_instance_valid(main.meld_btn):
+		return # the table's gone (back to the room)
 	var w = main.world
 	var ready: bool = w.darts_viewing() and not w.camera_moving() and not w.fx_busy and main.overlay_layer.get_child_count() == 0 and not main._lesson_showing() and not main._settings_open()
 	if _wait > 0.0:

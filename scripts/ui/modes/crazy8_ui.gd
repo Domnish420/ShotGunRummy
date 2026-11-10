@@ -21,7 +21,7 @@ static func card_words(c: Dictionary) -> String:
 		return "WHISKEY"
 	if r == 1 and c["suit"] == "S":
 		return "LAST ORDERS"
-	return {2: "DOUBLE BARREL", 11: "CUFFED", 12: "KICK BACK"}.get(r, "")
+	return {2: "+2", 11: "CUFFED", 12: "KICK BACK"}.get(r, "")
 
 
 func refresh() -> void:
@@ -95,7 +95,7 @@ func status() -> String:
 	if it != "":
 		return it
 	if g.pending_draw > 0:
-		return "STACK A 2 (OR THE ACE OF SPADES), OR DRAW %d" % g.pending_draw
+		return "+%d COMING: STACK A 2 ON IT, OR DRAW %d" % [g.pending_draw, g.pending_draw]
 	if g.players[main._me()].ultimatum:
 		return "REVOLVER: PLAY A CARD THIS TURN, OR DRAW AND SPIN THE CYLINDER"
 	if g.drew:
@@ -239,6 +239,9 @@ func on_event(kind: String, d: Dictionary) -> void:
 			var words := card_words(c)
 			if int(c["rank"]) == 8:
 				main.world.announce("WHISKEY! %s" % SUIT_WORDS[d["suit"]])
+			elif int(d.get("stack", 0)) > 0:
+				var n := int(d["stack"])
+				main.world.announce(("+%d!" % n) if n <= 2 or (n == 4 and int(c["rank"]) == 1) else "STACKED: +%d!" % n)
 			elif words != "":
 				main.world.announce(words + "!")
 		"took_stack":
@@ -278,7 +281,7 @@ func rules() -> Array:
 		"THE DEAL. 7 cards each (5 with 5 or 6 players). The rest is the stock, and one card is turned up to start the pile. A few items are shuffled into the stock: draw one and you keep it and draw again.",
 		"PLAYING. On your turn, play one card on the pile that matches the top card's SUIT or RANK. Can't, or would rather not? Tap the stock to DRAW one, then play or PASS.",
 		"WHISKEY. Eights are wild: play one on anything and call the suit the next player must match.",
-		"SALOON CARDS. 2 is DOUBLE BARREL: the next player draws 2, unless they stack a 2 of their own and pass the lot along. The Ace of Spades is LAST ORDERS: draw 4 (it stacks the same way). A Jack is CUFFED: the next player is skipped. A Queen is KICK BACK: play turns round (with two players it's a skip).",
+		"SALOON CARDS. 2 is +2: the next player draws 2, unless they stack a 2 of their own on it, and it keeps going round in turn: +4, +6, +8... until someone can't stack and draws the lot. The Ace of Spades is LAST ORDERS: draw 4 (it stacks the same way). A Jack is CUFFED: the next player is skipped. A Queen is KICK BACK: play turns round (with two players it's a skip).",
 		"LAST SHOT! Down to your last card? Tap LAST SHOT! before you play your second-last one. Forget, and the table catches you: draw 2.",
 		"THE SHOTGUN. First out wins and gets 1 shell, or 2 for going out on a saloon card or an eight, and picks who to shoot. Everyone has 4 health. Last one standing walks out.",
 	]
@@ -291,7 +294,7 @@ func coach() -> String:
 	if not main._my_turn():
 		return "Keep an eye on who's down to a card or two: a 2 or a Jack can stop them."
 	if g.pending_draw > 0:
-		return "Got a 2? Stack it and the next player takes the lot. If not, DRAW."
+		return "Got a 2? Stack it and the +%d goes on to the next player. If not, DRAW." % (g.pending_draw + 2)
 	if g.playable(main._me()).is_empty():
 		return "Nothing fits: tap the stock to draw."
 	return "Glowing cards fit. Save your eights for when nothing else does."

@@ -527,10 +527,11 @@ trick (the first one played, if there's more than one).
   card's suit or rank. Nothing fits? Tap the stock to **DRAW** one, then play or
   **PASS**.
 - **Whiskey.** Eights are wild: play one on anything and call a suit.
-- **Saloon cards.** **2 Double Barrel**: the next player draws 2, unless they
-  stack a 2 and pass the lot on. **Ace of Spades Last Orders**: draw 4 (stacks
-  the same way). **Jack Cuffed**: skip the next player. **Queen Kick Back**:
-  play turns round (a skip with two players).
+- **Saloon cards.** **2 is +2**: the next player draws 2, unless they stack a 2
+  of their own; it keeps going round in turn (+4, +6, +8...) until someone
+  can't stack and draws the lot. **Ace of Spades Last Orders**: +4 (stacks the
+  same way). **Jack Cuffed**: skip the next player. **Queen Kick Back**: play
+  turns round (a skip with two players).
 - **LAST SHOT!** With two cards left, tap the floating **LAST SHOT!** before you
   play. Forget and you're caught: draw 2.
 - **The shotgun.** First out wins, with 1 shell, or 2 for going out on a saloon
