@@ -31,6 +31,8 @@ const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
 const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
 const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
 const Crazy8UI = preload("res://scripts/ui/modes/crazy8_ui.gd")
+const DartsUI = preload("res://scripts/ui/modes/darts_ui.gd")
+const DartsT = preload("res://scripts/core/darts.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
@@ -117,6 +119,9 @@ var _viewer := 0 # pass-and-play: the person holding the phone (AIs don't)
 var _ai_wait := 0.0 # seconds until the AI's next move
 var _ai_memory := {} # seat -> what that AI remembers this turn
 var _ai_phase := ""
+var _ai_held: Array = [] # an AI move held back while its aim plays out (darts)
+var darts_mode := "shootout" # which darts game: shootout, clock or 301
+var _card_kind := "rummy" # the last cartridge, for coming back from the party room
 var _ip_edit: LineEdit
 var _name_edit: LineEdit
 
@@ -527,6 +532,10 @@ func _load_settings() -> void:
 	game_kind = str(cfg.get_value("setup", "game", "rummy"))
 	if not Games.has(game_kind):
 		game_kind = "rummy"
+	_card_kind = game_kind if Games.LIST.has(game_kind) else "rummy"
+	darts_mode = str(cfg.get_value("setup", "darts_mode", "shootout"))
+	if not DartsT.MODES.has(darts_mode):
+		darts_mode = "shootout"
 	played = cfg.get_value("progress", "played", {})
 	sound_on = cfg.get_value("audio", "on", true)
 	music_on = cfg.get_value("audio", "music", true)
@@ -579,6 +588,7 @@ func _save_settings() -> void:
 	cfg.set_value("setup", "hide_hands", hide_hands)
 	cfg.set_value("setup", "bots", setup_bots)
 	cfg.set_value("setup", "game", game_kind)
+	cfg.set_value("setup", "darts_mode", darts_mode)
 	cfg.set_value("setup", "normal", normal_mode)
 	cfg.set_value("progress", "played", played)
 	cfg.set_value("audio", "on", sound_on)
@@ -784,8 +794,9 @@ func show_menu() -> void:
 	if profile_name == "":
 		show_name_screen()
 		return
-	world.set_cartridge(game_kind)
-	_play_music("room")
+	if Games.LIST.has(game_kind):
+		world.set_cartridge(game_kind)
+	_play_music("party" if world.room_id == "party" else "room")
 	_room_hud()
 	if not tutorial_offered:
 		tutorial_offered = true
@@ -819,7 +830,7 @@ func _room_hud() -> void:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 6)
 	margin.add_child(col)
-	var title := _label("SHOTGUN PARTY", 44, Color(0.85, 0.15, 0.1), true)
+	var title := _label("THE PARTY ROOM" if world.room_id == "party" else "SHOTGUN PARTY", 44, Color(0.75, 0.4, 1.0) if world.room_id == "party" else Color(0.85, 0.15, 0.1), true)
 	var who := _label("%s · %d GACHA COIN%s" % [profile_name, coins, "" if coins == 1 else "S"], 24, Palette.INK, true)
 	var parts: Array = [title, who]
 	if menu_message != "":
@@ -874,6 +885,119 @@ func _go_station(id: String) -> void:
 			show_door()
 		"computer":
 			show_computer()
+		"party":
+			_walk_to_room("party")
+		"back":
+			_walk_to_room("bar")
+		"darts":
+			show_darts()
+		"boxes":
+			show_board_games()
+
+
+## Through a door to the other room: walk up to it, the screen fades out, the
+## other room's swapped in, and it fades back up.
+func _walk_to_room(id: String) -> void:
+	_clear(screen)
+	world.focus_station("party" if id == "party" else "back")
+	await get_tree().create_timer(0.75).timeout
+	var black := ColorRect.new()
+	black.color = Color(0, 0, 0, 0)
+	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_full(black))
+	var t := black.create_tween()
+	t.tween_property(black, "color:a", 1.0, 0.3)
+	await t.finished
+	world.goto_room(id)
+	world.enter_room()
+	_play_music("party" if id == "party" else "room")
+	_room_hud()
+	var back := black.create_tween()
+	back.tween_property(black, "color:a", 0.0, 0.4)
+	await back.finished
+	black.queue_free()
+
+
+## The dartboard: pick a game, then PLAY or DEMO. Floating words, no boxes.
+func show_darts() -> void:
+	world.focus_station("darts")
+	_close_overlay()
+	_clear(screen)
+	game_kind = "darts"
+	if not _normal_unlocked("darts"):
+		normal_mode = false
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 6)
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 50)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label("SHOTGUN DARTS" if not normal_mode else "DARTS", 44, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	for m in DartsT.MODES:
+		var stakes := "1 SHELL (2 FOR A BULL)" if m == "shootout" else "%d SHELLS" % DartsT.STAKES[m]
+		var word := _bubble(DartsT.MODE_NAMES[m], _set_darts_mode.bind(m), FLOAT_YELLOW if m == darts_mode else Palette.DIM, 44 if m == darts_mode else 34)
+		word.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		col.add_child(word)
+		if m == darts_mode and not normal_mode:
+			var st := _label(stakes, 22, Palette.RED, true)
+			st.add_theme_color_override("font_outline_color", Color.BLACK)
+			st.add_theme_constant_override("outline_size", 6)
+			col.add_child(st)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the board shows through here
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 40)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 34))
+	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 34)
+	plain.disabled = not _normal_unlocked("darts")
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	var words := HBoxContainer.new()
+	words.alignment = BoxContainer.ALIGNMENT_CENTER
+	words.add_theme_constant_override("separation", 70)
+	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_child(_bubble("PLAY", show_play_choice, Palette.GOLD, 72))
+	words.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 72))
+	col.add_child(words)
+	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 36))
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 40)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+
+
+func _set_darts_mode(m: String) -> void:
+	darts_mode = m
+	_save_settings()
+	show_darts()
+
+
+func _set_darts_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked("darts")
+	_save_settings()
+	show_darts()
+
+
+## The board game shelf: nothing to play yet.
+func show_board_games() -> void:
+	world.focus_station("boxes")
+	var box := _station_panel("BOARD GAMES")
+	box.add_child(_label("Still in their shrink-wrap. Board games are coming to this shelf soon.", 26, Palette.INK, true))
+	_panel_button(box, "BACK", show_menu, 30)
+
+
+## The options a new game of `kind` starts with (which darts game, say).
+func _game_opts(kind: String) -> Dictionary:
+	return {"mode": darts_mode} if kind == "darts" else {}
 
 
 ## A dark panel along the bottom (the room shows above it). Returns its box.
@@ -1192,6 +1316,9 @@ func show_cartridges() -> void:
 			profile_name = typed
 	_close_overlay()
 	_clear(screen)
+	if not Games.LIST.has(game_kind):
+		game_kind = _card_kind
+		normal_mode = normal_mode and _normal_unlocked(game_kind)
 	var kinds := Games.kinds()
 	var at := maxi(0, kinds.find(game_kind))
 	if world._carousel.is_empty():
@@ -1288,6 +1415,7 @@ func _scroll_cartridges(step: int) -> void:
 
 func _pick_cartridge(kind: String) -> void:
 	game_kind = kind
+	_card_kind = kind
 	if not _normal_unlocked(kind):
 		normal_mode = false
 	_save_settings()
@@ -1338,7 +1466,7 @@ func show_play_choice() -> void:
 	if not OS.has_feature("web"): # browsers can't open the connections lobbies use
 		col.add_child(_bubble("HOST A LOBBY", _on_host_pressed, Color(0.55, 0.85, 1.0), 44))
 		col.add_child(_bubble("JOIN A LOBBY", _on_join_pressed, Color(0.55, 0.85, 1.0), 44))
-	col.add_child(_bubble("BACK", show_cartridges, Palette.DIM, 34))
+	col.add_child(_bubble("BACK", show_darts if Games.is_party(game_kind) else show_cartridges, Palette.DIM, 34))
 
 
 ## First time in: point people at the demos.
@@ -1655,6 +1783,7 @@ func _on_host_pressed() -> void:
 	var err := session.host(n, my_look)
 	session.game_kind = game_kind
 	session.normal = normal_mode
+	session.game_opts = _game_opts(game_kind)
 	if err != "":
 		menu_message = err
 		show_menu()
@@ -2309,7 +2438,7 @@ func start_match() -> void:
 	tutorial = bool(_table.get("tutorial", false))
 	if not tutorial:
 		demo_stage = ""
-	game.setup(_table["names"], {}, int(_table.get("seed", -1)))
+	game.setup(_table["names"], _game_opts(game.kind), int(_table.get("seed", -1)))
 	for i in range(game.players.size()):
 		game.players[i].look = _table["looks"][i]
 		game.players[i].bot = _table["bots"][i]
@@ -2336,6 +2465,7 @@ func _reset_match_view() -> void:
 	_ai_memory = {}
 	_ai_wait = 1.0
 	_ai_phase = ""
+	_ai_held = []
 
 
 func _online() -> bool:
@@ -3531,7 +3661,7 @@ func _show_blackjack_result() -> void:
 # ================================================================ AI players
 
 ## Seconds the AI waits after each kind of move, so you can follow along.
-const AI_PACE := {"use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 2.3, "finish": 1.5}
+const AI_PACE := {"throw": 0.5, "use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 2.3, "finish": 1.5}
 
 
 # ---------------------------------------------------------------- pinch to zoom
@@ -3628,10 +3758,18 @@ func _drive_ai(delta: float) -> void:
 	if _ai_wait > 0.0:
 		return
 	var memory: Dictionary = _ai_memory.get_or_add(seat, {})
-	var act := Bot.next_action(game, seat, game.players[seat].bot, memory)
-	if act.is_empty():
-		_ai_wait = 0.5
-		return
+	var act: Array
+	if not _ai_held.is_empty():
+		act = _ai_held
+		_ai_held = []
+	else:
+		act = Bot.next_action(game, seat, game.players[seat].bot, memory)
+		if act.is_empty():
+			_ai_wait = 0.5
+			return
+		if mode_ui != null and mode_ui.has_method("preview_bot") and mode_ui.preview_bot(seat, act):
+			_ai_held = act # its aim plays out first (darts)
+			return
 	_ai_wait = float(AI_PACE.get(act[0], 1.0))
 	if egg_on("turbo"):
 		_ai_wait *= 0.45 # TURBO: too much coffee
@@ -3859,6 +3997,8 @@ func _make_mode_ui():
 			return PokerUI.new(self)
 		"crazy8":
 			return Crazy8UI.new(self)
+		"darts":
+			return DartsUI.new(self)
 	return null
 
 
@@ -3881,6 +4021,8 @@ func _on_table_input(event: InputEvent) -> void:
 		_aim_tap(event.position)
 		return
 	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
+		return
+	if mode_ui != null and mode_ui.has_method("table_tap") and mode_ui.table_tap(event.position):
 		return
 	var hit: Dictionary = world.pick(_to_view(event.position))
 	if _item_pick_tap(hit, _to_view(event.position)):

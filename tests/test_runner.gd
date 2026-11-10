@@ -17,6 +17,8 @@ const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Crazy8 = preload("res://scripts/core/crazy8.gd")
+const Darts = preload("res://scripts/core/darts.gd")
+const DartsBot = preload("res://scripts/core/darts_bot.gd")
 const Games = preload("res://scripts/core/games.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
@@ -45,7 +47,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_crazy8", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_crazy8", "test_darts_board", "test_darts_modes", "test_darts_ai", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1544,6 +1546,128 @@ func test_crazy8() -> void:
 	h.draw(me)
 	h.draw(h.turn)
 	check(h.phase == "shoot" and h.gun["holder"] == me, "a dry deck: fewest cards wins")
+
+
+# ================================================================ darts
+
+func test_darts_board() -> void:
+	check(Darts.score_at(0, 0)["label"] == "BULL" and Darts.score_at(0, 0)["value"] == 50, "dead centre is the bull")
+	check(Darts.score_at(0.1, 0)["value"] == 25, "the outer bull is 25")
+	check(Darts.score_at(0, 0.585)["label"] == "T20", "straight up, the treble ring is treble 20")
+	check(Darts.score_at(0, 0.96)["label"] == "D20", "and the double ring above it is double 20")
+	check(Darts.score_at(0, -0.4)["label"] == "3", "straight down is 3")
+	check(Darts.score_at(0.4, 0)["label"] == "6", "right is 6")
+	check(Darts.score_at(-0.4, 0)["label"] == "11", "left is 11")
+	check(Darts.score_at(1.3, 0)["label"] == "MISS", "off the board scores nothing")
+	for n in Darts.NUMBERS:
+		for ring in ["single", "inner", "double", "treble"]:
+			var p := Darts.spot(n, ring)
+			var hit := Darts.score_at(p.x, p.y)
+			check(int(hit["num"]) == n and int(hit["mult"]) == {"single": 1, "inner": 1, "double": 2, "treble": 3}[ring], "the middle of %s %d hits it" % [ring, n])
+
+
+func test_darts_modes() -> void:
+	# shootout: highest visit wins; a bull makes it 2 shells
+	var g := Darts.new()
+	g.setup(["A", "B"], {"mode": "shootout"}, 4)
+	g.start_round()
+	var a: int = g.turn
+	var b: int = 1 - a
+	var t20 := Darts.spot(20, "treble")
+	g.throw(a, t20.x, t20.y)
+	g.throw(a, 0, 0)
+	g.throw(a, 2, 2)
+	check(g.scores[a] == 110 and g.turn == b, "60 + 50 + a miss: 110, then the next player")
+	for i in range(3):
+		g.throw(b, 0, -0.4)
+	check(g.phase == "shoot" and g.gun["holder"] == a and g.gun["shells"] == 2, "the bull-hitter wins with 2 shells")
+	# a tie goes to sudden death
+	var h := Darts.new()
+	h.setup(["A", "B", "C"], {"mode": "shootout"}, 5)
+	h.start_round()
+	var o := [h.turn, h.next_alive(h.turn), h.next_alive(h.next_alive(h.turn))]
+	var deaths := []
+	h.event.connect(func(k, d): if k == "sudden_death": deaths.append(d))
+	for s in o:
+		for i in range(3):
+			var p := Darts.spot(20 if s != o[2] else 1, "single")
+			h.throw(s, p.x, p.y)
+	check(deaths.size() == 1 and deaths[0]["seats"] == [o[0], o[1]] and h.turn == o[0], "a tie: the leaders throw again")
+	for i in range(3):
+		h.throw(o[0], 0, -0.4)
+	for i in range(3):
+		h.throw(o[1], 0, 0.4)
+	check(h.phase == "shoot" and h.gun["holder"] == o[1] and h.gun["shells"] == 1, "sudden death decides it: 1 shell")
+	# 301: bust and checkout
+	var f := Darts.new()
+	f.setup(["A", "B"], {"mode": "301"}, 6)
+	f.start_round()
+	a = f.turn
+	b = 1 - a
+	f.scores[a] = 40
+	f.visit_start = 40
+	var d20 := Darts.spot(20, "single")
+	f.throw(a, d20.x, d20.y)
+	f.throw(a, t20.x, t20.y)
+	check(f.scores[a] == 40 and f.turn == b, "301: going under busts, back to 40")
+	for i in range(3):
+		f.throw(b, 2, 2)
+	var d := Darts.spot(20, "double")
+	f.throw(a, d.x, d.y)
+	check(f.phase == "shoot" and f.gun["holder"] == a and f.gun["shells"] == 4, "301: exactly 0 wins, 4 shells")
+	# around the clock: doubles and trebles move you on
+	var c := Darts.new()
+	c.setup(["A", "B"], {"mode": "clock"}, 7)
+	c.start_round()
+	a = c.turn
+	var p1 := Darts.spot(1, "treble")
+	c.throw(a, p1.x, p1.y)
+	check(c.scores[a] == 4, "a treble 1 moves you on to 4")
+	var p4 := Darts.spot(4, "double")
+	c.throw(a, p4.x, p4.y)
+	check(c.scores[a] == 6, "a double 4 moves you on to 6")
+	c.scores[a] = 21
+	c.throw(a, 0, 0.1)
+	check(c.phase == "shoot" and c.gun["shells"] == 2, "the bull at the end wins, 2 shells")
+	# normal mode: no gun
+	var n := Darts.new()
+	n.setup(["A", "B"], Game.NORMAL_MODE.merged({"mode": "shootout"}), 8)
+	n.start_round()
+	for i in range(6):
+		n.throw(n.turn, 0, 0.4 if i < 3 else -0.4)
+	check(n.phase == "round_over" and n.gun == null, "normal mode: nobody shoots")
+
+
+## AIs finish every mode at every level, and better players win more.
+func test_darts_ai() -> void:
+	for m in Darts.MODES:
+		var wins := {"easy": 0, "normal": 0, "hard": 0}
+		for sd in range(1, 7):
+			var n := 2 + sd % 4
+			var names := []
+			for i in range(n):
+				names.append("P%d" % i)
+			var g = Games.make("darts")
+			g.setup(names, {"mode": m}, sd * 13)
+			for i in range(n):
+				g.players[i].bot = Bot.LEVELS[(i + sd) % 3]
+			g.start_round()
+			var steps := 0
+			while g.phase != "match_over" and steps < 20000:
+				steps += 1
+				if g.phase == "round_over":
+					g.start_round()
+					continue
+				var seat: int = g.gun["holder"] if g.phase == "shoot" else g.turn
+				var act: Array = Bot.next_action(g, seat, g.players[seat].bot, {})
+				var res: Dictionary = Session.perform(g, seat, act[0], act[1], true)
+				if not res["ok"]:
+					check(false, "darts %s: AI move refused: %s" % [m, res.get("error", "")])
+					break
+			check(g.phase == "match_over", "darts %s: the match finishes (%d steps)" % [m, steps])
+			if g.winner >= 0:
+				wins[g.players[g.winner].bot] += 1
+		print("  darts %s AI wins by level: %s" % [m, wins])
 
 
 ## The Blank Shell: the next shot fired does nothing, then the gun is live.

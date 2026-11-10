@@ -36,6 +36,7 @@ var bots: Array = [] # "" for a person, or an AI's level, same order (the host r
 var my_look: Dictionary = {}
 var game_kind := "rummy" # which card game the lobby will play
 var normal := false # normal mode: no items, no shotgun
+var game_opts := {} # options the game starts with (which darts game)
 var lobbies := {} # ip -> { "name", "players", "max", "seen" }
 var game: Game = null
 var in_match := false
@@ -336,7 +337,7 @@ func start_match() -> void:
 		return
 	in_match = true
 	game = make_game(game_kind, normal)
-	game.setup(names)
+	game.setup(names, game_opts)
 	for i in range(game.players.size()):
 		game.players[i].look = looks[i] if i < looks.size() else Looks.for_seat(i)
 		game.players[i].bot = str(bots[i]) if i < bots.size() else ""

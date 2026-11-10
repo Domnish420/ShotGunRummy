@@ -23,6 +23,7 @@ const GunSkins = preload("res://scripts/core/gun_skins.gd")
 const Gacha3D = preload("res://scripts/three/gacha3d.gd")
 const Games = preload("res://scripts/core/games.gd")
 const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
+const PartyRoom = preload("res://scripts/three/party_room.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -101,7 +102,47 @@ const STATIONS := {
 	"gacha": {"sign": Vector3(2.35, 0.95, -1.7), "spot": Vector3(2.35, 0.1, -1.7), "name": "GACHA"},
 	"door": {"sign": Vector3(0.9, 1.75, -3.0), "spot": Vector3(0.9, 0.25, -3.05), "name": "EXIT"},
 	"computer": {"sign": Vector3(-2.6, 1.35, 1.75), "spot": Vector3(-2.6, 0.5, 1.75), "name": "ARCADE"},
+	"party": {"sign": Vector3(-1.35, 1.85, -3.0), "spot": Vector3(-1.35, 0.25, -3.05), "name": "PARTY ROOM"},
+	# the party room
+	"darts": {"sign": Vector3(0.0, 0.42, -3.0), "spot": Vector3(0.0, 0.95, -3.05), "name": "PLAY DARTS", "room": "party"},
+	"boxes": {"sign": Vector3(2.8, 1.55, -1.2), "spot": Vector3(2.9, 0.4, -1.2), "name": "BOARD GAMES", "room": "party"},
+	"back": {"sign": Vector3(-2.95, 0.95, 1.4), "spot": Vector3(-3.0, 0.25, 1.4), "name": "BACK TO THE BAR", "room": "party"},
 }
+var _bar_set: Node3D
+var _party_set: Node3D
+var dartboard: Node3D # the party room's board (dartboard3d.gd)
+var room_id := "bar" # which room you're in: "bar" or "party"
+
+
+## Is this station in the room you're in?
+func _here(station: String) -> bool:
+	return str(STATIONS[station].get("room", "bar")) == room_id
+
+
+## Through a door: the other room is swapped in (main.gd fades the screen
+## over it). You come in at the middle, looking round.
+func goto_room(id: String) -> void:
+	room_id = id
+	_bar_set.visible = id == "bar"
+	_party_set.visible = id == "party"
+	if _console != null:
+		_console.visible = id == "bar" # the cartridge slot's for the card games
+	if _cartridge != null:
+		_cartridge.visible = id == "bar"
+	_set_door(false)
+	var party_hinge := _bar_set.get_node_or_null("PartyHinge") as Node3D
+	if party_hinge != null:
+		party_hinge.rotation.y = 0.0
+	_yaw = 0.0
+	_pitch = -0.12
+	_view_yaw = 0.0
+	_view_pitch = -0.12
+	if _room:
+		_focus = ""
+		_room_hold = 0.0
+		camera.global_transform = _hub_transform(0.0, -0.12)
+		for k in _signs:
+			_signs[k].visible = _here(k)
 var _gacha_light: SpotLight3D
 const PREVIEW_CAM := Vector3(-1.75, 1.15, 2.0) # from the spot: the gap beside the table
 
@@ -119,7 +160,7 @@ func _ready() -> void:
 	gacha_machine = Gacha3D.new()
 	gacha_machine.position = GACHA_SPOT
 	gacha_machine.rotation.y = -0.5 # turned a little towards the room
-	add_child(gacha_machine)
+	_bar_set.add_child(gacha_machine)
 	gacha_machine.sfx.connect(func(n: String) -> void: sfx.emit(n))
 	gacha_machine.dropped.connect(gacha_closeup)
 	gacha_machine.burst.connect(func(at: Vector3, color: Color, count: int) -> void:
@@ -214,8 +255,18 @@ func _build_room() -> void:
 	we.environment = env
 	add_child(we)
 
-	# the room, the table and the clutter on it
-	Props.build_room(self, TABLE_TOP, TABLE_RX, TABLE_RZ)
+	# two rooms in the same spot, one shown at a time: the bar, and the party
+	# room through the purple door. The table in the middle is in both.
+	_bar_set = Node3D.new()
+	_bar_set.name = "BarRoom"
+	add_child(_bar_set)
+	Props.build_room(_bar_set, TABLE_TOP, TABLE_RX, TABLE_RZ)
+	Props.build_table(self, TABLE_TOP, TABLE_RX, TABLE_RZ)
+	_party_set = Node3D.new()
+	_party_set.name = "PartyRoom"
+	add_child(_party_set)
+	dartboard = PartyRoom.build(_party_set)["board"]
+	_party_set.visible = false
 
 	# the lamp over the table
 	var cord := CylinderMesh.new()
@@ -447,6 +498,9 @@ func _fit_camera() -> void:
 	_landscape = s.x > s.y
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT if _landscape else Camera3D.KEEP_WIDTH
 	camera.fov = 50.0 if _landscape else 62.0
+	if _darts_on:
+		camera.global_transform = darts_camera()
+		return
 	if not _preview.is_empty():
 		_aim_preview()
 		return
@@ -581,7 +635,7 @@ func enter_room() -> void:
 	_room_hold = 0.6
 	_move_camera(_hub_transform(_view_yaw, _view_pitch), 0.6)
 	for k in _signs:
-		_signs[k].visible = true
+		_signs[k].visible = _here(k)
 
 
 ## At the table, playing: no room.
@@ -664,6 +718,8 @@ func room_pick(at: Vector2) -> String:
 	var best := ""
 	var best_d := reach
 	for k in STATIONS:
+		if not _here(k):
+			continue
 		for p in [STATIONS[k]["sign"], STATIONS[k]["spot"]]:
 			if camera.is_position_behind(p):
 				continue
@@ -696,6 +752,24 @@ func focus_station(id: String) -> void:
 		"door":
 			camera.fov = 56.0 if not _landscape else 48.0
 			_move_camera(Transform3D(Basis(), Vector3(0.75, 0.45, -1.0)).looking_at(Vector3(0.9, 0.3, -3.1), Vector3.UP), 0.7)
+		"party":
+			# walk up to the purple door; it swings open
+			camera.fov = 56.0 if not _landscape else 48.0
+			var hinge := _bar_set.get_node_or_null("PartyHinge") as Node3D
+			if hinge != null:
+				var t := hinge.create_tween()
+				t.tween_property(hinge, "rotation:y", 1.35, 0.6).set_trans(Tween.TRANS_SINE)
+			sfx.emit("open")
+			_move_camera(Transform3D(Basis(), Vector3(-1.35, 0.4, -1.6)).looking_at(Vector3(-1.35, 0.3, -3.2), Vector3.UP), 0.8)
+		"back":
+			camera.fov = 56.0 if not _landscape else 48.0
+			sfx.emit("open")
+			_move_camera(Transform3D(Basis(), Vector3(-1.6, 0.4, 1.4)).looking_at(Vector3(-3.2, 0.3, 1.4), Vector3.UP), 0.8)
+		"darts":
+			_move_camera(darts_camera(), 0.7)
+		"boxes":
+			camera.fov = 52.0 if not _landscape else 44.0
+			_move_camera(Transform3D(Basis(), Vector3(1.2, 0.45, -0.6)).looking_at(Vector3(3.0, 0.3, -1.2), Vector3.UP), 0.7)
 		"computer":
 			# in front of the cabinet: the screen up top, the controls below it
 			camera.fov = 52.0 if not _landscape else 44.0
@@ -724,7 +798,7 @@ func _build_computer() -> void:
 	_computer.name = "Computer"
 	_computer.position = COMPUTER_POS
 	_computer.rotation.y = PI / 2.0 # faces into the room (+X)
-	add_child(_computer)
+	_bar_set.add_child(_computer)
 	var body := Props.plain(Color(0.12, 0.06, 0.18), 0.6)
 	var trim := Props.glow(Color(1.0, 0.25, 0.75), 1.6)
 	var black := Props.plain(Color(0.05, 0.05, 0.06), 0.5)
@@ -875,7 +949,7 @@ func computer_press(button: String) -> void:
 
 ## The door swings open (or shut).
 func _set_door(open: bool) -> void:
-	var hinge := get_node_or_null("DoorHinge") as Node3D
+	var hinge := _bar_set.get_node_or_null("DoorHinge") as Node3D
 	if hinge == null:
 		return
 	var t := hinge.create_tween()
@@ -891,7 +965,7 @@ func open_door() -> void:
 
 ## The wardrobe's doors, open while you're dressing.
 func _set_robe_doors(open: bool) -> void:
-	var robe := get_node_or_null("Wardrobe") as Node3D
+	var robe := _bar_set.get_node_or_null("Wardrobe") as Node3D
 	if robe == null:
 		return
 	for n in ["RobeDoorL", "RobeDoorR"]:
@@ -973,7 +1047,7 @@ func set_tags_shown(on: bool) -> void:
 ## The station signs over the room, off while a menu's words are up.
 func set_signs(on: bool) -> void:
 	for k in _signs:
-		_signs[k].visible = on and _room and _focus == ""
+		_signs[k].visible = on and _room and _focus == "" and _here(k)
 
 
 func set_menu_mode(on: bool) -> void:
@@ -985,6 +1059,11 @@ func set_menu_mode(on: bool) -> void:
 	else:
 		leave_room()
 	if on:
+		_darts_on = false
+		_darts_round = -1
+		if dartboard != null:
+			dartboard.clear_darts()
+		set_tags_shown(true)
 		_last = {}
 		_round_seen = 0
 		_deal = {}
@@ -1079,7 +1158,7 @@ func _sync_figures(game, viewer: int) -> void:
 		var lines := [p.name + (" (D)" if p.seat == game.dealer else "")]
 		if p.alive:
 			var life := "HP %d/%d" % [p.hp, p.max_hp] if game.options.get("shotgun", true) else "WINS %d" % p.rounds_won
-			lines.append("%s  %d CARDS" % [life, p.hand.size()])
+			lines.append(life if game.kind == "darts" else "%s  %d CARDS" % [life, p.hand.size()])
 			if game.has_method("table_note"):
 				lines.append(game.table_note(p.seat))
 			var flags := []
@@ -1206,6 +1285,9 @@ func sync(s: Dictionary) -> void:
 	_last = s
 	var game = s["game"]
 	var viewer: int = s["viewer"]
+	if game.kind == "darts":
+		_sync_darts(game, viewer)
+		return
 	var new_round: bool = game.round_num != _round_seen and (game.phase == "draw" or game.phase == "play")
 	if dealing and not new_round:
 		_resync = true # catch up when the deal is done
@@ -2368,3 +2450,78 @@ func hide_carousel() -> void:
 	if _carousel_light != null:
 		_carousel_light.queue_free()
 		_carousel_light = null
+
+
+# ================================================================ darts
+
+const DART_REACH := 1.75 # board radii the throwing view shows each side of the bull
+var _darts_on := false # looking at the board to throw
+var _darts_round := -1
+var _darts_seen := 0 # darts thrown that the board shows
+
+
+## Standing at the oche: square on to the board, close enough that the board
+## and a bit round it fill the screen's narrower side.
+func darts_camera() -> Transform3D:
+	var half := deg_to_rad(camera.fov) * 0.5 # the narrow side's half-angle (KEEP_WIDTH in portrait)
+	var reach: float = dartboard.R * DART_REACH
+	var d := reach / tan(half)
+	var at: Vector3 = dartboard.global_position
+	return Transform3D(Basis(), at + Vector3(0, 0, d))
+
+
+## Look at the board (to throw) or back to your seat at the table (to shoot).
+func darts_view(on: bool) -> void:
+	if on == _darts_on:
+		return
+	_darts_on = on
+	set_tags_shown(not on)
+	if on:
+		_move_camera(darts_camera(), 0.6)
+	else:
+		_move_camera(_cam_home, 0.6)
+
+
+func darts_viewing() -> bool:
+	return _darts_on
+
+
+## Is the camera still on its way somewhere?
+func camera_moving() -> bool:
+	return _cam_tween != null and _cam_tween.is_valid() and _cam_tween.is_running()
+
+
+## A point on the board (board radii) in the 3D view's pixels.
+func board_to_view(p: Vector2) -> Vector2:
+	return camera.unproject_position(dartboard.board_to_world(p))
+
+
+## Throws a dart where it landed. Returns how long it flies.
+func throw_dart(p: Vector2, seat: int) -> float:
+	var from: Vector3 = camera.global_position + camera.global_basis * Vector3(0.05 * (seat % 3 - 1), -0.25, -0.15)
+	var col: Color = Color.from_hsv(fposmod(0.0 + seat * 0.17, 1.0), 0.75, 0.95)
+	fx_busy = true
+	var t: float = dartboard.throw_dart(p, from, col)
+	get_tree().create_timer(t + 0.05).timeout.connect(func() -> void: fx_busy = false)
+	sfx.emit("thunk")
+	return t
+
+
+func clear_darts() -> void:
+	dartboard.clear_darts()
+
+
+func _sync_darts(game, viewer: int) -> void:
+	_viewer = viewer
+	dealing = false
+	_round_seen = game.round_num
+	_clear_labels()
+	for id in _cards:
+		_cards[id].queue_free()
+	_cards.clear()
+	_sync_figures(game, viewer)
+	_sync_dealer_chip(game, viewer)
+	if game.round_num != _darts_round:
+		_darts_round = game.round_num
+		clear_darts()
+	darts_view(game.phase == "play")

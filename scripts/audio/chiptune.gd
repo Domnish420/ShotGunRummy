@@ -280,6 +280,18 @@ static func make(name_: String) -> AudioStreamWAV:
 			_note(out, 4200.0, 0.03, "noise", 0.12, -0.5)
 		"tap":
 			_note(out, 1200.0, 0.025, "pulse", 0.14)
+		# --- darts
+		"whoosh": # a dart leaves your hand
+			_note(out, 2400.0, 0.09, "noise", 0.12, 0.6)
+		"thunk": # and sticks in the board
+			_note(out, 900.0, 0.02, "noise", 0.3, -0.6)
+			_note(out, 180.0, 0.07, "square", 0.22, -0.7)
+		"lock": # the dot stops on the first line
+			_note(out, 1760.0, 0.03, "pulse", 0.18)
+			_note(out, 2350.0, 0.04, "pulse", 0.16)
+		"bust":
+			for st in [0, -3, -7]:
+				_note(out, _hz(st), 0.09, "square", 0.2)
 		"type": # a key pressed
 			_note(out, 1600.0 + randf() * 400.0, 0.018, "pulse", 0.1)
 		# --- the gacha machine

@@ -33,7 +33,7 @@ func _initialize() -> void:
 	await _frames(30)
 	check(main._music_id == "room" and main._music_player.playing, "the saloon tune plays in the room")
 	for k in w.STATIONS:
-		check(w._signs[k].visible, "%s has its sign up" % k)
+		check(w._signs[k].visible == w._here(k), "%s has its sign up (only in its own room)" % k)
 	# look round: drag left, the view turns
 	var before: float = w._yaw
 	w.room_look(Vector2(-120, 0))

@@ -24,6 +24,7 @@ const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const PresidentBot = preload("res://scripts/core/president_bot.gd")
 const PokerBot = preload("res://scripts/core/poker_bot.gd")
 const Crazy8Bot = preload("res://scripts/core/crazy8_bot.gd")
+const DartsBot = preload("res://scripts/core/darts_bot.gd")
 
 const LEVELS := ["easy", "normal", "hard"]
 const ITEMS_PER_TURN := {"easy": 1, "normal": 2, "hard": 3}
@@ -53,6 +54,8 @@ static func next_action(game, seat: int, level: String = "normal", memory: Dicti
 			return PokerBot.next_action(game, seat, level, memory)
 		"crazy8":
 			return Crazy8Bot.next_action(game, seat, level, memory)
+		"darts":
+			return DartsBot.next_action(game, seat, level, memory)
 	var me = game.players[seat]
 	var key := "%d-%d-%d" % [game.round_num, seat, me.turns_taken]
 	if memory.get("turn", "") != key:

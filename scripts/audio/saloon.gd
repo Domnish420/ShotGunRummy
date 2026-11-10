@@ -83,6 +83,8 @@ const VARIANTS := {
 	"snap": {"key": 5, "mode": "mixolydian", "bpm": 96, "lead": "guitar", "swing": 0.64},
 	"president": {"key": 6, "mode": "major", "bpm": 80, "lead": "piano", "swing": 0.67},
 	"poker": {"key": -2, "mode": "dorian", "bpm": 72, "lead": "horn", "swing": 0.67},
+	"party": {"key": 7, "mode": "mixolydian", "bpm": 100, "lead": "guitar", "swing": 0.62},
+	"darts": {"key": -3, "mode": "dorian", "bpm": 92, "lead": "vibes", "swing": 0.64},
 	"crazy8": {"key": 4, "mode": "mixolydian", "bpm": 104, "lead": "piano", "swing": 0.62},
 }
 

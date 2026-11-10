@@ -19,6 +19,7 @@ const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Crazy8 = preload("res://scripts/core/crazy8.gd")
+const Darts = preload("res://scripts/core/darts.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
@@ -33,12 +34,25 @@ const LIST := {
 	"crazy8": {"name": "CRAZY EIGHTS", "color": Color(0.42, 0.48, 0.07), "min": 2, "max": 6},
 }
 
+## The party games: in the party room, not on cartridges.
+const PARTY := {
+	"darts": {"name": "DARTS", "color": Color(0.6, 0.1, 0.12), "min": 2, "max": 6},
+}
+
 ## Shotgun matches of a game to finish before its normal mode unlocks.
 const UNLOCK_NORMAL_AFTER := 3
 
 
 static func has(kind: String) -> bool:
-	return LIST.has(kind)
+	return LIST.has(kind) or PARTY.has(kind)
+
+
+static func is_party(kind: String) -> bool:
+	return PARTY.has(kind)
+
+
+static func _info(kind: String) -> Dictionary:
+	return LIST.get(kind, PARTY.get(kind, {"name": "?", "color": Color.GRAY}))
 
 
 ## A game's name, as it's shown everywhere ("Shotgun Party" already says
@@ -48,11 +62,11 @@ static func title(kind: String) -> String:
 
 
 static func label(kind: String) -> String:
-	return str(LIST.get(kind, {"name": "?"})["name"])
+	return str(_info(kind)["name"])
 
 
 static func color(kind: String) -> Color:
-	return LIST.get(kind, {"color": Color.GRAY})["color"]
+	return _info(kind)["color"]
 
 
 ## The button colours for a game, from its cartridge: its plastic made
@@ -95,6 +109,8 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = Poker.new()
 		"crazy8":
 			g = Crazy8.new()
+		"darts":
+			g = Darts.new()
 		_:
 			g = Game.new()
 	if normal:

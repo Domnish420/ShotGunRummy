@@ -54,6 +54,11 @@ thing itself) and you walk over:
 - **ARCADE**, the cabinet in the front-left corner. It won't start until
   you've finished a match of every game. Then it takes cheat codes (see
   below).
+- **PARTY ROOM**, the purple door in the back wall: through it (the screen
+  fades over) is a second room for the party games. Inside: **PLAY DARTS** at
+  the dartboard on the back wall, **BOARD GAMES** on the shelf on the right
+  (still in their shrink-wrap: coming soon), a jukebox, string lights, and
+  the **BAR** door on the left to go back.
 
 ### The arcade: cheat codes and easter eggs
 
@@ -531,6 +536,27 @@ trick (the first one played, if there's more than one).
 - **The shotgun.** First out wins, with 1 shell, or 2 for going out on a saloon
   card or an eight.
 
+## How to play Darts
+
+The first party game, at the board in the party room. Pick a game there, then
+**PLAY** (VS AI, pass the phone or a lobby) or **DEMO**.
+
+- **The throw.** A red line crosses the board through the bull, with a dot
+  running up and down it: **tap to stop the dot**. A second line then crosses
+  through the spot where it stopped, at another angle and just as long: **tap
+  again** and the dart flies to wherever that dot is. The lines run past the
+  edge of the board, so you can miss it completely. Each of your 3 darts, the
+  dots get quicker. You see the AIs' lines too.
+- **SHOOTOUT.** 3 darts each, highest total wins: **1 shell, or 2 with a
+  bullseye**. A tie for the lead is sudden death.
+- **AROUND THE CLOCK.** Hit 1, then 2, up to 20, then the bull. A double moves
+  you on 2, a treble 3. **2 shells.**
+- **301.** Count down from 301 to exactly 0; go under and you bust (that
+  visit doesn't count). It's long, so it's worth **4 shells**: enough to
+  finish someone off.
+- No items in darts. The board: double ring outside, treble ring in the
+  middle, 25 round the bull, the bull 50.
+
 ## How to play Poker
 
 - **The deal.** Texas Hold'em: 2 cards face down each. Items turn up as loot. Five
@@ -604,6 +630,9 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/president.gd`, `president_bot.gd` | President's rules and AI. |
 | `scripts/core/poker.gd`, `poker_bot.gd` | Poker's rules (with the hand rankings) and AI. |
 | `scripts/core/crazy8.gd`, `crazy8_bot.gd` | Crazy Eights' rules (with the saloon cards) and AI. |
+| `scripts/core/darts.gd`, `darts_bot.gd` | Darts: the board's scoring, the three games and their stakes, and the AI (it aims with the same two lines). |
+| `scripts/three/party_room.gd`, `dartboard3d.gd` | The party room, and the dartboard on its wall (face painted in code, darts that stick). |
+| `scripts/ui/darts_aim.gd` | The two-line aim drawn over the board. |
 | `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
@@ -659,6 +688,13 @@ rule gets explained:
 
 ```
 godot --headless --path . -s tests/ui_demo_check.gd
+```
+
+`tests/ui_darts_check.gd` walks through to the party room and plays each
+darts game through the real screens (tapping to stop the dots), then the demo:
+
+```
+godot --headless --path . -s tests/ui_darts_check.gd
 ```
 
 `tests/ui_blackjack_check.gd` plays Blackjack solo against two AIs

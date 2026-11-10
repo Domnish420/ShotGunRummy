@@ -159,6 +159,34 @@ static func build_room(parent: Node3D, table_top: float, table_rx: float, table_
 	red.position = Vector3(0.9, sign_y - 0.1, -2.95)
 	parent.add_child(red)
 
+	# a second door, further along the back wall: the party room
+	var party_hinge := Node3D.new()
+	party_hinge.name = "PartyHinge"
+	party_hinge.position = Vector3(-1.85, floor_y + 1.03, -3.11)
+	parent.add_child(party_hinge)
+	box(party_hinge, Vector3(1.0, 2.05, 0.06), tex_mat("wood", Color(0.42, 0.22, 0.4), 1.2, 0.85), Vector3(0.5, 0, -0.02))
+	ball(party_hinge, 0.035, 6, tex_mat("metal", Color(0.9, 0.85, 0.6), 4.0, 0.4, 0.8), Vector3(0.88, -0.03, 0.03))
+	box(parent, Vector3(1.16, 0.08, 0.1), frame, Vector3(-1.35, floor_y + 2.1, -3.12))
+	for x in [-1.89, -0.81]:
+		box(parent, Vector3(0.08, 2.1, 0.1), frame, Vector3(x, floor_y + 1.05, -3.12))
+	# behind it, the party room's coloured lights
+	box(parent, Vector3(1.0, 2.05, 0.02), glow(Color(0.3, 0.08, 0.35), 1.2), Vector3(-1.35, floor_y + 1.03, -3.17))
+	var party := Label3D.new()
+	party.text = "PARTY"
+	party.font = load("res://fonts/VT323.woff2")
+	party.font_size = 96
+	party.pixel_size = 0.0028
+	party.modulate = Color(0.75, 0.45, 1.0)
+	party.outline_size = 0
+	party.position = Vector3(-1.35, floor_y + 2.38, -3.1)
+	parent.add_child(party)
+	var violet := OmniLight3D.new()
+	violet.light_color = Color(0.7, 0.35, 1.0)
+	violet.light_energy = 0.8
+	violet.omni_range = 1.8
+	violet.position = Vector3(-1.35, floor_y + 2.2, -2.9)
+	parent.add_child(violet)
+
 	# a shelf of old bottles on the left wall
 	var shelf := tex_mat("wood", Color(0.45, 0.38, 0.3), 1.5)
 	for h in [0.75, 1.25]:
@@ -257,6 +285,10 @@ static func build_room(parent: Node3D, table_top: float, table_rx: float, table_
 	for y in [2.45, 2.6]:
 		cyl(parent, 0.05, 0.05, 6.2, 8, pipe, Vector3(3.05, floor_y + y, 0), Vector3(PI / 2.0, 0, 0))
 
+
+## The card table in the middle (both rooms have it) and the clutter on it.
+static func build_table(parent: Node3D, table_top: float, table_rx: float, table_rz: float) -> void:
+	var floor_y := -0.78
 	# the table: felt top, wooden rim, a heavy pedestal
 	var top_mi := cyl(parent, 1.0, 1.0, 0.06, 28, tex_mat("felt", Color(0.85, 0.9, 0.85), 1.4, 1.0, 0.0, true), Vector3(0, table_top - 0.03, 0))
 	top_mi.scale = Vector3(table_rx, 1, table_rz)
