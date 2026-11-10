@@ -30,6 +30,7 @@ const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
 const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
 const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
 const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
+const Crazy8UI = preload("res://scripts/ui/modes/crazy8_ui.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
@@ -770,6 +771,8 @@ func show_menu() -> void:
 	session.stop_scan()
 	game = null
 	round_label = null
+	if mode_ui != null and mode_ui.has_method("clear"):
+		mode_ui.clear()
 	mode_ui = null
 	tutorial = false
 	demo_stage = ""
@@ -3128,8 +3131,8 @@ func _event_sound(kind: String, d: Dictionary) -> void:
 			_sound("pick_item")
 		"draw", "hit", "flip", "trick_card", "board":
 			_sound("flick")
-		"discard", "play", "president_play":
-			_sound("slap" if kind == "president_play" else "flick")
+		"discard", "play", "president_play", "crazy8_play":
+			_sound("slap" if kind in ["president_play", "crazy8_play"] else "flick")
 		"meld", "layoff", "book", "trick_won":
 			_sound("slap")
 		"swap":
@@ -3811,6 +3814,8 @@ func _build_table() -> void:
 		meld_btn.text = "HIT"
 		discard_btn.text = "STAND"
 		minor.visible = false
+	if mode_ui != null and mode_ui.has_method("clear"):
+		mode_ui.clear()
 	mode_ui = _make_mode_ui()
 	if not game.options["shotgun"]:
 		use_btn.visible = false # normal mode has no items
@@ -3852,6 +3857,8 @@ func _make_mode_ui():
 			return PresidentUI.new(self)
 		"poker":
 			return PokerUI.new(self)
+		"crazy8":
+			return Crazy8UI.new(self)
 	return null
 
 

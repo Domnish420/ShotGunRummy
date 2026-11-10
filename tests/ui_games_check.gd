@@ -11,8 +11,9 @@ const CheatBot = preload("res://scripts/core/cheat_bot.gd")
 const TricksBot = preload("res://scripts/core/tricks_bot.gd")
 const PresidentBot = preload("res://scripts/core/president_bot.gd")
 const PokerBot = preload("res://scripts/core/poker_bot.gd")
+const Crazy8Bot = preload("res://scripts/core/crazy8_bot.gd")
 
-const KINDS := ["gofish", "cheat", "hearts", "spades", "snap", "president", "poker"]
+const KINDS := ["gofish", "cheat", "hearts", "spades", "snap", "president", "poker", "crazy8"]
 
 var fails := 0
 var main
@@ -182,6 +183,19 @@ func _play(kind: String, what: String) -> void:
 						main.mode_ui._fold_pressed()
 					_:
 						main.mode_ui._first_pressed()
+			"crazy8":
+				if g.can_call(0) and my_moves % 3 != 0:
+					main.mode_ui._call_pressed()
+					continue
+				var c8: Dictionary = Crazy8Bot.choose_card(g, 0, "normal")
+				if c8.is_empty():
+					main.mode_ui._draw_pressed()
+				else:
+					main.selected = [c8["id"]]
+					main.mode_ui._play_pressed()
+					if int(c8["rank"]) == 8:
+						check(main.mode_ui._suit_bar != null, "crazy8: an eight pops up the suits")
+						main.mode_ui._play(c8["id"], Crazy8Bot.best_suit(g, 0, c8["id"]))
 			"president":
 				var ids: Array = PresidentBot.choose_play(g, 0, "normal")
 				if ids.is_empty():

@@ -22,6 +22,8 @@ other games don't).
   Scum pays up next round.
 - **Poker**: Texas Hold'em, betting shells instead of chips. Fold and
   you're safe; stay in and you might get shot.
+- **Crazy Eights**: match the suit or rank, eights are wild, and the
+  saloon cards hit back. Call **LAST SHOT!** or draw 2.
 
 ### The room
 
@@ -83,8 +85,8 @@ Winning a round loads the shotgun with **1 shell**. An instant or perfect win
 loads **2**: a **rummy** (going out in one turn), **shooting the moon** in
 Hearts, making **nil** in Spades, going out in Cheat without
 ever being caught lying, more than half the books in Go Fish, more than half
-the deck in Snap, going out first in President without passing once, or a
-straight flush in Poker. AI players with the gun take turns: each shoots
+the deck in Snap, going out first in President without passing once, going out on a
+saloon card or an eight in Crazy Eights, or a straight flush in Poker. AI players with the gun take turns: each shoots
 whoever's been shot the least so far. (A Blackjack wins an item instead, and
 in Snap every player's first wrong snap adds a shell, up to one per player.)
 
@@ -124,7 +126,7 @@ the in-game MENU (**SOUND** turns everything off).
 
 The songs are in `music/`, named for where they play: `room`, and the game's
 name for its table (`rummy`, `blackjack`, `gofish`, `cheat`, `hearts`,
-`spades`, `snap`, `president`, `poker`; a game without its own plays the
+`spades`, `snap`, `president`, `poker`, `crazy8`; a game without its own plays the
 room's). Drop in `.ogg`, `.mp3` or `.wav` files with those names
 and open the project in Godot once to import them.
 
@@ -512,6 +514,23 @@ trick (the first one played, if there's more than one).
   passing once. Whoever's left holding the most is the **Scum**: next round they hand the
   President their best card and get the worst one back.
 
+## How to play Crazy Eights
+
+- **The deal.** 7 cards each (5 with 5 or 6 players). The rest is the stock,
+  with the round's few items shuffled in, and one card turns up to start the pile.
+- **Playing.** Tap a card, then the pile (or **PLAY**): it must match the top
+  card's suit or rank. Nothing fits? Tap the stock to **DRAW** one, then play or
+  **PASS**.
+- **Whiskey.** Eights are wild: play one on anything and call a suit.
+- **Saloon cards.** **2 Double Barrel**: the next player draws 2, unless they
+  stack a 2 and pass the lot on. **Ace of Spades Last Orders**: draw 4 (stacks
+  the same way). **Jack Cuffed**: skip the next player. **Queen Kick Back**:
+  play turns round (a skip with two players).
+- **LAST SHOT!** With two cards left, tap the floating **LAST SHOT!** before you
+  play. Forget and you're caught: draw 2.
+- **The shotgun.** First out wins, with 1 shell, or 2 for going out on a saloon
+  card or an eight.
+
 ## How to play Poker
 
 - **The deal.** Texas Hold'em: 2 cards face down each. Items turn up as loot. Five
@@ -584,6 +603,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/snap.gd`, `snap_bot.gd` | Snap's rules and AI (main.gd times the AIs' snaps). |
 | `scripts/core/president.gd`, `president_bot.gd` | President's rules and AI. |
 | `scripts/core/poker.gd`, `poker_bot.gd` | Poker's rules (with the hand rankings) and AI. |
+| `scripts/core/crazy8.gd`, `crazy8_bot.gd` | Crazy Eights' rules (with the saloon cards) and AI. |
 | `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |

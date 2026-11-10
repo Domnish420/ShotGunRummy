@@ -155,9 +155,17 @@ static func egg_found(id: String, owned: Dictionary) -> bool:
 	return owned.has("egg:" + id)
 
 
+## Cartridges added after the arcade first shipped. Someone who'd already
+## powered it up with every game of the time keeps it on.
+const LATER_GAMES := ["crazy8"]
+
+
 ## The computer boots once you've finished a match of every game.
 static func computer_unlocked(tried: Dictionary, kinds: Array) -> bool:
-	return missing_games(tried, kinds).is_empty()
+	if missing_games(tried, kinds).is_empty():
+		return true
+	var first := kinds.filter(func(k): return not LATER_GAMES.has(k))
+	return missing_games(tried, first).is_empty()
 
 
 static func missing_games(tried: Dictionary, kinds: Array) -> Array:

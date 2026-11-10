@@ -1251,7 +1251,7 @@ func sync(s: Dictionary) -> void:
 	elif game.kind == "president":
 		_president_pile(seen, game, stock_xf)
 		pile = []
-	elif game.kind != "rummy":
+	elif not game.kind in ["rummy", "crazy8"]:
 		pile = [] # only Rummy has a discard pile (Snap shows its middle pile big, over the table); elsewhere spent cards just go out of play
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
@@ -1259,9 +1259,11 @@ func sync(s: Dictionary) -> void:
 		var yaw := (hash(c["id"]) % 100) / 100.0 * 0.5 - 0.25
 		var xf := _leaned(discard_base, 0.0, yaw, i - from)
 		var top_one := i == pile.size() - 1
-		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] else "", game.is_trump(c), stock_xf)
-	if game.kind == "rummy" or not pile.is_empty():
-		_label_at("DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] and game.kind == "rummy" else "", game.is_trump(c), stock_xf)
+	if game.kind == "crazy8" and str(game.get("called_suit")) != "":
+		_label_at("CALLED: %s" % {"S": "♠ SPADES", "H": "♥ HEARTS", "D": "♦ DIAMONDS", "C": "♣ CLUBS"}[game.called_suit], discard_base + Vector3(0, 0.01, 0.15), 30, Palette.GOLD)
+	elif game.kind == "rummy" or not pile.is_empty():
+		_label_at("PILE" if game.kind == "crazy8" else "DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 	if trump_rank > 0:
 		_label_at("TRUMP: %s" % TRUMP_NAMES[trump_rank], Vector3(0, TABLE_TOP + 0.01, 0.23), 34, Palette.GOLD)
 

@@ -18,6 +18,7 @@ const Spades = preload("res://scripts/core/spades.gd")
 const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
+const Crazy8 = preload("res://scripts/core/crazy8.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
@@ -29,6 +30,7 @@ const LIST := {
 	"snap": {"name": "SNAP", "color": Color(0.85, 0.55, 0.1), "min": 2, "max": 6},
 	"president": {"name": "PRESIDENT", "color": Color(0.35, 0.18, 0.5), "min": 2, "max": 6},
 	"poker": {"name": "POKER", "color": Color(0.08, 0.38, 0.32), "min": 2, "max": 6},
+	"crazy8": {"name": "CRAZY EIGHTS", "color": Color(0.42, 0.48, 0.07), "min": 2, "max": 6},
 }
 
 ## Shotgun matches of a game to finish before its normal mode unlocks.
@@ -91,6 +93,8 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = President.new()
 		"poker":
 			g = Poker.new()
+		"crazy8":
+			g = Crazy8.new()
 		_:
 			g = Game.new()
 	if normal:

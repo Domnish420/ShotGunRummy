@@ -16,6 +16,7 @@ const Spades = preload("res://scripts/core/spades.gd")
 const Snap = preload("res://scripts/core/snap.gd")
 const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
+const Crazy8 = preload("res://scripts/core/crazy8.gd")
 const Games = preload("res://scripts/core/games.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
 const CardSkins = preload("res://scripts/ui/card_skins.gd")
@@ -44,7 +45,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_crazy8", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1231,7 +1232,7 @@ func test_ch_call() -> void:
 ## Every game's AI, all three levels, finishes whole matches with legal moves
 ## (the newer cartridges; Rummy and Blackjack have their own tests).
 func test_ai_all_games() -> void:
-	for kind in ["cheat", "hearts", "spades", "snap", "president", "poker"]:
+	for kind in ["cheat", "hearts", "spades", "snap", "president", "poker", "crazy8"]:
 		var wins := {"easy": 0, "normal": 0, "hard": 0}
 		for s in range(1, 9):
 			var n := 2 + s % 5
@@ -1479,6 +1480,72 @@ func test_president() -> void:
 	check(swaps.size() == 1 and swaps[0]["president"] == o[2] and swaps[0]["scum"] == o[1], "next round the Scum pays the President")
 
 
+# ================================================================ crazy eights
+
+func test_crazy8() -> void:
+	var g := Crazy8.new()
+	g.setup(["A", "B", "C"], {}, 9)
+	g.start_round()
+	check(g.players[0].hand.size() == 7 and not g.is_action(g.top_discard()), "7 cards each, a plain card turned up")
+	var o := [g.turn, g.next_alive(g.turn), g.next_alive(g.next_alive(g.turn))]
+	g.discard_pile = cards("5H")
+	g.players[o[0]].hand = cards("9C 5S 8D KD")
+	g.players[o[1]].hand = cards("KH 2S 3C")
+	g.players[o[2]].hand = cards("2H 4D QD JD 6D")
+	check(not g.play(o[0], "9C")["ok"], "a 9 of clubs doesn't go on the 5 of hearts")
+	check(not g.play(o[0], "8D")["ok"], "an eight needs a suit called")
+	check(g.play(o[0], "5S")["ok"] and g.turn == o[1], "same rank goes")
+	check(not g.play(o[1], "KH")["ok"], "the suit is spades now")
+	check(g.play(o[1], "2S")["ok"] and g.pending_draw == 2, "a 2 is a Double Barrel: draw 2 coming")
+	check(not g.play(o[2], "4D")["ok"], "under a Double Barrel only a 2 goes")
+	check(g.play(o[2], "2H")["ok"] and g.pending_draw == 4 and g.turn == o[0], "stacked: 4 for the next player")
+	var before: int = g.players[o[0]].hand.size()
+	g.draw(o[0])
+	check(g.players[o[0]].hand.size() == before + 4 and g.pending_draw == 0 and g.turn == o[1], "drawing takes the lot and ends the turn")
+	g.players[o[1]].hand = cards("KS 3C 4C")
+	g.discard_pile = cards("7S")
+	check(g.play(o[1], "KS")["ok"] and g.turn == o[2], "match the suit")
+	g.players[o[2]].hand = cards("QS 4D JD 6D")
+	check(g.play(o[2], "QS")["ok"] and g.direction == -1 and g.turn == o[1], "a Queen kicks it back round")
+	g.players[o[1]].hand = cards("JS 3C 4C")
+	check(g.play(o[1], "JS")["ok"] and g.turn == o[2], "a Jack cuffs the next player (play is going the other way)")
+	g.players[o[2]].hand = cards("8H 9C")
+	check(not g.can_call(o[1]) and g.can_call(o[2]), "LAST SHOT! with two cards on your turn")
+	check(g.play(o[2], "9C")["ok"] == false, "the 9 of clubs doesn't go on a jack of spades")
+	check(g.draw(o[2])["ok"] and g.drew and g.can_pass(o[2]), "draw one, then play or pass")
+	check(not g.draw(o[2])["ok"], "only one draw a turn")
+	g.players[o[2]].hand = cards("8H 9C")
+	check(g.play(o[2], "8H", "C")["ok"] and g.called_suit == "C", "an eight calls clubs")
+	check(g.players[o[2]].hand.size() == 3, "forgot LAST SHOT!: caught, draw 2")
+	g.players[g.turn].hand = cards("4C 3D")
+	var t: int = g.turn
+	check(g.call_last_shot(t)["ok"] and g.play(t, "4C")["ok"] and g.players[t].hand.size() == 1, "called it: no penalty")
+	g.players[g.turn].hand = cards("2D 3H")
+	g.discard_pile = cards("2C")
+	t = g.turn
+	g.call_last_shot(t)
+	g.play(t, "2D")
+	t = g.turn
+	g.players[t].hand = cards("2H")
+	check(g.play(t, "2H")["ok"] and g.phase == "shoot" and g.gun["holder"] == t and g.gun["shells"] == 2, "out on a saloon card: 2 shells")
+	# two players: a Queen is a skip
+	var h := Crazy8.new()
+	h.setup(["A", "B"], {}, 3)
+	h.start_round()
+	var me: int = h.turn
+	h.discard_pile = cards("5H")
+	h.players[me].hand = cards("QH 3C 4C")
+	check(h.play(me, "QH")["ok"] and h.turn == me, "with two players Kick Back is a skip")
+	# nothing left to draw anywhere: fewest cards takes it
+	h.stock = []
+	h.discard_pile = cards("5H")
+	h.players[me].hand = cards("3C 4C")
+	h.players[1 - me].hand = cards("3S 4S 6S")
+	h.draw(me)
+	h.draw(h.turn)
+	check(h.phase == "shoot" and h.gun["holder"] == me, "a dry deck: fewest cards wins")
+
+
 ## The Blank Shell: the next shot fired does nothing, then the gun is live.
 func test_blank_shell() -> void:
 	var g := new_game(3, 21)
@@ -1675,12 +1742,14 @@ func test_secrets() -> void:
 	# the computer boots after every game
 	var kinds := Games.kinds()
 	var tried := {}
-	for k in kinds.slice(0, kinds.size() - 1):
+	for k in kinds.slice(1):
 		tried[k] = true
 	check(not Secrets.computer_unlocked(tried, kinds), "one game short: still locked")
-	check(Secrets.missing_games(tried, kinds) == [kinds[-1]], "it says which game is missing")
-	tried[kinds[-1]] = true
+	check(Secrets.missing_games(tried, kinds) == [kinds[0]], "it says which game is missing")
+	tried[kinds[0]] = true
 	check(Secrets.computer_unlocked(tried, kinds), "every game played: it boots")
+	tried.erase("crazy8")
+	check(Secrets.computer_unlocked(tried, kinds), "a cartridge added later doesn't lock it again")
 
 
 func test_unlocks() -> void:

@@ -150,6 +150,15 @@ const PRESIDENT := {
 	"joker_paint": {"text": "A card in your hand is wild (a trump) for the rest of the round: it fills in any set.", "copies": 1},
 }
 
+const CRAZY8 := {
+	"shakedown": {"text": "A player of your choice throws a random card away (under the pile, so the top card stays)."},
+	"revolver": {"text": "If a player of your choice draws on their next turn, they play Russian roulette (1 in 6: lose 2 health)."},
+	"double_down": {"text": "A player of your choice draws 2 cards right now."},
+	"sticky_fingers": {"text": "Steal a random card from a player of your choice.", "needs": "player"},
+	"dumpster_dive": {"text": "Dig the 2 cards under the top of the pile into your hand."},
+	"garbage_day": {"text": "A player of your choice picks up the whole pile under the top card."},
+}
+
 const POKER := {
 	"beer": {"text": "Burn the next card for the middle. Everyone sees it."},
 	"magnifier": {"text": "Secretly look at the next card for the middle."},
@@ -169,7 +178,7 @@ const POKER := {
 }
 
 ## Each game's changes to the items, by game.
-const OVERRIDES := {"poker": POKER, "blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT}
+const OVERRIDES := {"poker": POKER, "blackjack": BLACKJACK, "gofish": GOFISH, "cheat": CHEAT, "hearts": TRICKS, "spades": TRICKS, "snap": SNAP, "president": PRESIDENT, "crazy8": CRAZY8}
 
 ## Changes on top of OVERRIDES, for games that share one set.
 const EXTRA := {"hearts": HEARTS, "spades": SPADES}
