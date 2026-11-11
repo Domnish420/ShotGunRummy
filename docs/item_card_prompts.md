@@ -115,3 +115,17 @@ simple: if you can't tell what it is from a thumbnail, it isn't working.
 - Ask for a square image. The game puts it in the card's panel, so anything
   near the very edge may be trimmed; keep the object in the middle.
 - No text anywhere in the picture. If Gemini adds some, say "remove all text".
+
+## Board game box lids
+
+Each board game on the party room shelf is a box with its lid art facing the
+room. The game puts the **name and tagline on the lid itself**, so the art has
+**no text**. Ask for one square picture, 512 x 512 px, using the same style
+block as the item cards, and save it as `textures/boxes/<game>.png`. It
+replaces the lid the game paints for itself.
+
+**`timber.png`** (TIMBER!, the tower game)
+> A tall tower of pale wooden blocks in alternating layers, three blocks per
+> layer, one block sticking halfway out of the middle and one tumbling off the
+> top, on a bold red-orange background with a warm spotlight. Leave the top
+> fifth and bottom fifth of the square plain (the name and tagline go there).

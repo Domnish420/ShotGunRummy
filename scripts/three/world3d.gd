@@ -783,7 +783,8 @@ func focus_station(id: String) -> void:
 		"darts_menu":
 			# stood back a bit: the board in the middle, room for words round it
 			var close := darts_camera()
-			_move_camera(Transform3D(close.basis, dartboard.global_position + (close.origin - dartboard.global_position) * 1.75), 0.7)
+			var back := dartboard.global_position + (close.origin - dartboard.global_position) * 1.75
+			_move_camera(Transform3D(close.basis, back + Vector3(0, -0.24 if not _landscape else 0.0, 0)), 0.7)
 		"boxes":
 			camera.fov = 52.0 if not _landscape else 44.0
 			_move_camera(Transform3D(Basis(), Vector3(1.2, 0.45, -0.6)).looking_at(Vector3(3.0, 0.3, -1.2), Vector3.UP), 0.7)

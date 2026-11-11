@@ -12,6 +12,13 @@ const Dartboard3D = preload("res://scripts/three/dartboard3d.gd")
 const FLOOR_Y := -0.78
 const BOARD_POS := Vector3(0.0, FLOOR_Y + 1.73, -3.1) # bull height, by the rules
 const BACK_DOOR := Vector3(-3.12, FLOOR_Y, 1.4) # on the left wall, back to the bar
+## The board games on the shelf. A box's lid art is res://textures/boxes/<id>.png
+## if there is one (square, no text: the name's put on it); otherwise it's
+## painted here.
+const BOARD_GAMES := [
+	{"id": "timber", "name": "TIMBER!", "tag": "THE TOWER GAME", "color": Color(0.62, 0.16, 0.1)},
+]
+const BOX := Vector3(0.09, 0.42, 0.42) # thickness, height, width
 
 
 static func build(parent: Node3D) -> Dictionary:
@@ -66,24 +73,17 @@ static func build(parent: Node3D) -> Dictionary:
 	# board games on a shelf on the right wall
 	var shelf := Props.tex_mat("wood", Color(0.45, 0.32, 0.24), 1.4)
 	var shelf_x := 3.0
-	Props.box(parent, Vector3(0.4, 2.0, 1.8), Props.tex_mat("wood", Color(0.3, 0.2, 0.16), 1.4), Vector3(shelf_x + 0.05, FLOOR_Y + 1.0, -1.2))
-	var box_cols := [Color(0.8, 0.15, 0.12), Color(0.15, 0.4, 0.75), Color(0.95, 0.75, 0.15), Color(0.2, 0.6, 0.3), Color(0.55, 0.25, 0.65), Color(0.9, 0.45, 0.1), Color(0.85, 0.85, 0.8)]
+	var dark := Props.tex_mat("wood", Color(0.3, 0.2, 0.16), 1.4)
+	Props.box(parent, Vector3(0.05, 2.0, 1.8), dark, Vector3(shelf_x + 0.15, FLOOR_Y + 1.0, -1.2)) # the back
+	for dz in [-0.88, 0.88]:
+		Props.box(parent, Vector3(0.4, 2.0, 0.04), dark, Vector3(shelf_x - 0.02, FLOOR_Y + 1.0, -1.2 + dz)) # the sides
 	for row in range(4):
-		var y := FLOOR_Y + 0.12 + row * 0.48
-		Props.box(parent, Vector3(0.4, 0.03, 1.72), shelf, Vector3(shelf_x - 0.02, y, -1.2))
-		var z := -1.95
-		var i := row * 3
-		while z < -0.5:
-			var w := 0.2 + float((i * 37) % 5) * 0.04
-			var h := 0.28 + float((i * 11) % 4) * 0.035
-			if (i + row) % 3 == 0:
-				# a pile of boxes lying flat
-				for k in range(2):
-					Props.box(parent, Vector3(0.32, 0.07, w + 0.1), Props.plain(box_cols[(i + k) % box_cols.size()], 0.6), Vector3(shelf_x - 0.06, y + 0.05 + k * 0.075, z + w * 0.5))
-			else:
-				Props.box(parent, Vector3(0.3, h, w * 0.4), Props.plain(box_cols[i % box_cols.size()], 0.6), Vector3(shelf_x - 0.06, y + 0.02 + h * 0.5, z + w * 0.2), Vector3(0, 0, -0.05 if i % 4 == 0 else 0.0))
-			z += w * 0.42 + 0.03 if (i + row) % 3 != 0 else w + 0.16
-			i += 1
+		Props.box(parent, Vector3(0.4, 0.03, 1.72), shelf, Vector3(shelf_x - 0.02, FLOOR_Y + 0.12 + row * 0.48, -1.2))
+	# the games themselves: one box each, standing up with its lid facing the
+	# room (more go on the shelf as they're made)
+	for i in range(BOARD_GAMES.size()):
+		var game: Dictionary = BOARD_GAMES[i]
+		_game_box(parent, game, Vector3(shelf_x - 0.04, FLOOR_Y + 0.12 + 2 * 0.48 + 0.015, -1.2 + i * 0.5))
 
 	# the door back to the bar, on the left wall
 	var frame := Props.tex_mat("wood", Color(0.3, 0.25, 0.2), 1.5)
@@ -156,3 +156,110 @@ static func _neon(parent: Node3D, text: String, pos: Vector3, color: Color, size
 	glow.position = pos + Vector3(0, -0.05, 0.25)
 	parent.add_child(glow)
 	return l
+
+
+## A board game box standing on the shelf, its lid turned a little towards
+## the middle of the room.
+static func _game_box(parent: Node3D, game: Dictionary, base: Vector3) -> void:
+	var node := Node3D.new()
+	node.position = base + Vector3(0, BOX.y * 0.5, 0)
+	node.rotation.y = 0.3
+	parent.add_child(node)
+	var side := Props.plain(Color(game["color"]).darkened(0.25), 0.7)
+	Props.box(node, BOX, side, Vector3.ZERO)
+	# the lid: a little bigger than the box, with the art on its face
+	Props.box(node, Vector3(0.012, BOX.y + 0.008, BOX.z + 0.008), Props.plain(Color(game["color"]), 0.7), Vector3(-BOX.x * 0.5 - 0.004, 0, 0))
+	var art: Texture2D = null
+	var path := "res://textures/boxes/%s.png" % game["id"]
+	if ResourceLoader.exists(path):
+		art = load(path)
+	else:
+		art = ImageTexture.create_from_image(_paint_lid(Color(game["color"])))
+	var face := StandardMaterial3D.new()
+	face.albedo_texture = art
+	face.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	face.roughness = 0.8
+	var quad := QuadMesh.new()
+	quad.size = Vector2(BOX.z - 0.02, BOX.y - 0.02)
+	var mi := Props.mesh(node, quad, face, Vector3(-BOX.x * 0.5 - 0.0105, 0, 0), Vector3(0, -PI / 2.0, 0))
+	mi.name = "Lid"
+	# the name across the top of the lid, and what it is along the bottom
+	for spec in [[game["name"], 0.14, 128, 0.0013, Color(1.0, 0.86, 0.35)], [game["tag"], -0.175, 48, 0.0012, Color(0.98, 0.94, 0.85)]]:
+		var l := Label3D.new()
+		l.text = spec[0]
+		l.font = load("res://fonts/VT323.woff2")
+		l.font_size = spec[2]
+		l.pixel_size = spec[3]
+		l.modulate = spec[4]
+		l.outline_size = 14
+		l.outline_modulate = Color(0.15, 0.04, 0.02)
+		l.position = Vector3(-BOX.x * 0.5 - 0.013, spec[1], 0)
+		l.rotation.y = -PI / 2.0
+		node.add_child(l)
+	# a little display light on it
+	var spot := OmniLight3D.new()
+	spot.position = Vector3(-0.45, 0.15, 0.1)
+	spot.light_color = Color(1.0, 0.9, 0.75)
+	spot.light_energy = 1.2
+	spot.omni_range = 0.9
+	node.add_child(spot)
+
+
+## Lid art painted in code: a pixel tower of pine blocks, a couple sticking
+## out and one on its way down, on the box's colour.
+static func _paint_lid(color: Color) -> Image:
+	var n := 96
+	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
+	for y in range(n):
+		for x in range(n):
+			var d := Vector2(x - n * 0.5, y - n * 0.62).length() / n
+			img.set_pixel(x, y, color.lightened(0.25 - d * 0.6))
+	var pine := Color(0.98, 0.84, 0.58)
+	var shade := Color(0.78, 0.6, 0.38)
+	var line := Color(0.35, 0.2, 0.1)
+	var left := 27
+	var width := 42
+	var rows := 12
+	var h := 5
+	var bottom := 84
+	for r in range(rows):
+		var y0 := bottom - (r + 1) * h
+		var out := 0
+		if r == 4:
+			out = 9 # one pushed half out
+		elif r == 8:
+			out = -6
+		for y in range(y0, y0 + h):
+			for x in range(left - 2, left + width + 12):
+				var inside := x >= left and x < left + width
+				if r % 2 == 0:
+					# blocks end-on: three squares
+					if inside:
+						var k := (x - left) * 3 / width
+						var edge := (x - left) % (width / 3) == 0 or y == y0
+						if out != 0 and k == 1:
+							continue
+						img.set_pixel(x, y, line if edge else (pine if k != 1 else shade))
+				else:
+					# a long block, side-on
+					var lx: int = left + maxi(0, out)
+					var rx: int = left + width + maxi(0, out)
+					if out < 0:
+						lx = left + out
+						rx = left + width + out
+					if x >= lx and x < rx:
+						img.set_pixel(x, y, line if y == y0 or x == lx or x == rx - 1 else pine)
+		if r % 2 == 0 and out != 0:
+			# the middle block, sticking out
+			var mx0 := left + width / 3 + out
+			for y in range(y0, y0 + h):
+				for x in range(mx0, mx0 + width / 3):
+					img.set_pixel(x, y, line if y == y0 or x == mx0 or x == mx0 + width / 3 - 1 else shade)
+	# one falling off the top, tumbling
+	for i in range(12):
+		for j in range(5):
+			var x := 72 + i - j
+			var y := 22 + j + i / 2
+			if x < n and y < n:
+				img.set_pixel(x, y, pine if j > 0 and j < 3 else line)
+	return img

@@ -974,48 +974,53 @@ func show_darts() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(spacer) # the board shows through here
-	# who's throwing
+	# who's throwing: big words, a row each, so nothing's cramped
 	var who := HBoxContainer.new()
 	who.alignment = BoxContainer.ALIGNMENT_CENTER
-	who.add_theme_constant_override("separation", 14)
+	who.add_theme_constant_override("separation", 18)
 	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	who.add_child(_bubble("◀", _change_darts_count.bind(-1), cream, 44))
-	var count := _label("YOU + %d AI" % solo_opponents, 34, cream, true)
+	who.add_child(_bubble("◀", _change_darts_count.bind(-1), cream, 56))
+	var count := _label("YOU + %d AI" % solo_opponents, 44, cream, true)
 	count.autowrap_mode = TextServer.AUTOWRAP_OFF
 	count.add_theme_color_override("font_outline_color", Color.BLACK)
-	count.add_theme_constant_override("outline_size", 8)
+	count.add_theme_constant_override("outline_size", 10)
 	who.add_child(count)
-	who.add_child(_bubble("▶", _change_darts_count.bind(1), cream, 44))
+	who.add_child(_bubble("▶", _change_darts_count.bind(1), cream, 56))
 	col.add_child(who)
 	var levels := HBoxContainer.new()
 	levels.alignment = BoxContainer.ALIGNMENT_CENTER
-	levels.add_theme_constant_override("separation", 22)
+	levels.add_theme_constant_override("separation", 26)
 	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for pair in DARTS_LEVELS:
-		levels.add_child(_bubble(pair[1], _set_darts_level.bind(pair[0]), dart_green if solo_level == pair[0] else Palette.DIM, 32 if solo_level == pair[0] else 26))
+		levels.add_child(_bubble(pair[1], _set_darts_level.bind(pair[0]), dart_green if solo_level == pair[0] else Palette.DIM, 42 if solo_level == pair[0] else 34))
 	col.add_child(levels)
 	var mode_row := HBoxContainer.new()
 	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	mode_row.add_theme_constant_override("separation", 36)
+	mode_row.add_theme_constant_override("separation", 40)
 	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), dart_red if not normal_mode else Palette.DIM, 30))
-	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 30)
+	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), dart_red if not normal_mode else Palette.DIM, 40))
+	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 40)
 	plain.disabled = not _normal_unlocked("darts")
 	mode_row.add_child(plain)
 	col.add_child(mode_row)
 	var more := HBoxContainer.new()
 	more.alignment = BoxContainer.ALIGNMENT_CENTER
-	more.add_theme_constant_override("separation", 26)
+	more.add_theme_constant_override("separation", 34)
 	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 28))
-	if not OS.has_feature("web"):
-		more.add_child(_bubble("HOST", _on_host_pressed, Color(0.55, 0.85, 1.0), 28))
-		more.add_child(_bubble("JOIN", _on_join_pressed, Color(0.55, 0.85, 1.0), 28))
-	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 28))
+	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 38))
+	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 38))
 	col.add_child(more)
-	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 30))
+	var last := HBoxContainer.new()
+	last.alignment = BoxContainer.ALIGNMENT_CENTER
+	last.add_theme_constant_override("separation", 44)
+	last.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not OS.has_feature("web"):
+		last.add_child(_bubble("HOST", _on_host_pressed, Color(0.55, 0.85, 1.0), 36))
+		last.add_child(_bubble("JOIN", _on_join_pressed, Color(0.55, 0.85, 1.0), 36))
+	last.add_child(_bubble("BACK", show_menu, Palette.DIM, 36))
+	col.add_child(last)
 	var gap_bottom := Control.new()
-	gap_bottom.custom_minimum_size = Vector2(0, 26)
+	gap_bottom.custom_minimum_size = Vector2(0, 30)
 	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(gap_bottom)
 	# TAKE AIM! sits right on the bull
