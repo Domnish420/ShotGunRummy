@@ -13,10 +13,10 @@ const FLOOR_Y := -0.78
 const BOARD_POS := Vector3(0.0, FLOOR_Y + 1.73, -3.1) # bull height, by the rules
 const BACK_DOOR := Vector3(-3.12, FLOOR_Y, 1.4) # on the left wall, back to the bar
 ## The board games on the shelf. A box's lid art is res://textures/boxes/<id>.png
-## if there is one (square, no text: the name's put on it); otherwise it's
-## painted here.
+## if there is one (square, with the game's name in the art); otherwise it's
+## painted here and the name and tagline are put on it.
 const BOARD_GAMES := [
-	{"id": "timber", "name": "TIMBER!", "tag": "THE TOWER GAME", "color": Color(0.62, 0.16, 0.1)},
+	{"id": "timber", "name": "TIMBER", "tag": "THE TOWER GAME", "color": Color(0.62, 0.16, 0.1)},
 ]
 const BOX := Vector3(0.09, 0.42, 0.42) # thickness, height, width
 
@@ -184,7 +184,8 @@ static func _game_box(parent: Node3D, game: Dictionary, base: Vector3) -> void:
 	var mi := Props.mesh(node, quad, face, Vector3(-BOX.x * 0.5 - 0.0105, 0, 0), Vector3(0, -PI / 2.0, 0))
 	mi.name = "Lid"
 	# the name across the top of the lid, and what it is along the bottom
-	for spec in [[game["name"], 0.14, 128, 0.0013, Color(1.0, 0.86, 0.35)], [game["tag"], -0.175, 48, 0.0012, Color(0.98, 0.94, 0.85)]]:
+	# (lid art from a file has the name in it already)
+	for spec in ([] if ResourceLoader.exists(path) else [[game["name"], 0.14, 128, 0.0013, Color(1.0, 0.86, 0.35)], [game["tag"], -0.175, 48, 0.0012, Color(0.98, 0.94, 0.85)]]):
 		var l := Label3D.new()
 		l.text = spec[0]
 		l.font = load("res://fonts/VT323.woff2")

@@ -119,13 +119,25 @@ simple: if you can't tell what it is from a thumbnail, it isn't working.
 ## Board game box lids
 
 Each board game on the party room shelf is a box with its lid art facing the
-room. The game puts the **name and tagline on the lid itself**, so the art has
-**no text**. Ask for one square picture, 512 x 512 px, using the same style
-block as the item cards, and save it as `textures/boxes/<game>.png`. It
-replaces the lid the game paints for itself.
+room. Ask for one square picture, 512 x 512 px, and save it as
+`textures/boxes/<game>.png`. Lid art **has the game's name in it** (it's the
+box's logo), so when the file's there the game doesn't print its own name over
+it. With no file, the game paints a lid and puts the name on itself.
 
-**`timber.png`** (TIMBER!, the tower game)
-> A tall tower of pale wooden blocks in alternating layers, three blocks per
-> layer, one block sticking halfway out of the middle and one tumbling off the
-> top, on a bold red-orange background with a warm spotlight. Leave the top
-> fifth and bottom fifth of the square plain (the name and tagline go there).
+**`timber.png`** (TIMBER, the tower game)
+> Board game box lid art, square, in the style of a PlayStation 2 era game
+> from around 2002: low-polygon 3D with flat faces and hard edges, small
+> blurry low-resolution textures, simple warm lighting, slight colour banding,
+> no modern photo-realism. A tall tower of pale pine wooden blocks stacked in
+> alternating layers of three, standing on a dark wooden table, lit by one
+> warm spotlight from above. One block sticks halfway out of the middle of the
+> tower and another is tumbling off the top. Behind it, a smoky dark red-brown
+> saloon background with a faint purple glow. Across the top of the lid, the
+> word "TIMBER" in big chunky blocky letters made of the same pale wood, with
+> dark outlines, slightly 3D. Only that one word: no exclamation mark, no
+> other text, no numbers, no logos, no borders.
+
+If the letters come out wrong, ask again with: *"Spell it exactly T-I-M-B-E-R,
+one word, no punctuation."* Or ask for the art with **no text at all**, save
+that instead, and tell me: I'll switch the box back to printing the name over
+it.
