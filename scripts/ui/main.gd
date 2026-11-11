@@ -769,6 +769,23 @@ func _change_name() -> void:
 
 
 func show_menu() -> void:
+	_stop_match()
+	if profile_name == "":
+		show_name_screen()
+		return
+	if Games.LIST.has(game_kind):
+		world.set_cartridge(game_kind)
+	_play_music("party" if world.room_id == "party" else "room")
+	_room_hud()
+	if not tutorial_offered:
+		tutorial_offered = true
+		_save_settings()
+		_offer_tutorial()
+
+
+## Ends whatever's being played (or watched) and puts the room back: the game,
+## its table screen, the AIs, the lobby, the demo.
+func _stop_match() -> void:
 	_computer_open = false
 	_hide_settings()
 	_item_pick = {}
@@ -792,17 +809,6 @@ func show_menu() -> void:
 		_lesson_panel.visible = false
 	world.hide_carousel()
 	world.set_menu_mode(true)
-	if profile_name == "":
-		show_name_screen()
-		return
-	if Games.LIST.has(game_kind):
-		world.set_cartridge(game_kind)
-	_play_music("party" if world.room_id == "party" else "room")
-	_room_hud()
-	if not tutorial_offered:
-		tutorial_offered = true
-		_save_settings()
-		_offer_tutorial()
 
 
 # ================================================================ the room
@@ -1934,7 +1940,13 @@ func _start_solo() -> void:
 
 ## NEW PLAYERS after a game on this phone: back to whichever setup it came from.
 func _new_players() -> void:
-	if local_mode == "solo":
+	_stop_match() # the match is over: nothing carries on behind the setup
+	_play_music("party" if world.room_id == "party" else "room")
+	if game_kind == "darts" and local_mode == "solo":
+		show_darts() # the party games pick their players at their own station
+	elif game_kind == "timber" and local_mode == "solo":
+		show_board_games()
+	elif local_mode == "solo":
 		show_solo()
 	else:
 		show_setup()
