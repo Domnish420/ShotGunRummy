@@ -20,6 +20,7 @@ const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Crazy8 = preload("res://scripts/core/crazy8.gd")
 const Darts = preload("res://scripts/core/darts.gd")
+const Timber = preload("res://scripts/core/timber.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
@@ -37,6 +38,7 @@ const LIST := {
 ## The party games: in the party room, not on cartridges.
 const PARTY := {
 	"darts": {"name": "DARTS", "color": Color(0.6, 0.1, 0.12), "min": 2, "max": 6},
+	"timber": {"name": "TIMBER", "color": Color(0.62, 0.42, 0.2), "min": 2, "max": 6},
 }
 
 ## Shotgun matches of a game to finish before its normal mode unlocks.
@@ -111,6 +113,8 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = Crazy8.new()
 		"darts":
 			g = Darts.new()
+		"timber":
+			g = Timber.new()
 		_:
 			g = Game.new()
 	if normal:

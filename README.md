@@ -57,8 +57,8 @@ thing itself) and you walk over:
 - **PARTY ROOM**, the purple door in the back wall: through it (the screen
   fades over) is a second room for the party games. Inside: **PLAY DARTS** at
   the dartboard on the back wall, **BOARD GAMES** on the shelf on the right
-  (still in their shrink-wrap: coming soon), a rectangular wooden table for
-  the board games, a jukebox, string lights, and the **BAR** door on the left
+  (TIMBER, the tower game; the other boxes are still in their shrink-wrap), a
+  rectangular wooden table for the board games, a jukebox, string lights, and the **BAR** door on the left
   to go back.
 
 ### The arcade: cheat codes and easter eggs
@@ -563,6 +563,40 @@ The board's cleared before each thrower.
 - No items in darts. The board: double ring outside, treble ring in the
   middle, 25 round the bull, the bull 50.
 
+## How to play TIMBER
+
+The first board game, from the shelf in the party room, played at the
+rectangular table. Board games are elimination: no health, no items. One shot
+and you're out; last one standing wins.
+
+- **The tower.** 18 layers of 3 wooden blocks, every one a real physics body.
+  Some are loose and slide right out; some carry the weight, and pushing those
+  drags the tower with them.
+- **Your turn.** Tap a block (not in the top layer, nor the one under it while
+  the top's unfinished). The camera swings round to its end and the skeleton
+  hand comes up. Your thumb drives the fingertip, level with that block: slide
+  up the screen to push in, down to ease off, sideways to move across. It
+  follows your thumb on a spring, so a steady thumb is a steady push and a
+  twitchy one shoves. Push it out the far side (or pull it out) and it's laid
+  on top for you. ✕ lets go to try another.
+- **Feel it.** A faint ghost shows where your thumb wants the finger; the
+  line from it to the real finger goes red, the hand trembles and the phone
+  buzzes when the block fights back. The round map from above shows the layer,
+  your block in gold and how far it's come. ◀ ▶ walk you round the tower.
+- **The hand.** POKE (one finger), TWO (two fingers, firmer), PINCH (pinch two
+  fingers on the screen: it grips the end that sticks out; drag to pull, let
+  go to let go, yank too hard and it slips) and SWIPE (the flat hand: flick
+  across to sweep a whole layer out: a massive risk, and it thins the tower
+  for everyone after you).
+- **The shotgun.** Whoever's turn it is has the gun lying in front of them; it
+  moves left with the turn. Bring the tower down and the player on your right
+  shoots you. The tower's built again and the player on your left goes first.
+  Always.
+- **AIs** (SHAKY, STEADY, SURGEON) test a block with a finger and back off if
+  it's tight or the tower moves; out of options, they lean on one harder.
+- Local only for now (VS AI or pass the phone): the tower's physics isn't sent
+  over the network.
+
 ## How to play Poker
 
 - **The deal.** Texas Hold'em: 2 cards face down each. Items turn up as loot. Five
@@ -639,6 +673,9 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/darts.gd`, `darts_bot.gd` | Darts: the board's scoring, the three games and their stakes, and the AI (it aims with the same two lines). |
 | `scripts/three/party_room.gd`, `dartboard3d.gd` | The party room, and the dartboard on its wall (face painted in code, darts that stick). |
 | `scripts/ui/darts_aim.gd` | The two-line aim drawn over the board. |
+| `scripts/core/timber.gd` | TIMBER's turns and shotgun (the board-game elimination rule). |
+| `scripts/three/tower3d.gd`, `hand3d.gd`, `timber_driver.gd` | The physics tower, the skeleton hand (force-limited fingertip), and the AI's hand. |
+| `scripts/ui/modes/timber_ui.gd`, `scripts/ui/timber_top_view.gd` | TIMBER's controls, camera, and the round map from above. |
 | `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
@@ -701,6 +738,13 @@ darts game through the real screens (tapping to stop the dots), then the demo:
 
 ```
 godot --headless --path . -s tests/ui_darts_check.gd
+```
+
+`tests/ui_timber_check.gd` plays a TIMBER match through the real screens
+(a scripted thumb taps blocks and drags to push), then the demo:
+
+```
+godot --headless --path . -s tests/ui_timber_check.gd
 ```
 
 `tests/ui_blackjack_check.gd` plays Blackjack solo against two AIs

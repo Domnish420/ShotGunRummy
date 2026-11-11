@@ -91,6 +91,13 @@ const GAMES := {
 		["round_end", "First out is PRESIDENT. Whoever's left holding the most is the SCUM."],
 		["exchange", "THE SCUM PAYS UP: their best card goes to the President, who hands back their worst."],
 	],
+	"timber": [
+		["start", "TIMBER. Take a block from anywhere below the top two layers and it goes on top. Don't bring the tower down."],
+		["turn_start", "Whoever's turn it is has the shotgun in front of them. It moves to the left with the turn."],
+		["placed", "Out and on top. Watch the AIs test a block with a finger, and back off when the tower moves: some blocks are loose, some carry the weight."],
+		["timber", "TIMBER! Whoever brings it down is shot by the player on their right. One shot and you're out."],
+		["round_end", "The tower's built again, and the player on the left of whoever knocked it over goes first. Always. Last one standing wins."],
+	],
 	"darts": [
 		["start", "DARTS. Pick a game at the board: SHOOTOUT (highest 3 darts wins), AROUND THE CLOCK (1 to 20, then the bull) or 301 (count down to exactly 0)."],
 		["dart", "THE THROW: a red line crosses the board through the bull, with a dot running along it. Tap to stop it. A second line crosses through that spot: tap again and the dart goes where that dot is."],
@@ -139,7 +146,7 @@ const PRACTICE := "NOW YOU TRY. Play %d practice rounds against two easy players
 
 ## The lessons for a cartridge, its own first.
 static func for_game(kind: String) -> Array:
-	if kind == "darts":
+	if kind == "darts" or kind == "timber":
 		# no cards, no dealer, no items: just the shotgun rules
 		var shared := COMMON.filter(func(l): return not (str(l[0]).split(":")[0] in ["start", "loot", "item_used", "roulette"] or str(l[0]).begins_with("shot:blank")))
 		return GAMES.get(kind, []) + shared

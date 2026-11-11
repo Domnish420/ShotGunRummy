@@ -47,7 +47,7 @@ func _init() -> void:
 		"test_bot_matches", "test_ai_levels",
 		"test_bj_totals", "test_bj_deal", "test_bj_turns", "test_bj_winner", "test_bj_blackjack_shot", "test_bj_items", "test_bj_ai_matches",
 		"test_gf_ask", "test_gf_books", "test_gf_ai_matches",
-		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_crazy8", "test_darts_board", "test_darts_modes", "test_darts_ai", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
+		"test_ch_play", "test_ch_call", "test_ch_empty_pile", "test_hearts", "test_spades", "test_snap", "test_president", "test_crazy8", "test_darts_board", "test_darts_modes", "test_darts_ai", "test_timber", "test_poker_hands", "test_poker_betting", "test_blank_shell", "test_trumps_only_rummy", "test_items_scarce", "test_every_item_everywhere", "test_unlocks", "test_secrets", "test_music", "test_normal_mode", "test_ai_all_games",
 	]:
 		var only := OS.get_cmdline_user_args() # -- test_name runs just that one
 		if not only.is_empty() and not only.has(t):
@@ -1636,6 +1636,43 @@ func test_darts_modes() -> void:
 	for i in range(6):
 		n.throw(n.turn, 0, 0.4 if i < 3 else -0.4)
 	check(n.phase == "round_over" and n.gun == null, "normal mode: nobody shoots")
+
+
+## TIMBER: the gun goes round with the turn; bring the tower down and the
+## player on your right shoots you (one shot, you're out); the player on your
+## left starts the next tower. Always.
+func test_timber() -> void:
+	var g = Games.make("timber")
+	g.setup(["A", "B", "C", "D"], {}, 3)
+	g.start_round()
+	var first: int = g.turn
+	check(g.players[0].hp == 1 and g.players[0].max_hp == 1, "board games: one life")
+	check(g.placed(first)["ok"] and g.turn == g.next_alive(first), "block placed: on to the left")
+	var t: int = g.turn
+	check(not g.placed(first)["ok"], "only on your own turn")
+	check(g.toppled(t)["ok"] and g.phase == "shoot", "the tower comes down: out comes the gun")
+	check(g.gun["holder"] == g.prev_alive(t) and g.gun["targets"] == [t], "the player on the right holds it, and can only shoot the one who knocked it over")
+	check(not g.shoot(g.gun["holder"], g.next_alive(g.next_alive(t)))["ok"], "nobody else can be shot")
+	var res: Dictionary = g.shoot(g.gun["holder"], t)
+	check(res["ok"] and not g.players[t].alive and g.phase == "round_over", "one shot: they're out")
+	g.start_round()
+	check(g.turn == g.next_alive(t) and g.round_num == 2, "the player on the left starts the new tower")
+	# down to the last two, then one
+	var u: int = g.turn
+	g.toppled(u)
+	g.shoot(g.gun["holder"], u)
+	g.start_round()
+	var v: int = g.turn
+	g.toppled(v)
+	g.shoot(g.gun["holder"], v)
+	check(g.phase == "match_over" and g.alive_count() == 1, "last one standing wins")
+	# with two left, the right and the left are the same player
+	var h = Games.make("timber")
+	h.setup(["A", "B"], {}, 4)
+	h.start_round()
+	var a: int = h.turn
+	h.toppled(a)
+	check(h.gun["holder"] == 1 - a, "two players: the other one shoots")
 
 
 ## AIs finish every mode at every level, and better players win more.

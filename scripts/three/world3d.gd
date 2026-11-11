@@ -24,6 +24,8 @@ const Gacha3D = preload("res://scripts/three/gacha3d.gd")
 const Games = preload("res://scripts/core/games.gd")
 const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
 const PartyRoom = preload("res://scripts/three/party_room.gd")
+const Tower3D = preload("res://scripts/three/tower3d.gd")
+const Hand3D = preload("res://scripts/three/hand3d.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -502,6 +504,8 @@ func _fit_camera() -> void:
 	if _darts_on:
 		camera.global_transform = darts_camera()
 		return
+	if _timber_on:
+		return # the tower camera drives itself
 	if not _preview.is_empty():
 		_aim_preview()
 		return
@@ -550,6 +554,7 @@ var _disco_t := 0.0
 
 func _process(delta: float) -> void:
 	_spin_carousel(delta)
+	_process_timber(delta)
 	if egg_disco and lamp != null:
 		_disco_t += delta
 		lamp.light_color = Color.from_hsv(fmod(_disco_t * 0.35, 1.0), 0.75, 1.0)
@@ -1072,6 +1077,7 @@ func set_menu_mode(on: bool) -> void:
 		leave_room()
 	if on:
 		set_standing(false)
+		timber_off()
 		_darts_on = false
 		_darts_round = -1
 		if dartboard != null:
@@ -1201,7 +1207,7 @@ func _sync_figures(game, viewer: int) -> void:
 		var lines := [p.name + (" (D)" if p.seat == game.dealer else "")]
 		if p.alive:
 			var life := "HP %d/%d" % [p.hp, p.max_hp] if game.options.get("shotgun", true) else "WINS %d" % p.rounds_won
-			lines.append(life if game.kind == "darts" else "%s  %d CARDS" % [life, p.hand.size()])
+			lines.append(life if game.kind == "darts" else ("STILL IN" if game.kind == "timber" else "%s  %d CARDS" % [life, p.hand.size()]))
 			if game.has_method("table_note"):
 				lines.append(game.table_note(p.seat))
 			var flags := []
@@ -1330,6 +1336,9 @@ func sync(s: Dictionary) -> void:
 	var viewer: int = s["viewer"]
 	if game.kind == "darts":
 		_sync_darts(game, viewer)
+		return
+	if game.kind == "timber":
+		_sync_timber(game, viewer)
 		return
 	var new_round: bool = game.round_num != _round_seen and (game.phase == "draw" or game.phase == "play")
 	if dealing and not new_round:
@@ -2604,3 +2613,184 @@ func _sync_darts(game, viewer: int) -> void:
 		_darts_round = game.round_num
 		clear_darts()
 	darts_view(game.phase == "play")
+	_sync_gun(game, viewer)
+
+
+# ================================================================ timber
+
+var tower: Node3D # tower3d.gd, while TIMBER's on
+var hand: Node3D # hand3d.gd
+var _timber_on := false # the camera's on the tower
+var _timber_round := -1
+var tower_yaw := 0.0 # where round the tower the camera stands (radians, 0 = your seat side)
+var tower_focus := Vector3(0, 0.3, 0) # what the camera looks at
+var tower_dist := 0.95
+var tower_rise := 0.32 # how far above what it looks at
+var _cam_goal := Transform3D()
+var _ghost: MeshInstance3D # where your thumb wants the fingertip
+var _strain_line: MeshInstance3D # from the ghost to the real fingertip
+var _strain_mat: StandardMaterial3D
+
+
+## The tower and the hand, built the first time TIMBER's played.
+func timber_ready() -> void:
+	if tower != null:
+		return
+	tower = Tower3D.new()
+	add_child(tower)
+	hand = Hand3D.new()
+	add_child(hand)
+	var gm := StandardMaterial3D.new()
+	gm.albedo_color = Color(1, 1, 1, 0.35)
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.no_depth_test = true
+	var sm := SphereMesh.new()
+	sm.radius = 0.012
+	sm.height = 0.024
+	sm.radial_segments = 8
+	sm.rings = 4
+	_ghost = MeshInstance3D.new()
+	_ghost.mesh = sm
+	_ghost.material_override = gm
+	_ghost.visible = false
+	add_child(_ghost)
+	_strain_mat = StandardMaterial3D.new()
+	_strain_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_strain_mat.no_depth_test = true
+	_strain_mat.albedo_color = Color(1, 1, 1)
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.0025
+	cm.bottom_radius = 0.0025
+	cm.height = 1.0
+	cm.radial_segments = 4
+	_strain_line = MeshInstance3D.new()
+	_strain_line.mesh = cm
+	_strain_line.material_override = _strain_mat
+	_strain_line.visible = false
+	add_child(_strain_line)
+
+
+func timber_off() -> void:
+	_timber_on = false
+	_timber_round = -1
+	if tower != null:
+		tower.clear()
+		hand.park()
+		_ghost.visible = false
+		_strain_line.visible = false
+
+
+func _sync_timber(game, viewer: int) -> void:
+	timber_ready()
+	set_standing(false)
+	_viewer = viewer
+	dealing = false
+	_round_seen = game.round_num
+	_clear_labels()
+	for id in _cards:
+		_cards[id].queue_free()
+	_cards.clear()
+	_sync_figures(game, viewer)
+	if _dealer_chip != null:
+		_dealer_chip.visible = false
+	if game.round_num != _timber_round:
+		_timber_round = game.round_num
+		tower.build()
+		tower.set_watch(false)
+		get_tree().create_timer(1.6).timeout.connect(func() -> void:
+			if tower != null:
+				tower.set_watch(true))
+	if game.phase == "play":
+		_timber_on = true
+		set_tags_shown(false) # nothing floating over the tower while it's played
+		_gun_on_table(game.turn, viewer, game.players.size())
+	else:
+		if _timber_on:
+			_timber_on = false
+			set_tags_shown(true)
+			hand.park()
+			_ghost.visible = false
+			_strain_line.visible = false
+			_move_camera(_cam_home, 0.6)
+		_sync_gun(game, viewer)
+
+
+## TIMBER: the shotgun lies on the table in front of whoever's turn it is.
+func _gun_on_table(seat: int, viewer: int, count: int) -> void:
+	_hold_gun(-1)
+	var spot := seat_position(seat, viewer, count)
+	var at := spot.lerp(Vector3.ZERO, 0.52)
+	at.y = TABLE_TOP + 0.03
+	var across := Vector3.UP.cross(spot.normalized()).normalized()
+	var xf := Transform3D(Basis.looking_at(across, Vector3.UP) * Basis(Vector3.FORWARD, PI * 0.5), at)
+	if _gun_pose != "table%d" % seat:
+		_gun_pose = "table%d" % seat
+		if not shotgun.visible:
+			shotgun.transform = xf.translated(Vector3(0, -0.3, 0))
+			shotgun.visible = true
+		_tween(shotgun, "transform", xf, 0.0, 0.45)
+
+
+## Where the camera stands to look at the tower.
+func tower_camera() -> Transform3D:
+	var flat := Vector3(sin(tower_yaw), 0, cos(tower_yaw))
+	var from := tower_focus + flat * tower_dist + Vector3(0, tower_rise, 0)
+	return Transform3D(Basis.looking_at(tower_focus - from, Vector3.UP), from)
+
+
+func _process_timber(delta: float) -> void:
+	if not _timber_on or _room:
+		return
+	var goal := tower_camera()
+	camera.global_transform = camera.global_transform.interpolate_with(goal, minf(1.0, delta * 6.0))
+	camera.fov = 58.0 if not _landscape else 50.0
+
+
+## The ghost fingertip and the strain line between it and the real one:
+## white when it's easy, red when the block's fighting back.
+func show_strain(on: bool) -> float:
+	if hand == null:
+		return 0.0
+	_ghost.visible = on
+	_strain_line.visible = on
+	if not on:
+		return 0.0
+	var a: Vector3 = hand.target
+	var b: Vector3 = hand.tip.global_position
+	_ghost.global_position = a
+	var gap := a.distance_to(b)
+	var strain := clampf(gap / 0.03, 0.0, 1.0)
+	_strain_mat.albedo_color = Color(1, 1, 1).lerp(Color(1, 0.15, 0.1), strain)
+	if gap > 0.002:
+		var mid := (a + b) * 0.5
+		var up := (a - b).normalized()
+		var side := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
+		_strain_line.global_transform = Transform3D(Basis(side, up, side.cross(up)).scaled(Vector3(1, gap, 1)), mid)
+		_strain_line.visible = true
+	else:
+		_strain_line.visible = false
+	return strain
+
+
+## The block under a tap (in the 3D view's pixels), or null.
+func pick_block(at: Vector2) -> RigidBody3D:
+	if tower == null:
+		return null
+	var from := camera.project_ray_origin(at)
+	var dir := camera.project_ray_normal(at)
+	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 5.0, 1)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty() or not (hit["collider"] is RigidBody3D) or not tower.blocks.has(hit["collider"]):
+		return null
+	return hit["collider"]
+
+
+## A screen point (3D view pixels) on the flat plane at height `y`.
+func on_plane(at: Vector2, y: float) -> Vector3:
+	var from := camera.project_ray_origin(at)
+	var dir := camera.project_ray_normal(at)
+	if absf(dir.y) < 0.0001:
+		return from
+	var t := (y - from.y) / dir.y
+	return from + dir * maxf(t, 0.0)

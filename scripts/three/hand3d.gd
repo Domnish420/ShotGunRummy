@@ -28,6 +28,7 @@ var _thumb := [] # [base, end]
 var _wrist: Node3D
 var _palm: Node3D
 var _speed := 0.0
+var boost := 1.0 # pushing harder than a finger likes to (an AI out of options)
 
 
 func _ready() -> void:
@@ -38,6 +39,10 @@ func _ready() -> void:
 	tip.lock_rotation = true
 	tip.can_sleep = false
 	tip.continuous_cd = true
+	# the fingers only ever touch the block (or layer) being worked on, never
+	# snag the ones round it (the tower sets that block on layer 2)
+	tip.collision_layer = 4
+	tip.collision_mask = 2
 	var pm := PhysicsMaterial.new()
 	pm.friction = 0.4
 	tip.physics_material_override = pm
@@ -52,10 +57,11 @@ func _ready() -> void:
 		cs.shape = pair[1]
 		tip.add_child(cs)
 		_shapes[pair[0]] = cs
-	add_child(tip)
 	tip.top_level = true
-	set_tool("poke")
-	visible = false
+	tip.position = Vector3(0, -3, 0) # out of the way (never inside the tower)
+	add_child(tip)
+	tool = "poke"
+	park()
 
 
 ## Pick a tool: the hand changes shape and the right part touches the blocks.
@@ -94,7 +100,7 @@ func show_hand() -> void:
 func _physics_process(_delta: float) -> void:
 	if tip == null or not visible:
 		return
-	var most: float = STRENGTH.get(tool, 5.0)
+	var most: float = STRENGTH.get(tool, 5.0) * boost
 	var k := 500.0 if tool != "flat" else 2500.0
 	var c := 2.0 * sqrt(k * tip.mass)
 	var f := (target - tip.global_position) * k - tip.linear_velocity * c

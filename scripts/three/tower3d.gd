@@ -12,12 +12,14 @@ extends Node3D
 
 signal toppled
 signal block_out(block: RigidBody3D) # the moving block's clear of the tower
+signal dropped(block: RigidBody3D) # a lone block slid out by itself (out of the game)
 
 const L := 0.18 # block length
 const W := 0.06 # width (3 side by side make a square layer)
 const H := 0.036 # height
 const LAYERS := 18
 const MASS := 0.12
+const GAP := 0.002 # between blocks side by side
 const TOP_Y := 0.03 # the table top (world3d.TABLE_TOP)
 
 var blocks: Array = [] # every RigidBody3D
@@ -33,6 +35,7 @@ var _hold_grip := Vector3.ZERO # the pinch point, in the block's own space
 var _floor: StaticBody3D
 var _watch := true # checking for a collapse
 var fall_reason := ""
+var moving := {} # block -> true: being worked on (the hand may touch them; they may move)
 
 
 func build(seed_value: int = -1) -> void:
@@ -51,7 +54,7 @@ func build(seed_value: int = -1) -> void:
 		_floor.physics_material_override = _mat
 		add_child(_floor)
 		# the table top, and the floor further down for whatever falls off
-		for spec in [[Vector3(1.8, 0.1, 2.4), Vector3(0, TOP_Y - 0.05, 0)], [Vector3(8, 0.1, 8), Vector3(0, -0.78 - 0.05, 0)]]:
+		for spec in [[Vector3(1.9, 0.1, 1.15), Vector3(0, TOP_Y - 0.05, 0.15)], [Vector3(8, 0.1, 8), Vector3(0, -0.78 - 0.05, 0)]]:
 			var cs := CollisionShape3D.new()
 			var bs := BoxShape3D.new()
 			bs.size = spec[0]
@@ -59,16 +62,25 @@ func build(seed_value: int = -1) -> void:
 			cs.position = spec[1]
 			_floor.add_child(cs)
 	_base = Vector3(0, TOP_Y, 0)
+	if get_node_or_null("Light") == null:
+		# a warm light on the tower from each side, so its faces aren't in the dark
+		for i in range(3):
+			var o := OmniLight3D.new()
+			o.name = "Light" if i == 0 else "Light%d" % i
+			var a := i * TAU / 3.0 + 0.4
+			o.position = Vector3(sin(a) * 0.9, 0.55, cos(a) * 0.9)
+			o.light_color = Color(1.0, 0.88, 0.7)
+			o.light_energy = 0.9
+			o.omni_range = 1.6
+			add_child(o)
+	# pale pine, each block a shade different (like the real thing)
 	var wood := []
-	for i in range(4):
+	for i in range(6):
 		var m := StandardMaterial3D.new()
-		var t = load("res://textures/wood.png")
-		if t is Texture2D:
-			m.albedo_texture = t
-		m.uv1_triplanar = true
-		m.uv1_scale = Vector3.ONE * 6.0
-		m.albedo_color = Color(0.95, 0.82, 0.6).lerp(Color(0.8, 0.62, 0.42), i / 3.0)
+		m.albedo_color = Color(0.98, 0.86, 0.62).lerp(Color(0.86, 0.68, 0.45), i / 5.0)
 		m.roughness = 0.85
+		m.emission_enabled = true # a touch of its own light: you can always read the blocks
+		m.emission = m.albedo_color * 0.12
 		wood.append(m)
 	var y := TOP_Y
 	for layer in range(LAYERS):
@@ -82,9 +94,12 @@ func build(seed_value: int = -1) -> void:
 		for k in range(3):
 			var b := _block(wood[_rng.randi() % wood.size()], heights[k], 0.45)
 			var along_x := layer % 2 == 0
-			var off := (k - 1) * (W + 0.0008)
+			var off := (k - 1) * (W + GAP)
 			var pos := Vector3(0 if along_x else off, y + heights[k] * 0.5, off if along_x else 0)
-			pos += Vector3(_rng.randf_range(-0.0015, 0.0015), 0, _rng.randf_range(-0.0015, 0.0015))
+			# a little untidy, like a hand-stacked tower: only along its length,
+			# never into its neighbours
+			var slide := _rng.randf_range(-0.004, 0.004)
+			pos += Vector3(slide, 0, 0) if along_x else Vector3(0, 0, slide)
 			b.position = pos
 			b.rotation.y = 0.0 if along_x else PI / 2.0
 			b.set_meta("layer", layer)
@@ -113,9 +128,11 @@ func _block(mat: Material, height: float, grip: float = 0.5) -> RigidBody3D:
 	pm.bounce = 0.0
 	b.physics_material_override = pm
 	b.set_meta("grip", grip)
-	b.can_sleep = true
-	b.linear_damp = 0.15
-	b.angular_damp = 0.3
+	b.can_sleep = false # waking a sleeping stack jolts it (the contacts are solved afresh): it stays awake
+	# a good bit of damping: wooden blocks settle dead still instead of
+	# jittering (and a collapse comes down a touch slow, which reads well)
+	b.linear_damp = 1.0
+	b.angular_damp = 2.0
 	b.continuous_cd = false
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
@@ -174,15 +191,15 @@ func top_layer() -> int:
 	return -1
 
 
-## May this block be taken? Not from the top layer, and not from the one
-## under it while the top's not finished.
+## May this block be taken? Not from the bottom layer, not from the top
+## layer, and not from the one under it while the top's not finished.
 func takeable(b: RigidBody3D) -> bool:
 	if b == null or removed.has(b) or down:
 		return false
 	var top := top_layer()
 	var l := int(b.get_meta("layer"))
-	if l >= top:
-		return false
+	if l == 0 or l >= top:
+		return false # the bottom layer stays put (house rule), and not the top
 	if l == top - 1 and layer_blocks()[top].size() < 3:
 		return false
 	return true
@@ -207,7 +224,7 @@ func tower_center() -> Vector3:
 	var c := Vector3.ZERO
 	var n := 0
 	for b in blocks:
-		if removed.has(b) or b == active:
+		if removed.has(b) or b == active or moving.has(b):
 			continue
 		c += b.global_position
 		n += 1
@@ -219,10 +236,23 @@ func tower_center() -> Vector3:
 
 # ---------------------------------------------------------------- moving one
 
+## What the hand may touch: only the block being worked on (physics layer 2).
+## Every block is on layer 1 for the rest of the tower.
 func set_active(b: RigidBody3D) -> void:
+	set_touchable(([] if b == null else [b]))
 	active = b
 	if b != null:
 		b.sleeping = false
+
+
+func set_touchable(list: Array) -> void:
+	moving = {}
+	for o in list:
+		moving[o] = true
+	for o in blocks:
+		var on := list.has(o)
+		o.collision_layer = 1 | (2 if on else 0)
+		o.collision_mask = 1 | (4 if on else 0) # and it feels the fingers back
 
 
 ## Pinch: hold the block at its grip point and pull it toward `to`.
@@ -240,65 +270,94 @@ func hold_to(to: Vector3) -> void:
 
 func release() -> void:
 	if _held != null and is_instance_valid(_held):
-		_held.angular_damp = 0.3
+		_held.angular_damp = 2.0
 	_held = null
 
 
-## Is the moving block clear of the tower (pulled out, or pushed through)?
+## Is the moving block out? Once it's more than about 60% out (just before it
+## would tip over the edge) the other hand catches it; or it's down on the table.
 func is_out(b: RigidBody3D) -> bool:
 	var d := b.global_position - tower_center()
 	d.y = 0.0
-	return d.length() > L * 0.98 or b.global_position.y < TOP_Y + H * 0.6 and int(b.get_meta("layer")) > 0
+	return d.length() > L * 0.62 or b.global_position.y < TOP_Y + H * 0.6 and int(b.get_meta("layer")) > 0
 
 
 ## Carry the moving block up and lay it on top. Returns the time it takes.
 func place_on_top(b: RigidBody3D) -> float:
 	release()
+	active = b # it's carried: not part of the tower till it's down
 	var ls := layer_blocks()
-	var top := top_layer()
-	# the top layer's blocks (without this one)
+	var top := -1
+	for i in range(ls.size() - 1, -1, -1):
+		if not ls[i].filter(func(o): return o != b).is_empty():
+			top = i
+			break
 	var top_blocks: Array = ls[top].filter(func(o): return o != b) if top >= 0 else []
 	var layer := top
-	if top_blocks.size() >= 3 or (int(b.get_meta("layer")) == top and top_blocks.is_empty()):
+	if top_blocks.size() >= 3:
 		layer = top + 1
 		top_blocks = []
-	elif top_blocks.is_empty():
-		layer = top + 1
 	var used := top_blocks.map(func(o): return int(o.get_meta("slot")))
 	var slot := 1
 	for s in [1, 0, 2]:
 		if not used.has(s):
 			slot = s
 			break
-	# where: centred on what's under it, a little above the highest block there
-	var under: Array = ls[layer - 1] if layer - 1 >= 0 and layer - 1 < ls.size() else []
-	under = under.filter(func(o): return o != b)
-	var ref: Array = top_blocks if not top_blocks.is_empty() else under
-	var center := tower_center()
+	# line up with the layer it lies on: across it, centred on it, just above
+	var under: Array = (ls[layer - 1] if layer >= 1 and layer - 1 < ls.size() else []).filter(func(o): return o != b)
+	var center := Vector3.ZERO
 	var high := TOP_Y
-	for o in ref:
-		center = Vector3(center.x, 0, center.z)
-	for o in under:
-		high = maxf(high, o.global_position.y + float(o.get_meta("height")) * 0.5)
-	var along_x := layer % 2 == 0
-	var off := (slot - 1) * (W + 0.0008)
-	var target := Vector3(center.x + (0.0 if along_x else off), high + float(b.get_meta("height")) * 0.5 + 0.003, center.z + (off if along_x else 0.0))
+	var under_axis := Vector3(0, 0, 1) if layer % 2 == 0 else Vector3(1, 0, 0)
+	if not under.is_empty():
+		for o in under:
+			center += o.global_position
+			high = maxf(high, o.global_position.y + float(o.get_meta("height")) * 0.5)
+		center /= under.size()
+		under_axis = block_axis(under[0])
+		# along their length, one sticking out would drag the average: use the
+		# middle one (or the tower's middle)
+		var alongs := []
+		for o in under:
+			alongs.append(o.global_position.dot(under_axis))
+		alongs.sort()
+		var mid_along: float = alongs[alongs.size() / 2] if alongs.size() == 3 else tower_center().dot(under_axis)
+		center += under_axis * (mid_along - center.dot(under_axis))
+	var axis := Vector3(-under_axis.z, 0, under_axis.x) # this layer runs across the one below
+	if top_blocks.size() > 0:
+		axis = block_axis(top_blocks[0])
+	var across := Vector3(-axis.z, 0, axis.x)
+	var target := Vector3(center.x, high + float(b.get_meta("height")) * 0.5 + 0.002, center.z) + across * ((slot - 1) * (W + GAP))
 	b.set_meta("layer", layer)
 	b.set_meta("slot", slot)
 	b.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 	b.freeze = true
-	var lift := Vector3(b.global_position.x, target.y + 0.12, b.global_position.z)
-	var basis := Basis(Vector3.UP, 0.0 if along_x else PI / 2.0)
+	# carried through the air, it touches nothing till it's set down on top
+	b.collision_layer = 0
+	b.collision_mask = 0
+	# first it slides on out, clear of the tower, then up and over
+	var out_dir := b.global_position - tower_center()
+	out_dir.y = 0.0
+	var own := block_axis(b)
+	if own.dot(out_dir) < 0.0:
+		own = -own
+	var clear := Vector3(tower_center().x, b.global_position.y, tower_center().z) + own * (L + 0.03)
+	var lift := Vector3(clear.x, target.y + 0.12, clear.z)
+	var basis := Basis(Vector3.UP, atan2(-axis.z, axis.x))
 	var t := create_tween()
+	t.tween_property(b, "global_position", clear, 0.2).set_trans(Tween.TRANS_SINE)
 	t.tween_property(b, "global_position", lift, 0.35).set_trans(Tween.TRANS_SINE)
 	t.parallel().tween_property(b, "global_basis", basis, 0.35)
-	t.tween_property(b, "global_position", target + Vector3(0, 0.03, 0), 0.35).set_trans(Tween.TRANS_SINE)
-	t.tween_property(b, "global_position", target, 0.12)
+	t.tween_property(b, "global_position", target + Vector3(0, 0.025, 0), 0.35).set_trans(Tween.TRANS_SINE)
+	t.tween_property(b, "global_position", target, 0.15)
 	t.tween_callback(func() -> void:
+		b.collision_layer = 1
+		b.collision_mask = 1
 		b.freeze = false
 		b.linear_velocity = Vector3.ZERO
-		b.angular_velocity = Vector3.ZERO)
-	return 0.85
+		b.angular_velocity = Vector3.ZERO
+		if active == b:
+			active = null)
+	return 1.1
 
 
 ## Take a block out of the game (swiped off the tower).
@@ -327,25 +386,28 @@ func _physics_process(delta: float) -> void:
 		toppled.emit()
 
 
-## Has the tower come down? A block other than the one being moved is off the
-## tower, down on the table (and wasn't on the bottom), or tipped right over.
+## Has the tower come down? Blocks off the tower or down on the table (that
+## weren't on the bottom), or any block tipped right over. One block that
+## slides out on its own, low in the tower (one left sticking out, say), just
+## drops out of the game: that's not a collapse.
 func _fallen() -> bool:
 	var center := tower_center()
+	var off := []
 	for b in blocks:
-		if removed.has(b) or b == active or b.freeze:
+		if removed.has(b) or b == active or moving.has(b) or b.freeze:
 			continue
 		var d: Vector3 = b.global_position - center
 		d.y = 0.0
-		if d.length() > L * 1.1:
-			fall_reason = "L%d off the tower (%.3f)" % [int(b.get_meta("layer")), d.length()]
-			return true
-		if int(b.get_meta("layer")) >= 2 and b.global_position.y < TOP_Y + H * 1.2:
-			fall_reason = "L%d on the table" % int(b.get_meta("layer"))
-			return true
-		if b.global_transform.basis.y.dot(Vector3.UP) < 0.75:
-			fall_reason = "L%d tipped" % int(b.get_meta("layer"))
-			return true
-	return false
+		if b.global_transform.basis.y.dot(Vector3.UP) < 0.75 or d.length() > L * 1.1 or (int(b.get_meta("layer")) >= 2 and b.global_position.y < TOP_Y + H * 1.2):
+			off.append(b)
+	if off.is_empty():
+		return false
+	if off.size() == 1 and int(off[0].get_meta("layer")) < top_layer() - 1:
+		removed[off[0]] = true
+		dropped.emit(off[0])
+		return false
+	fall_reason = "%d off the tower (L%d)" % [off.size(), int(off[0].get_meta("layer"))]
+	return true
 
 
 ## How much the tower is moving right now (the fastest block but the active one).

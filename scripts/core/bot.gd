@@ -56,6 +56,8 @@ static func next_action(game, seat: int, level: String = "normal", memory: Dicti
 			return Crazy8Bot.next_action(game, seat, level, memory)
 		"darts":
 			return DartsBot.next_action(game, seat, level, memory)
+		"timber":
+			return [] # the AI's hand is played out in 3D by the table screen (timber_driver.gd)
 	var me = game.players[seat]
 	var key := "%d-%d-%d" % [game.round_num, seat, me.turns_taken]
 	if memory.get("turn", "") != key:

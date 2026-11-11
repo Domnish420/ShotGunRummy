@@ -32,6 +32,7 @@ const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
 const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
 const Crazy8UI = preload("res://scripts/ui/modes/crazy8_ui.gd")
 const DartsUI = preload("res://scripts/ui/modes/darts_ui.gd")
+const TimberUI = preload("res://scripts/ui/modes/timber_ui.gd")
 const DartsT = preload("res://scripts/core/darts.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
@@ -1058,12 +1059,99 @@ func _set_darts_normal(on: bool) -> void:
 	show_darts()
 
 
-## The board game shelf: nothing to play yet.
+## The board game shelf. TIMBER's the box on top: everything about it
+## floats over the shelf in its own colours. (The rest are still wrapped.)
+const TIMBER_LEVELS := [["easy", "SHAKY"], ["normal", "STEADY"], ["hard", "SURGEON"], ["mixed", "MIXED"]]
+
+
 func show_board_games() -> void:
 	world.focus_station("boxes")
-	var box := _station_panel("BOARD GAMES")
-	box.add_child(_label("Still in their shrink-wrap. Board games are coming to this shelf soon.", 26, Palette.INK, true))
-	_panel_button(box, "BACK", show_menu, 30)
+	_close_overlay()
+	_clear(screen)
+	game_kind = "timber"
+	if not _normal_unlocked("timber"):
+		normal_mode = false
+	var wood := Color(0.95, 0.78, 0.5)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 4)
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 40)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label("TIMBER!", 66, wood, true)
+	title.add_theme_color_override("font_outline_color", Color(0.2, 0.1, 0.04))
+	title.add_theme_constant_override("outline_size", 14)
+	col.add_child(title)
+	for line in ["Pull a block. Put it on top. Don't bring it down.", "Bring it down and the player on your right shoots you." if not normal_mode else "Bring it down and you're out."]:
+		var l := _label(line, 24, Color(0.95, 0.9, 0.8), true)
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 8)
+		col.add_child(l)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the shelf shows through here
+	var who := HBoxContainer.new()
+	who.alignment = BoxContainer.ALIGNMENT_CENTER
+	who.add_theme_constant_override("separation", 14)
+	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	who.add_child(_bubble("◀", _change_timber_count.bind(-1), wood, 44))
+	var count := _label("YOU + %d AI" % solo_opponents, 34, wood, true)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	count.add_theme_color_override("font_outline_color", Color.BLACK)
+	count.add_theme_constant_override("outline_size", 8)
+	who.add_child(count)
+	who.add_child(_bubble("▶", _change_timber_count.bind(1), wood, 44))
+	col.add_child(who)
+	var levels := HBoxContainer.new()
+	levels.alignment = BoxContainer.ALIGNMENT_CENTER
+	levels.add_theme_constant_override("separation", 22)
+	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for pair in TIMBER_LEVELS:
+		levels.add_child(_bubble(pair[1], _set_timber_level.bind(pair[0]), Color(0.45, 0.9, 0.5) if solo_level == pair[0] else Palette.DIM, 32 if solo_level == pair[0] else 26))
+	col.add_child(levels)
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 36)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_timber_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 30))
+	var plain := _bubble("NORMAL" if _normal_unlocked("timber") else "NORMAL 🔒%d/%d" % [int(played.get("timber", 0)), Games.UNLOCK_NORMAL_AFTER], _set_timber_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 30)
+	plain.disabled = not _normal_unlocked("timber")
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	col.add_child(_bubble("STACK 'EM!", _start_solo, Palette.GOLD, 66))
+	var more := HBoxContainer.new()
+	more.alignment = BoxContainer.ALIGNMENT_CENTER
+	more.add_theme_constant_override("separation", 30)
+	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 28))
+	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 28))
+	col.add_child(more)
+	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 30))
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 26)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+
+
+func _change_timber_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	_save_settings()
+	show_board_games()
+
+
+func _set_timber_level(level: String) -> void:
+	solo_level = level
+	_save_settings()
+	show_board_games()
+
+
+func _set_timber_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked("timber")
+	_save_settings()
+	show_board_games()
 
 
 ## The options a new game of `kind` starts with (which darts game, say).
@@ -3764,7 +3852,7 @@ func _input(event: InputEvent) -> void:
 			_pinching = true
 			_pinch_gap = gap
 			return
-		if game != null and round_label != null and overlay_layer.get_child_count() == 0 and _pinch_gap > 1.0:
+		if game != null and round_label != null and overlay_layer.get_child_count() == 0 and _pinch_gap > 1.0 and not Games.is_party(game.kind):
 			var mid: Vector2 = ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
 			world.zoom_at(_to_view(mid), (gap / _pinch_gap - 1.0) * 5.0)
 		_pinch_gap = gap
@@ -4070,6 +4158,8 @@ func _make_mode_ui():
 			return Crazy8UI.new(self)
 		"darts":
 			return DartsUI.new(self)
+		"timber":
+			return TimberUI.new(self)
 	return null
 
 
