@@ -33,6 +33,7 @@ const TABLE_CARD := Vector2(0.17, 0.244)
 const HAND_CARD := Vector2(0.105, 0.152)
 const ITEM_CARD := Vector2(0.075, 0.1)
 const OPP_CARD := Vector2(0.09, 0.13)
+const PILE_CARD := Vector2(0.34, 0.49) # Crazy Eights: the pile's top card, big, floating over the middle
 const BJ_CARD := Vector2(0.11, 0.158) # Blackjack hands lie face up on the table
 const SEAT_RX := 1.08
 const SEAT_RZ := 1.5
@@ -1301,7 +1302,7 @@ func sync(s: Dictionary) -> void:
 	if new_round:
 		_begin_deal(game, viewer, s["hand"])
 
-	var stock_xf := _flat(Vector3(-0.2, TABLE_TOP + 0.002, -0.02), 0.08, false)
+	var stock_xf := _flat(Vector3(-0.2 if game.kind != "crazy8" else -0.4, TABLE_TOP + 0.002, -0.02 if game.kind != "crazy8" else 0.12), 0.08, false)
 	var discard_base := Vector3(0.2, TABLE_TOP + 0.002, -0.02)
 	# zoomed in, but play's stopped (the round's over, the gun's out): back to your seat
 	if _cam_view != _cam_home and not (game.phase in ["play", "draw"]):
@@ -1333,7 +1334,10 @@ func sync(s: Dictionary) -> void:
 	elif game.kind == "president":
 		_president_pile(seen, game, stock_xf)
 		pile = []
-	elif not game.kind in ["rummy", "crazy8"]:
+	elif game.kind == "crazy8":
+		_crazy8_pile(seen, game, s, stock_xf)
+		pile = []
+	elif game.kind != "rummy":
 		pile = [] # only Rummy has a discard pile (Snap shows its middle pile big, over the table); elsewhere spent cards just go out of play
 	var from := maxi(0, pile.size() - 3)
 	for i in range(from, pile.size()):
@@ -1342,12 +1346,8 @@ func sync(s: Dictionary) -> void:
 		var xf := _leaned(discard_base, 0.0, yaw, i - from)
 		var top_one := i == pile.size() - 1
 		_place(seen, c["id"], c, TABLE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "amber" if top_one and s["can_draw"] and game.kind == "rummy" else "", game.is_trump(c), stock_xf)
-	if game.kind == "crazy8" and int(game.get("pending_draw")) > 0:
-		_label_at("+%d STACKED" % game.pending_draw, discard_base + Vector3(0, 0.01, 0.15), 34, Palette.RED)
-	elif game.kind == "crazy8" and str(game.get("called_suit")) != "":
-		_label_at("CALLED: %s" % {"S": "♠ SPADES", "H": "♥ HEARTS", "D": "♦ DIAMONDS", "C": "♣ CLUBS"}[game.called_suit], discard_base + Vector3(0, 0.01, 0.15), 30, Palette.GOLD)
-	elif game.kind == "rummy" or not pile.is_empty():
-		_label_at("PILE" if game.kind == "crazy8" else "DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
+	if game.kind == "rummy" or not pile.is_empty():
+		_label_at("DISCARD", discard_base + Vector3(0, 0.01, 0.15), 26, Palette.DIM)
 	if trump_rank > 0:
 		_label_at("TRUMP: %s" % TRUMP_NAMES[trump_rank], Vector3(0, TABLE_TOP + 0.01, 0.23), 34, Palette.GOLD)
 
@@ -1544,6 +1544,32 @@ func _snap_piles(seen: Dictionary, game, viewer: int, spawn: Transform3D) -> voi
 		if p.seat == viewer:
 			_label_at("YOUR PILE %d · WON %d" % [count, won], base + Vector3(0.08, TABLE_TOP + 0.01, 0.16), 24, Palette.DIM)
 
+
+
+## Crazy Eights: the card to match, big and floating up over the middle of
+## the table, turned to face you, with the couple before it peeking out
+## behind. Under it, what you must match: a called suit, or a +2 stack.
+func _crazy8_pile(seen: Dictionary, game, s: Dictionary, spawn: Transform3D) -> void:
+	var pile: Array = game.discard_pile
+	var cam_flat := _cam_home.origin
+	var center := Vector3(0.0, TABLE_TOP + 0.27, -0.1)
+	var yaw := atan2(cam_flat.x - center.x, cam_flat.z - center.z)
+	var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -0.38) # stood up, leaning back a little
+	var from := maxi(0, pile.size() - 3)
+	for i in range(from, pile.size()):
+		var c: Dictionary = pile[i]
+		var top_one := i == pile.size() - 1
+		var back := pile.size() - 1 - i # 0 for the top card
+		var spin := 0.0 if top_one else ((hash(c["id"]) % 100) / 100.0 * 0.5 - 0.25)
+		var bb := b * Basis(Vector3.BACK, spin)
+		var xf := Transform3D(bb, center - b.z * (0.012 * back) + b.y * (0.004 * back))
+		_place(seen, c["id"], c, PILE_CARD, xf, true, true, "discard" if top_one else "", c["id"], "", false, spawn)
+	var under := center - b.y * (PILE_CARD.y * 0.5 + 0.035) + b.z * 0.01
+	under.y = maxf(under.y, TABLE_TOP + 0.012)
+	if int(game.get("pending_draw")) > 0:
+		_label_at("+%d STACKED" % game.pending_draw, under, 44, Palette.RED, true)
+	elif str(game.get("called_suit")) != "":
+		_label_at("CALLED: %s" % {"S": "♠ SPADES", "H": "♥ HEARTS", "D": "♦ DIAMONDS", "C": "♣ CLUBS"}[game.called_suit], under, 40, Palette.GOLD, true)
 
 
 ## President: the set to beat, face up in the middle, and who played it.
