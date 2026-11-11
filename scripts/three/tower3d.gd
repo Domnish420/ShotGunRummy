@@ -88,11 +88,11 @@ func build(seed_value: int = -1) -> void:
 		# them: they slide right out. Mostly middles; now and then a side.
 		var heights := []
 		for k in range(3):
-			var loose := k == 1 and _rng.randf() < 0.6
+			var loose := k == 1 and _rng.randf() < 0.7
 			heights.append(H * (1.0 - (_rng.randf_range(0.035, 0.05) if loose else 0.0)))
 		var tallest: float = heights.max()
 		for k in range(3):
-			var b := _block(wood[_rng.randi() % wood.size()], heights[k], 0.45)
+			var b := _block(wood[_rng.randi() % wood.size()], heights[k], 0.38)
 			var along_x := layer % 2 == 0
 			var off := (k - 1) * (W + GAP)
 			var pos := Vector3(0 if along_x else off, y + heights[k] * 0.5, off if along_x else 0)

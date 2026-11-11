@@ -1,26 +1,23 @@
 extends "res://scripts/ui/modes/table_mode.gd"
 ## TIMBER at the party room table.
 ##
-## Your turn: tap a block (not in the top two layers). The camera swings round
-## to its end and the hand comes up to it. Then your thumb drives the
-## fingertip, level with that block: slide up the screen to push in, down to
-## pull back, left and right to move across. The fingertip follows your thumb
-## on a spring, so a steady thumb is a steady push and a twitchy one shoves.
-## A faint ghost shows where your thumb wants it; the line from the ghost to
-## the finger goes red, the hand trembles and the phone buzzes when the block
-## fights back. A round view from above shows how far it's out.
+## Your turn: tap a block. The camera goes round to its end once and the hand
+## comes up to it; then the camera's yours: two fingers drag to walk round and
+## look up and down, pinch to come closer (right-drag and the wheel on a
+## computer). One finger drives the hand, level with the block, as you see
+## it: up the screen is away from you, sideways is sideways. The fingertip
+## follows on a spring, with a limited push: a steady thumb is a steady push,
+## a twitch is a shove, and a tight block fights back (the line from the ghost
+## to the finger goes red, the hand trembles, the phone buzzes). The round
+## window up top is a camera over the hand's shoulder.
 ##
-## Tools (floating words, or just do it): POKE, TWO fingers (firmer), PINCH
-## (pinch two fingers on the screen: grips the end that sticks out; drag to
-## pull, let go to let go, yank too hard and it slips) and SWIPE (the flat
-## hand: flick across to sweep a whole layer out. Thins the tower for
-## everyone after you, if it stands).
-##
-## Push or pull it clear and it's laid on top for you. Bring the tower down
-## and the player on your right shoots you.
+## Tools: POKE, TWO (firmer), PINCH (grips the end that sticks out: hold and
+## drag back; yank and it slips) and SWIPE (the flat hand: drag it across the
+## layer yourself; let go and whatever's out of that layer is out of the
+## game). Push or pull a block clear and it's laid on top for you. Bring the
+## tower down and the player on your right shoots you.
 
 const Driver = preload("res://scripts/three/timber_driver.gd")
-const TopView = preload("res://scripts/ui/timber_top_view.gd")
 
 const TOOL_WORDS := [["poke", "POKE"], ["two", "TWO"], ["pinch", "PINCH"], ["flat", "SWIPE"]]
 const FOLLOW := 0.6 # how fast the fingertip can chase your thumb (m/s)
@@ -34,12 +31,13 @@ var _round := -1
 var _pad: Control # takes the touches over the table
 var _tools: HBoxContainer # the tool words
 var _orbit: HBoxContainer # ◀ ▶
-var _top_view: Control # the round view from above (timber_top_view.gd)
+var _top_view: TextureRect # the round view over the hand's shoulder
+var _sub: SubViewport
+var _sub_cam: Camera3D
 var _driver # timber_driver.gd, for an AI's turn
 var _timer := 0.0
 var _touches := {} # finger -> position (screen)
 var _down_at := Vector2.ZERO # where the drag started (screen)
-var _across_sign := 1.0 # +1 when the block's "across" points right on screen
 var _target_at := Vector3.ZERO # the fingertip's target when the drag started
 var _desired := Vector3.ZERO # where your thumb wants the fingertip
 var _dragging := false
@@ -48,11 +46,6 @@ var _pinch_gap := 0.0
 var _axis := Vector3.ZERO # the block's length, pointing the way a push goes
 var _y := 0.0 # the level the hand works on
 var _buzz := 0.0
-var _sweep_from := Vector3.ZERO
-var _sweep_dir := Vector3.ZERO
-var _sweep_speed := 0.0
-var _sweep_went := 0.0
-var _last_drag := []  # [time, screen pos] samples for the flick
 
 
 func _init(m) -> void:
@@ -69,7 +62,7 @@ func clear() -> void:
 	for sig in [[main.get_tree().physics_frame, _physics_tick], [main.get_tree().process_frame, _tick]]:
 		if sig[0].is_connected(sig[1]):
 			sig[0].disconnect(sig[1])
-	for n in [_pad, _tools, _orbit, _top_view]:
+	for n in [_pad, _tools, _orbit, _top_view, _sub]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 	_pad = null
@@ -105,9 +98,39 @@ func _ensure_screen() -> void:
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_orbit.add_child(gap)
 	_orbit.add_child(main._bubble("▶", _walk.bind(1), Palette.INK, 64))
-	# the view from above: a little map of the layer
-	_top_view = TopView.new()
-	_top_view.position = Vector2(vs.x - 236, 168)
+	# the hand cam: its own little camera, just behind and above the hand,
+	# looking where the fingers are going
+	_sub = SubViewport.new()
+	_sub.size = Vector2i(256, 256)
+	_sub.world_3d = main.world.get_world_3d()
+	_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_sub_cam = Camera3D.new()
+	_sub_cam.fov = 55.0
+	_sub_cam.near = 0.01
+	_sub_cam.far = 8.0
+	_sub.add_child(_sub_cam)
+	main.add_child(_sub)
+	_sub_cam.current = true
+	_top_view = TextureRect.new()
+	_top_view.texture = _sub.get_texture()
+	_top_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_top_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_top_view.stretch_mode = TextureRect.STRETCH_SCALE
+	_top_view.custom_minimum_size = Vector2(250, 250)
+	_top_view.size = Vector2(250, 250)
+	_top_view.position = Vector2(vs.x - 266, 160)
+	var sh := Shader.new()
+	sh.code = """shader_type canvas_item;
+void fragment() {
+	float d = distance(UV, vec2(0.5));
+	if (d > 0.5) { discard; }
+	vec4 c = texture(TEXTURE, UV);
+	if (d > 0.47) { c = vec4(0.95, 0.85, 0.4, 1.0); }
+	COLOR = vec4(c.rgb, 1.0);
+}"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	_top_view.material = mat
 	main.screen.add_child(_top_view)
 	_top_view.visible = false
 	_show_tools(false)
@@ -165,14 +188,14 @@ func status() -> String:
 		return "%s IS PULLING A BLOCK..." % main._name(g.turn)
 	match state:
 		"choose":
-			return "YOUR TURN: TAP A BLOCK"
+			return "YOUR TURN: TAP A BLOCK · TWO FINGERS: CAMERA"
 		"work":
 			match main.world.hand.tool:
 				"pinch":
-					return "PINCH AND DRAG TO PULL IT OUT"
+					return "HOLD AND DRAG BACK TO PULL IT OUT · TWO FINGERS: CAMERA"
 				"flat":
-					return "FLICK ACROSS TO SWIPE THE LAYER"
-			return "THUMB UP TO PUSH IN, DOWN TO EASE OFF"
+					return "DRAG THE FLAT HAND ACROSS THE LAYER · TWO FINGERS: CAMERA"
+			return "DRAG TO PUSH · TWO FINGERS: CAMERA"
 		"sweep":
 			return "PRAY..."
 		"carry", "settle":
@@ -211,6 +234,8 @@ func _tick() -> void:
 	if state == "work":
 		_drive_hand(delta)
 	_update_top_view()
+	if _top_view != null:
+		_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS if _top_view.visible else SubViewport.UPDATE_DISABLED
 
 
 func _start_turn() -> void:
@@ -250,8 +275,7 @@ func _physics_tick() -> void:
 		if r == "out":
 			block = _driver.block
 			_carry()
-	elif state == "sweep":
-		_sweep_step(main.get_physics_process_delta_time())
+
 
 
 func _timer_done() -> void:
@@ -304,8 +328,7 @@ func _walk(step: int) -> void:
 	main._sound("tick")
 
 
-## Stand off to one side of the block's end, a little above: you see the
-## end and which way it's going in.
+## An AI's turn: the camera keeps an eye on what it's doing.
 func _look_at_block(b: RigidBody3D, push: Vector3) -> void:
 	var w = main.world
 	var back := -push # the camera's on the side the push comes from
@@ -316,75 +339,144 @@ func _look_at_block(b: RigidBody3D, push: Vector3) -> void:
 	w.tower_rise = lerpf(w.tower_rise, 0.22, 0.1)
 
 
+## Your block: the camera goes round to its end once; after that it's yours
+## (two fingers) and stays put.
+func _aim_camera(b: RigidBody3D, push: Vector3) -> void:
+	var w = main.world
+	var back := -push
+	w.tower_yaw = atan2(back.x, back.z) + 0.4
+	w.tower_focus = b.global_position
+	w.tower_dist = 0.62
+	w.tower_rise = 0.18
+
+
+## Two fingers (or right-drag, and the wheel, on a computer): drag to walk
+## round the tower and look up or down it, pinch to come closer or back off.
+func _turn_camera(move: Vector2, zoom: float) -> void:
+	var w = main.world
+	w.tower_yaw -= move.x * 0.007
+	w.tower_rise = clampf(w.tower_rise + move.y * 0.0025, -0.05, 0.9)
+	w.tower_dist = clampf(w.tower_dist * zoom, 0.3, 1.6)
+	if state == "choose":
+		# looking round for a block: aim up and down the tower too
+		w.tower_focus.y = clampf(w.tower_focus.y + move.y * 0.0012, 0.08, w.tower.height())
+
+
 # ---------------------------------------------------------------- touches
 
 func _view(at: Vector2) -> Vector2:
 	return main._to_view(at)
 
 
+var _two := false # two fingers have been down (the camera): ignore the one-finger moves till they're all up
+var _cam_mid := Vector2.ZERO
+var _cam_gap := 0.0
+var _right_drag := false
+
+
 func _on_pad(event: InputEvent) -> void:
 	if not _my_turn():
 		return
-	# two fingers pinching together: grip with the hand
+	# real fingers: two or more move the camera
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touches[event.index] = event.position
 		else:
 			_touches.erase(event.index)
-		if _touches.size() == 2:
-			var pts: Array = _touches.values()
-			_pinch_gap = (pts[0] as Vector2).distance_to(pts[1])
+		if _touches.size() >= 2:
+			if not _two:
+				_two = true
+				_cancel_drag()
+			_cam_mid = _mid()
+			_cam_gap = _gap()
+		elif _touches.is_empty():
+			_two = false
 		return
 	if event is InputEventScreenDrag:
 		_touches[event.index] = event.position
-		if _touches.size() == 2 and state == "work" and main.world.hand.tool != "pinch":
-			var pts: Array = _touches.values()
-			var gap: float = (pts[0] as Vector2).distance_to(pts[1])
-			if _pinch_gap > 0.0 and gap < _pinch_gap * 0.8:
-				_pick_tool("pinch")
-				if main.world.hand.tool == "pinch":
-					_press(event.position)
+		if _touches.size() >= 2:
+			var mid := _mid()
+			var gap := _gap()
+			_turn_camera(mid - _cam_mid, _cam_gap / maxf(gap, 1.0) if _cam_gap > 1.0 else 1.0)
+			_cam_mid = mid
+			_cam_gap = gap
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_press(event.position)
-		else:
-			_release(event.position)
-	elif event is InputEventMouseMotion and _dragging:
-		_drag(event.position)
+	# one finger (it comes as the mouse) or the mouse: the hand
+	if event is InputEventMouseButton:
+		match event.button_index:
+			MOUSE_BUTTON_LEFT:
+				if _two:
+					return
+				if event.pressed:
+					_press(event.position)
+				else:
+					_release(event.position)
+			MOUSE_BUTTON_RIGHT:
+				_right_drag = event.pressed
+			MOUSE_BUTTON_WHEEL_UP:
+				_turn_camera(Vector2.ZERO, 0.92)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_turn_camera(Vector2.ZERO, 1.08)
+	elif event is InputEventMouseMotion:
+		if _right_drag:
+			_turn_camera(event.relative, 1.0)
+		elif _dragging and not _two:
+			_drag(event.position)
+
+
+func _mid() -> Vector2:
+	var m := Vector2.ZERO
+	for p in _touches.values():
+		m += p
+	return m / maxf(1.0, _touches.size())
+
+
+func _gap() -> float:
+	var pts: Array = _touches.values()
+	return (pts[0] as Vector2).distance_to(pts[1]) if pts.size() >= 2 else 0.0
+
+
+## A second finger came down mid-push: the hand stops where it is.
+func _cancel_drag() -> void:
+	if not _dragging:
+		return
+	_dragging = false
+	var hand = main.world.hand
+	_desired = hand.target
+	if state == "work" and hand.tool == "pinch":
+		main.world.tower.release()
+		hand.grip = 0.0
 
 
 func _press(at: Vector2) -> void:
 	_dragging = true
 	_moved = 0.0
 	_down_at = at
-	_last_drag = [[Time.get_ticks_msec(), at]]
 	if state == "work":
 		var hand = main.world.hand
 		_target_at = hand.target
-		var across := Vector3(-_axis.z, 0, _axis.x)
-		var cam: Camera3D = main.world.camera
-		var p: Vector3 = block.global_position
-		_across_sign = 1.0 if cam.unproject_position(p + across * 0.05).x >= cam.unproject_position(p).x else -1.0
 		_desired = hand.target
 		if hand.tool == "pinch":
 			_grip()
 
 
+## One finger drags the hand round on the block's level, as you see it: up
+## the screen is away from you, sideways is sideways.
 func _drag(at: Vector2) -> void:
-	_moved += at.distance_to(_down_at) if _moved == 0.0 else 0.0
 	_moved = maxf(_moved, at.distance_to(_down_at))
-	_last_drag.append([Time.get_ticks_msec(), at])
-	if _last_drag.size() > 6:
-		_last_drag.pop_front()
 	if state != "work":
 		return
-	# thumb up pushes in, down pulls back; sideways drifts the finger a little
 	var d := at - _down_at
-	var across := Vector3(-_axis.z, 0, _axis.x)
-	var want := _target_at + _axis * (-d.y * THUMB) + across * clampf(d.x * THUMB * 0.6 * _across_sign, -SIDEWAYS, SIDEWAYS)
+	var cam: Camera3D = main.world.camera
+	var right := cam.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var away := -cam.global_basis.z
+	away.y = 0.0
+	away = away.normalized()
+	var want := _target_at + (right * d.x + away * (-d.y)) * THUMB
 	want.y = _y
-	# don't let it wander far from the block's end
+	# don't let it wander far from the block
 	var from: Vector3 = block.global_position
 	var off := want - from
 	off.y = 0.0
@@ -405,7 +497,7 @@ func _release(at: Vector2) -> void:
 		main.world.tower.release()
 		hand.grip = 0.0
 	elif state == "work" and hand.tool == "flat":
-		_flick(at)
+		_swiped()
 
 
 func _tap_block(at: Vector2) -> void:
@@ -432,6 +524,7 @@ func _choose(b: RigidBody3D) -> void:
 	_y = b.global_position.y
 	state = "work"
 	w.set_tags_shown(false)
+	_aim_camera(b, _axis)
 	_set_hand(w.hand.tool if w.hand.tool != "pinch" else "poke")
 	main._sound("tap")
 	main._refresh()
@@ -507,12 +600,11 @@ func _set_hand(t: String) -> void:
 			center /= layer.size()
 			if across.dot(main.world.camera.global_position - center) > 0.0:
 				across = -across
-			_sweep_dir = across
-			_sweep_from = center - across * (tower.L * 0.5 + 0.05)
+			var from: Vector3 = center - across * (tower.L * 0.5 + 0.05)
 			hand.set_tool("flat")
 			hand.show_hand()
-			hand.jump_to(_sweep_from, axis)
-			_desired = _sweep_from
+			hand.jump_to(from, axis)
+			_desired = from
 			_axis = across
 			_show_tools(true)
 			_top_view.visible = true
@@ -545,8 +637,7 @@ func _drive_hand(delta: float) -> void:
 	var tower = w.tower
 	if block == null:
 		return
-	_look_at_block(block, _axis)
-	hand.target = hand.target.move_toward(_desired, FOLLOW * delta * (3.0 if hand.tool == "flat" else 1.0))
+	hand.target = hand.target.move_toward(_desired, FOLLOW * delta * (1.6 if hand.tool == "flat" else 1.0))
 	if hand.tool == "pinch":
 		if hand.grip > 0.0:
 			if tower._held == null:
@@ -566,55 +657,29 @@ func _drive_hand(delta: float) -> void:
 			if main.sound_on:
 				main._sound("tick")
 			Input.vibrate_handheld(int(15 + 25 * strain))
-	if tower.is_out(block):
+	if hand.tool != "flat" and tower.is_out(block):
 		_carry()
 
 
-func _flick(at: Vector2) -> void:
-	if _last_drag.size() < 2:
-		return
-	var a: Array = _last_drag[0]
-	var b: Array = _last_drag[-1]
-	var dt := maxf(0.016, (int(b[0]) - int(a[0])) / 1000.0)
-	var px_speed: float = (at - (a[1] as Vector2)).length() / dt
-	var speed := px_speed / 600.0
-	if px_speed < 350.0:
-		main.message = "Flick fast across the screen to swipe the layer."
-		main._refresh()
-		return
-	_sweep_speed = clampf(speed, 0.8, 4.0)
-	_sweep_went = 0.0
-	state = "sweep"
-	_show_tools(false)
-	main._sound("swish")
-	main._refresh()
-
-
-func _sweep_step(delta: float) -> void:
+## You've swept with the flat hand and let go: whatever's out of that layer
+## is out of the game. Nothing out? Keep going.
+func _swiped() -> void:
 	var w = main.world
 	var tower = w.tower
-	_sweep_went += _sweep_speed * delta
-	w.hand.target = _sweep_from + _sweep_dir * minf(_sweep_went, tower.L + 0.25)
-	if _sweep_went > tower.L + 0.25 + _sweep_speed * 1.0:
-		# what came out is out of the game
-		var took := 0
-		for o in tower.moving.keys():
-			if tower.is_out(o):
-				tower.discard(o)
-				took += 1
-		w.hand.park()
-		tower.set_active(null)
-		if took == 0:
-			main.message = "Nothing came out. Try again."
-			state = "choose"
-			_end_work()
-		else:
-			main._log("%s swipes %d block%s out." % [main._name(_seat), took, "" if took == 1 else "s"])
-			main.world.announce("SWIPED %d!" % took)
-			state = "settle"
-			_timer = 1.6
-			_end_work()
-		main._refresh()
+	var took := 0
+	for o in tower.moving.keys():
+		if tower.is_out(o):
+			tower.discard(o)
+			took += 1
+	if took == 0:
+		return
+	main._log("%s swipes %d block%s out." % [main._name(_seat), took, "" if took == 1 else "s"])
+	w.announce("SWIPED %d!" % took)
+	tower.set_active(null)
+	state = "settle"
+	_timer = 1.6
+	_end_work()
+	main._refresh()
 
 
 ## Out it comes: up and onto the top.
@@ -636,11 +701,15 @@ func _carry() -> void:
 func _update_top_view() -> void:
 	if _top_view == null or not _top_view.visible or block == null or not is_instance_valid(block):
 		return
-	_top_view.tower = main.world.tower
-	_top_view.hand = main.world.hand
-	_top_view.block = block
-	_top_view.layer = int(block.get_meta("layer"))
-	_top_view.forward = _axis if main.world.hand.tool != "pinch" else -_axis
+	var hand = main.world.hand
+	var tip: Vector3 = hand.tip.global_position
+	var f: Vector3 = hand.facing
+	f.y = 0.0
+	f = f.normalized() if f.length() > 0.01 else Vector3(0, 0, -1)
+	var side := Vector3(-f.z, 0, f.x)
+	# over the shoulder: behind the hand, up a bit, off to the side
+	var from := tip - f * 0.32 + Vector3.UP * 0.13 + side * 0.07
+	_sub_cam.global_transform = Transform3D(Basis.looking_at((tip + f * 0.06) - from, Vector3.UP), from)
 
 
 # ---------------------------------------------------------------- events, results, rules
@@ -668,9 +737,10 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TOWER. 18 layers of 3 wooden blocks. Some are loose and slide right out; some carry the weight and drag the tower with them.",
-		"YOUR TURN. Tap a block (not in the top layer, nor the one under it while the top's unfinished). Your thumb drives the fingertip, level with the block: slide up to push in, down to ease off, sideways to move across. Push it out the other side, or pull it out, and it's laid on top for you.",
-		"FEEL IT. A faint ghost shows where your thumb wants the finger. The line from it to the real finger goes red, the hand shakes and the phone buzzes when the block fights back. The round view from above shows how far it's out. ◀ ▶ walk you round the tower.",
-		"THE HAND. POKE (one finger), TWO (firmer), PINCH (pinch two fingers on the screen: grips the end sticking out; drag to pull; yank too hard and it slips) and SWIPE (flick across to sweep a whole layer out: thins the tower for everyone after you, if it stands).",
+		"YOUR TURN. Tap a block (not the bottom layer, the top layer, nor the one under it while the top's unfinished). ONE finger drives the hand, level with the block: drag up the screen to push away from you, sideways to move across. Push it out the other side, or pull it out, and it's laid on top for you.",
+		"THE CAMERA. TWO fingers: drag to walk round the tower and look up and down it, pinch to come closer or back off. ◀ ▶ step round a quarter at a time. The round window is a camera over the hand's shoulder.",
+		"FEEL IT. A faint ghost shows where your finger wants the hand. The line from it to the real finger goes red, the hand shakes and the phone buzzes when the block fights back.",
+		"THE HAND. POKE (one finger), TWO (firmer), PINCH (grips the end that sticks out: hold and drag back; yank too hard and it slips) and SWIPE (the flat hand: drag it across the layer yourself; let go and whatever's out of that layer is gone for good. It thins the tower for everyone after you, if it stands).",
 		"THE SHOTGUN. Whoever's turn it is has the gun in front of them; it moves left with the turn. Bring the tower down and the player on your right shoots you: one shot and you're out. The tower's built again and the player on your left goes first. Always. Last one standing wins.",
 	]
 

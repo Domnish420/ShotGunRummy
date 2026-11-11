@@ -572,22 +572,26 @@ and you're out; last one standing wins.
 - **The tower.** 18 layers of 3 wooden blocks, every one a real physics body.
   Some are loose and slide right out; some carry the weight, and pushing those
   drags the tower with them.
-- **Your turn.** Tap a block (not in the top layer, nor the one under it while
-  the top's unfinished). The camera swings round to its end and the skeleton
-  hand comes up. Your thumb drives the fingertip, level with that block: slide
-  up the screen to push in, down to ease off, sideways to move across. It
-  follows your thumb on a spring, so a steady thumb is a steady push and a
+- **Your turn.** Tap a block (not the bottom layer, the top layer, nor the one
+  under it while the top's unfinished). The camera goes round to its end once
+  and the skeleton hand comes up.
+- **One finger moves the hand**, level with that block, as you see it: drag up
+  the screen to push away from you, sideways to move across. It follows on a
+  spring with a limited push, so a steady finger is a steady push and a
   twitchy one shoves. Push it out the far side (or pull it out) and it's laid
   on top for you. ✕ lets go to try another.
-- **Feel it.** A faint ghost shows where your thumb wants the finger; the
-  line from it to the real finger goes red, the hand trembles and the phone
-  buzzes when the block fights back. The round map from above shows the layer,
-  your block in gold and how far it's come. ◀ ▶ walk you round the tower.
-- **The hand.** POKE (one finger), TWO (two fingers, firmer), PINCH (pinch two
-  fingers on the screen: it grips the end that sticks out; drag to pull, let
-  go to let go, yank too hard and it slips) and SWIPE (the flat hand: flick
-  across to sweep a whole layer out: a massive risk, and it thins the tower
-  for everyone after you).
+- **Two fingers move the camera**: drag to walk round the tower and look up and
+  down it, pinch to come closer or back off (right-drag and the scroll wheel
+  on a computer). ◀ ▶ step round a quarter at a time.
+- **Feel it.** A faint ghost shows where your finger wants the hand; the line
+  from it to the real finger goes red, the hand trembles and the phone buzzes
+  when the block fights back. The round window up top is a camera over the
+  hand's shoulder.
+- **The hand.** POKE (one finger), TWO (two fingers, firmer), PINCH (grips the
+  end that sticks out: hold and drag back; yank too hard and it slips) and
+  SWIPE (the flat hand: drag it across the layer yourself; let go and
+  whatever's out of that layer is gone for good. A massive risk, and it thins
+  the tower for everyone after you).
 - **The shotgun.** Whoever's turn it is has the gun lying in front of them; it
   moves left with the turn. Bring the tower down and the player on your right
   shoots you. The tower's built again and the player on your left goes first.
@@ -675,7 +679,7 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/ui/darts_aim.gd` | The two-line aim drawn over the board. |
 | `scripts/core/timber.gd` | TIMBER's turns and shotgun (the board-game elimination rule). |
 | `scripts/three/tower3d.gd`, `hand3d.gd`, `timber_driver.gd` | The physics tower, the skeleton hand (force-limited fingertip), and the AI's hand. |
-| `scripts/ui/modes/timber_ui.gd`, `scripts/ui/timber_top_view.gd` | TIMBER's controls, camera, and the round map from above. |
+| `scripts/ui/modes/timber_ui.gd` | TIMBER's controls (one finger the hand, two the camera) and the hand cam. |
 | `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |

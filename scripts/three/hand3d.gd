@@ -14,7 +14,7 @@ extends Node3D
 
 const TOOLS := ["poke", "two", "pinch", "flat"]
 ## How hard each tool can push (newtons), and how quick it gets there.
-const STRENGTH := {"poke": 5.0, "two": 9.0, "pinch": 0.0, "flat": 40.0}
+const STRENGTH := {"poke": 7.0, "two": 13.0, "pinch": 0.0, "flat": 30.0}
 const BONE := Color(0.92, 0.88, 0.76)
 
 var tool := "poke"
@@ -101,7 +101,7 @@ func _physics_process(_delta: float) -> void:
 	if tip == null or not visible:
 		return
 	var most: float = STRENGTH.get(tool, 5.0) * boost
-	var k := 500.0 if tool != "flat" else 2500.0
+	var k := 500.0 if tool != "flat" else 900.0
 	var c := 2.0 * sqrt(k * tip.mass)
 	var f := (target - tip.global_position) * k - tip.linear_velocity * c
 	if tool == "pinch":
@@ -114,8 +114,8 @@ func _physics_process(_delta: float) -> void:
 
 func _process(delta: float) -> void:
 	if visible:
-		_place_bones()
 		_pose(delta)
+		_place_bones()
 
 
 ## How fast the tip is going (for the sounds).
@@ -176,7 +176,7 @@ func _build_bones() -> void:
 	var te := _bone(tb, 0.055, 0.021, Vector3(0, 0, -0.07))
 	_thumb = [tb, te]
 	# the wrist and a bit of forearm, so it doesn't end in mid-air
-	var arm := _bone(_wrist, 0.3, 0.04, Vector3(0, 0, 0.3))
+	var arm := _bone(_wrist, 0.14, 0.04, Vector3(0, 0, 0.14))
 
 
 ## Curl each finger for the tool.
@@ -217,15 +217,30 @@ func _place_bones() -> void:
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) # on its edge
 		"pinch":
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) * Basis(Vector3(1, 0, 0), 0.15)
-	# where the working tip is, in the hand's own space, with the fingers straight
-	var reach := Vector3(-0.017, 0, -0.17 - 0.2)
-	match tool:
-		"two":
-			reach = Vector3(0.0, 0, -0.17 - 0.2)
-		"flat":
-			reach = Vector3(0.0, 0.0, -0.17 - 0.1)
-		"pinch":
-			reach = Vector3(-0.03, 0.0, -0.17 - 0.1)
-	global_transform = Transform3D(b, tip.global_position - b * reach)
+	# put the hand down roughly, then slide it so the working fingertip (as the
+	# bones really are, curled or not) sits exactly on the tip that touches the
+	# blocks: what you see touching is what's touching
+	global_transform = Transform3D(b, tip.global_position)
+	var at := working_point()
+	global_position += tip.global_position - at
 	if tool == "flat":
 		_shapes["flat"].global_basis = Basis.looking_at(f, Vector3.UP)
+
+
+## The end of a finger joint chain, in the world.
+func _end_of(joint: Node3D) -> Vector3:
+	return joint.global_transform * Vector3(0, 0, -float(joint.get_meta("length")))
+
+
+## Where the hand does its work, by the bones: the index fingertip (poke),
+## between the index and middle tips (two), between thumb and index (pinch),
+## or the middle of the little-finger edge (flat).
+func working_point() -> Vector3:
+	match tool:
+		"two":
+			return (_end_of(_fingers[0][2]) + _end_of(_fingers[1][2])) * 0.5
+		"pinch":
+			return (_end_of(_fingers[0][2]) + _end_of(_thumb[1])) * 0.5
+		"flat":
+			return (_fingers[3][1].global_position + _fingers[0][1].global_position) * 0.5
+	return _end_of(_fingers[0][2])
