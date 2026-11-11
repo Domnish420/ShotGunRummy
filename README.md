@@ -57,8 +57,9 @@ thing itself) and you walk over:
 - **PARTY ROOM**, the purple door in the back wall: through it (the screen
   fades over) is a second room for the party games. Inside: **PLAY DARTS** at
   the dartboard on the back wall, **BOARD GAMES** on the shelf on the right
-  (still in their shrink-wrap: coming soon), a jukebox, string lights, and
-  the **BAR** door on the left to go back.
+  (still in their shrink-wrap: coming soon), a rectangular wooden table for
+  the board games, a jukebox, string lights, and the **BAR** door on the left
+  to go back.
 
 ### The arcade: cheat codes and easter eggs
 
@@ -539,8 +540,12 @@ trick (the first one played, if there's more than one).
 
 ## How to play Darts
 
-The first party game, at the board in the party room. Pick a game there, then
-**PLAY** (VS AI, pass the phone or a lobby) or **DEMO**.
+The first party game, at the board in the party room. Everything's set up
+round the board itself: the game above it, **TAKE AIM!** on the bull, and
+below it how many AIs (PUB, LEAGUE, PRO or MIXED), shotgun or normal, pass the
+phone, host, join or the demo. Nobody sits down: everyone stands in a ring in
+front of the board, and when you win you turn round and shoot from there.
+The board's cleared before each thrower.
 
 - **The throw.** A red line crosses the board through the bull, with a dot
   running up and down it: **tap to stop the dot**. A second line then crosses

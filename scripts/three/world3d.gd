@@ -262,7 +262,7 @@ func _build_room() -> void:
 	_bar_set.name = "BarRoom"
 	add_child(_bar_set)
 	Props.build_room(_bar_set, TABLE_TOP, TABLE_RX, TABLE_RZ)
-	Props.build_table(self, TABLE_TOP, TABLE_RX, TABLE_RZ)
+	Props.build_table(_bar_set, TABLE_TOP, TABLE_RX, TABLE_RZ)
 	_party_set = Node3D.new()
 	_party_set.name = "PartyRoom"
 	add_child(_party_set)
@@ -508,8 +508,15 @@ func _fit_camera() -> void:
 	if _room:
 		camera.fov = 62.0 if not _landscape else 52.0
 		return
+	# darts: you're standing in the ring, looking across it at everyone
+	if _stand:
+		var me := STAND_CENTER + Vector3(0, 0, STAND_R + (0.75 if not _landscape else 0.55))
+		camera.look_at_from_position(Vector3(me.x, FLOOR_Y + 1.45, me.z), Vector3(STAND_CENTER.x, FLOOR_Y + 0.8, STAND_CENTER.z - 0.2), Vector3.UP)
+		_cam_home = camera.transform
+		_cam_view = _cam_home
+		return
 	# wide screens look a little further across the table, to see faces
-	if _landscape:
+	elif _landscape:
 		camera.look_at_from_position(Vector3(0, 1.3, 1.8), Vector3(0, 0.18, -0.45), Vector3.UP)
 	else:
 		camera.look_at_from_position(Vector3(0, 1.12, 1.55), Vector3(0, 0, -0.12), Vector3.UP)
@@ -768,6 +775,10 @@ func focus_station(id: String) -> void:
 			_move_camera(Transform3D(Basis(), Vector3(-1.6, 0.4, 1.4)).looking_at(Vector3(-3.2, 0.3, 1.4), Vector3.UP), 0.8)
 		"darts":
 			_move_camera(darts_camera(), 0.7)
+		"darts_menu":
+			# stood back a bit: the board in the middle, room for words round it
+			var close := darts_camera()
+			_move_camera(Transform3D(close.basis, dartboard.global_position + (close.origin - dartboard.global_position) * 1.75), 0.7)
 		"boxes":
 			camera.fov = 52.0 if not _landscape else 44.0
 			_move_camera(Transform3D(Basis(), Vector3(1.2, 0.45, -0.6)).looking_at(Vector3(3.0, 0.3, -1.2), Vector3.UP), 0.7)
@@ -1060,6 +1071,7 @@ func set_menu_mode(on: bool) -> void:
 	else:
 		leave_room()
 	if on:
+		set_standing(false)
 		_darts_on = false
 		_darts_round = -1
 		if dartboard != null:
@@ -1088,11 +1100,36 @@ func set_menu_mode(on: bool) -> void:
 
 # ================================================================ seats
 
+## Darts: nobody sits. Everyone stands in a ring in front of the board.
+const STAND_CENTER := Vector3(0.0, 0.0, -1.9)
+const STAND_R := 0.95
+var _stand := false
+
+
 ## Where a seat sits around the table, with the viewer always at the near side.
+## (In darts, where they stand in the ring in front of the board.)
 func seat_position(seat: int, viewer: int, count: int) -> Vector3:
 	var rel := posmod(seat - viewer, count)
 	var angle := PI * 0.5 + TAU * rel / float(count)
+	if _stand:
+		return STAND_CENTER + Vector3(cos(angle) * STAND_R, 0.0, sin(angle) * STAND_R)
 	return Vector3(cos(angle) * SEAT_RX, 0.0, sin(angle) * SEAT_RZ)
+
+
+## Standing round the dartboard (darts) or sitting at the table: everyone's
+## built again in the right pose, and the camera goes to the right place.
+func set_standing(on: bool) -> void:
+	if on == _stand:
+		return
+	_stand = on
+	for k in _figures:
+		_figures[k]["node"].queue_free()
+	_figures.clear()
+	_holding = -99
+	if _dealer_chip != null:
+		_dealer_chip.visible = not on
+	if not _room:
+		_fit_camera()
 
 
 ## A point on the table in front of a seat: t = 0 at the seat, 1 at the centre.
@@ -1101,7 +1138,7 @@ func _toward_center(seat_pos: Vector3, t: float) -> Vector3:
 
 
 func _figure(seat: int, look: Dictionary) -> Dictionary:
-	var built: Dictionary = Props.build_character(self, look if not look.is_empty() else Looks.for_seat(seat), FLOOR_Y)
+	var built: Dictionary = Props.build_character(self, look if not look.is_empty() else Looks.for_seat(seat), FLOOR_Y, not _stand)
 	var node: Node3D = built["node"]
 	var head: Node3D = built["head"]
 	var eyes: Array = built["eyes"]
@@ -1141,6 +1178,11 @@ func _sync_figures(game, viewer: int) -> void:
 		var node: Node3D = f["node"]
 		var pos := seat_position(p.seat, viewer, n)
 		var target := Transform3D(Basis.looking_at(-pos.normalized(), Vector3.UP), pos)
+		if _stand:
+			# on their feet, facing the middle of the ring
+			var face := STAND_CENTER - pos
+			face.y = 0.0
+			target = Transform3D(Basis.looking_at(face.normalized(), Vector3.UP), Vector3(pos.x, FLOOR_Y, pos.z))
 		var anim: AnimationPlayer = f.get("anim", null)
 		if not p.alive and anim == null:
 			# no animations: slump over in the chair
@@ -1181,7 +1223,7 @@ func _sync_figures(game, viewer: int) -> void:
 		label.text = "\n".join(lines)
 		# on a wide screen their heads are near the top, under the status line:
 		# there the tag sits lower, out in front of them like a nameplate
-		label.position = Vector3(0, 0.5, -0.5) if _landscape else Vector3(0, 0.95, -0.22)
+		label.position = Vector3(0, 1.62, 0.0) if _stand else (Vector3(0, 0.5, -0.5) if _landscape else Vector3(0, 0.95, -0.22))
 		label.visible = _tags_shown
 		var turn_now: bool = game.is_turn_of(p.seat)
 		label.modulate = Palette.AMBER if turn_now else (Palette.INK if p.alive else Palette.DIM)
@@ -1891,6 +1933,11 @@ func _item_extra(item_id: String, user: int, target: int, color: Color) -> void:
 
 ## Back to sitting and breathing.
 func _sit(anim: AnimationPlayer) -> void:
+	if _stand:
+		if anim != null and anim.has_animation("Idle"):
+			anim.clear_queue()
+			anim.play("Idle", 0.3)
+		return
 	if anim != null and anim.has_animation("Sit_Chair_Idle"):
 		anim.clear_queue()
 		anim.play("Sit_Chair_Idle", 0.3)
@@ -1904,6 +1951,10 @@ func cheer(seat: int) -> void:
 	if anim == null or _figures[seat]["dead"]:
 		return
 	anim.clear_queue()
+	if _stand:
+		anim.play("Cheer", 0.2)
+		anim.queue("Idle")
+		return
 	anim.play("Sit_Chair_StandUp", 0.2)
 	anim.queue("Cheer")
 	anim.queue("Sit_Chair_Down")
@@ -2547,8 +2598,8 @@ func _sync_darts(game, viewer: int) -> void:
 	for id in _cards:
 		_cards[id].queue_free()
 	_cards.clear()
+	set_standing(true)
 	_sync_figures(game, viewer)
-	_sync_dealer_chip(game, viewer)
 	if game.round_num != _darts_round:
 		_darts_round = game.round_num
 		clear_darts()

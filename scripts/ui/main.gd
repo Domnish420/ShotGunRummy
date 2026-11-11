@@ -918,61 +918,132 @@ func _walk_to_room(id: String) -> void:
 	black.queue_free()
 
 
-## The dartboard: pick a game, then PLAY or DEMO. Floating words, no boxes.
+## The dartboard: everything about a game of darts, round the board itself.
+## Above it, which game (and what it pays); on the bull, TAKE AIM!; below
+## it, who's throwing and how good the AIs are. Floating words, no boxes.
+const DARTS_LEVELS := [["easy", "PUB"], ["normal", "LEAGUE"], ["hard", "PRO"], ["mixed", "MIXED"]]
+const DARTS_ABOUT := {
+	"shootout": "3 darts each. Highest score wins.",
+	"clock": "Hit 1 to 20, then the bull. First round wins.",
+	"301": "Count down to exactly 0. Go under and you bust.",
+}
+
+
 func show_darts() -> void:
-	world.focus_station("darts")
+	world.focus_station("darts_menu")
 	_close_overlay()
 	_clear(screen)
 	game_kind = "darts"
 	if not _normal_unlocked("darts"):
 		normal_mode = false
+	var cream := Color(0.95, 0.9, 0.75)
+	var dart_red := Color(0.95, 0.25, 0.22)
+	var dart_green := Color(0.35, 0.85, 0.45)
 	var col := VBoxContainer.new()
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 2)
 	screen.add_child(_full(col))
 	var gap_top := Control.new()
-	gap_top.custom_minimum_size = Vector2(0, 50)
+	gap_top.custom_minimum_size = Vector2(0, 34)
 	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(gap_top)
-	var title := _label("SHOTGUN DARTS" if not normal_mode else "DARTS", 44, Palette.GOLD, true)
+	var title := _label("SHOTGUN DARTS" if not normal_mode else "DARTS", 50, Palette.GOLD, true)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 10)
+	title.add_theme_constant_override("outline_size", 12)
 	col.add_child(title)
+	# the game: three words, the chosen one big
+	var games := HFlowContainer.new()
+	games.alignment = FlowContainer.ALIGNMENT_CENTER
+	games.add_theme_constant_override("h_separation", 26)
+	games.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for m in DartsT.MODES:
-		var stakes := "1 SHELL (2 FOR A BULL)" if m == "shootout" else "%d SHELLS" % DartsT.STAKES[m]
-		var word := _bubble(DartsT.MODE_NAMES[m], _set_darts_mode.bind(m), FLOAT_YELLOW if m == darts_mode else Palette.DIM, 44 if m == darts_mode else 34)
-		word.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		col.add_child(word)
-		if m == darts_mode and not normal_mode:
-			var st := _label(stakes, 22, Palette.RED, true)
-			st.add_theme_color_override("font_outline_color", Color.BLACK)
-			st.add_theme_constant_override("outline_size", 6)
-			col.add_child(st)
+		games.add_child(_bubble(DartsT.MODE_NAMES[m], _set_darts_mode.bind(m), FLOAT_YELLOW if m == darts_mode else Palette.DIM, 40 if m == darts_mode else 30))
+	col.add_child(games)
+	var about := _label(DARTS_ABOUT[darts_mode], 24, cream, true)
+	about.add_theme_color_override("font_outline_color", Color.BLACK)
+	about.add_theme_constant_override("outline_size", 8)
+	col.add_child(about)
+	if not normal_mode:
+		var stakes := "1 SHELL · 2 FOR A BULLSEYE" if darts_mode == "shootout" else "%d SHELLS" % DartsT.STAKES[darts_mode]
+		var st := _label(stakes, 26, dart_red, true)
+		st.add_theme_color_override("font_outline_color", Color.BLACK)
+		st.add_theme_constant_override("outline_size", 8)
+		col.add_child(st)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(spacer) # the board shows through here
+	# who's throwing
+	var who := HBoxContainer.new()
+	who.alignment = BoxContainer.ALIGNMENT_CENTER
+	who.add_theme_constant_override("separation", 14)
+	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	who.add_child(_bubble("◀", _change_darts_count.bind(-1), cream, 44))
+	var count := _label("YOU + %d AI" % solo_opponents, 34, cream, true)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	count.add_theme_color_override("font_outline_color", Color.BLACK)
+	count.add_theme_constant_override("outline_size", 8)
+	who.add_child(count)
+	who.add_child(_bubble("▶", _change_darts_count.bind(1), cream, 44))
+	col.add_child(who)
+	var levels := HBoxContainer.new()
+	levels.alignment = BoxContainer.ALIGNMENT_CENTER
+	levels.add_theme_constant_override("separation", 22)
+	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for pair in DARTS_LEVELS:
+		levels.add_child(_bubble(pair[1], _set_darts_level.bind(pair[0]), dart_green if solo_level == pair[0] else Palette.DIM, 32 if solo_level == pair[0] else 26))
+	col.add_child(levels)
 	var mode_row := HBoxContainer.new()
 	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	mode_row.add_theme_constant_override("separation", 40)
+	mode_row.add_theme_constant_override("separation", 36)
 	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 34))
-	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 34)
+	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), dart_red if not normal_mode else Palette.DIM, 30))
+	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 30)
 	plain.disabled = not _normal_unlocked("darts")
 	mode_row.add_child(plain)
 	col.add_child(mode_row)
-	var words := HBoxContainer.new()
-	words.alignment = BoxContainer.ALIGNMENT_CENTER
-	words.add_theme_constant_override("separation", 70)
-	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	words.add_child(_bubble("PLAY", show_play_choice, Palette.GOLD, 72))
-	words.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 72))
-	col.add_child(words)
-	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 36))
+	var more := HBoxContainer.new()
+	more.alignment = BoxContainer.ALIGNMENT_CENTER
+	more.add_theme_constant_override("separation", 26)
+	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 28))
+	if not OS.has_feature("web"):
+		more.add_child(_bubble("HOST", _on_host_pressed, Color(0.55, 0.85, 1.0), 28))
+		more.add_child(_bubble("JOIN", _on_join_pressed, Color(0.55, 0.85, 1.0), 28))
+	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 28))
+	col.add_child(more)
+	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 30))
 	var gap_bottom := Control.new()
-	gap_bottom.custom_minimum_size = Vector2(0, 40)
+	gap_bottom.custom_minimum_size = Vector2(0, 26)
 	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(gap_bottom)
+	# TAKE AIM! sits right on the bull
+	var aim := _bubble("TAKE AIM!", _start_solo, Palette.GOLD, 64)
+	screen.add_child(aim)
+	_pin_to_bull(aim)
+
+
+## Keep a word centred on the bull of the board (the camera's walking there).
+func _pin_to_bull(word: Control) -> void:
+	for i in range(60):
+		if not is_instance_valid(word) or not word.is_inside_tree():
+			return
+		var at: Vector2 = world.camera.unproject_position(world.dartboard.board_to_world(Vector2.ZERO))
+		at = at * view_rect.size / Vector2(view3d.size)
+		word.position = at - word.size * 0.5
+		await get_tree().process_frame
+
+
+func _change_darts_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	_save_settings()
+	show_darts()
+
+
+func _set_darts_level(level: String) -> void:
+	solo_level = level
+	_save_settings()
+	show_darts()
 
 
 func _set_darts_mode(m: String) -> void:
@@ -1723,7 +1794,7 @@ func show_solo() -> void:
 		"mixed": "A bit of everything: easy, normal and hard at one table.",
 	}
 	box.add_child(_label(about.get(solo_level, ""), 22, Palette.CARD_INK, true))
-	var go := _button("DEAL ME IN", _start_solo, 34)
+	var go := _button("TAKE AIM!" if game_kind == "darts" else "DEAL ME IN", _start_solo, 34)
 	box.add_child(go)
 	box.add_child(_paper_button("BACK", show_this_phone, 28))
 

@@ -16,7 +16,7 @@ const QUICKER := 0.8 # each dart after that
 var aim: Control # darts_aim.gd
 var _board_words: VBoxContainer # the scoreboard, floating at the top
 var _pop: Label # "TREBLE 20!" over the board
-var _clear_next := false # the next dart pulls the last visit's out first
+var _clear_at := 0 # msec: the last visit's darts come out of the board then
 var _ghosting := false
 var _wait := 0.0 # a beat after each dart before the next aim
 
@@ -72,6 +72,10 @@ func _tick() -> void:
 		return # the table's gone (back to the room)
 	var w = main.world
 	var ready: bool = w.darts_viewing() and not w.camera_moving() and not w.fx_busy and main.overlay_layer.get_child_count() == 0 and not main._lesson_showing() and not main._settings_open()
+	if _clear_at > 0 and Time.get_ticks_msec() >= _clear_at:
+		_clear_at = 0
+		main.world.clear_darts()
+		main._sound("flick")
 	if _wait > 0.0:
 		_wait -= main.get_process_delta_time()
 		return
@@ -113,7 +117,7 @@ func preview_bot(seat: int, act: Array) -> bool:
 
 
 func revealing() -> bool:
-	return _ghosting or main.world.camera_moving()
+	return _ghosting or _clear_at > 0 or main.world.camera_moving()
 
 
 func refresh() -> void:
@@ -208,11 +212,11 @@ func _popup(text: String, color: Color) -> void:
 func on_event(kind: String, d: Dictionary) -> void:
 	match kind:
 		"turn_start":
-			_clear_next = true
+			# a beat to see where the last darts landed, then the board's cleared
+			# for the next thrower (nobody aims till it is)
+			_clear_at = Time.get_ticks_msec() + 900
+			_wait = maxf(_wait, 0.8)
 		"dart":
-			if _clear_next:
-				_clear_next = false
-				main.world.clear_darts()
 			main.world.throw_dart(Vector2(float(d["x"]), float(d["y"])), int(d["seat"]))
 			_wait = 0.45
 			var label: String = d["label"]

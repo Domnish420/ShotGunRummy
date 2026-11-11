@@ -28,6 +28,24 @@ static func build(parent: Node3D) -> Dictionary:
 		var size := Vector3(6.4, 0.9, 0.04) if side.x == 0 else Vector3(0.04, 0.9, 6.4)
 		Props.box(parent, size, panel, side + Vector3(0, FLOOR_Y + 0.45, 0))
 
+	# a proper rectangular table in the middle (for the board games): a thick
+	# wooden top on four square legs, and a bench along each long side
+	var top_wood := Props.tex_mat("wood", Color(0.5, 0.33, 0.22), 1.6, 0.6, 0.0, true)
+	var leg_wood := Props.tex_mat("wood", Color(0.32, 0.2, 0.14), 2.0)
+	var table_top := 0.03
+	Props.box(parent, Vector3(1.9, 0.06, 1.15), top_wood, Vector3(0, table_top - 0.03, 0.15))
+	Props.box(parent, Vector3(1.8, 0.1, 1.05), leg_wood, Vector3(0, table_top - 0.11, 0.15)) # the apron under the top
+	for x in [-0.85, 0.85]:
+		for z in [-0.33, 0.63]:
+			Props.box(parent, Vector3(0.08, table_top - FLOOR_Y - 0.06, 0.08), leg_wood, Vector3(x, (table_top - 0.06 + FLOOR_Y) * 0.5, z))
+	# the darts ring: light over where everyone stands
+	var ring := OmniLight3D.new()
+	ring.position = Vector3(0, FLOOR_Y + 2.3, -1.9)
+	ring.light_color = Color(1.0, 0.85, 0.7)
+	ring.light_energy = 2.4
+	ring.omni_range = 3.0
+	parent.add_child(ring)
+
 	# the dartboard, a spotlight on it and a neon DARTS sign above
 	var board := Dartboard3D.new()
 	board.position = BOARD_POS
@@ -40,7 +58,7 @@ static func build(parent: Node3D) -> Dictionary:
 	spot.spot_range = 2.0
 	spot.spot_angle = 30.0
 	parent.add_child(spot)
-	var neon := _neon(parent, "DARTS", BOARD_POS + Vector3(0, 0.95, 0.04), Color(1.0, 0.25, 0.3), 128)
+	var neon := _neon(parent, "DARTS", BOARD_POS + Vector3(0, 1.25, 0.04), Color(1.0, 0.25, 0.3), 128)
 	neon.pixel_size = 0.0026
 	# the oche: a brass strip on the floor where you'd stand
 	Props.box(parent, Vector3(0.6, 0.012, 0.04), Props.tex_mat("metal", Color(0.95, 0.75, 0.35), 4.0, 0.35, 0.85), Vector3(0, FLOOR_Y + 0.006, BOARD_POS.z + 2.37))
