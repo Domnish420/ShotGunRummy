@@ -141,3 +141,32 @@ If the letters come out wrong, ask again with: *"Spell it exactly T-I-M-B-E-R,
 one word, no punctuation."* Or ask for the art with **no text at all**, save
 that instead, and tell me: I'll switch the box back to printing the name over
 it.
+
+### A 3D box instead (Meshy)
+
+A full box model can replace the box the game builds: export it from Meshy as
+**GLB** (textures embedded), save it as `models/boxes/<game>.glb` (for TIMBER,
+`models/boxes/timber.glb`) and open the project in Godot once. The game sizes
+it to the shelf (42 cm tall), stands it up and turns its front (the model's
++Z) to the room, and doesn't print the name over it.
+
+**Meshy, Image to 3D** (best: upload the lid art from above as the front):
+> Board game box standing upright, this image is the front of the lid, flat
+> square box about 5 times wider than deep, deep red cardboard sides with worn
+> corners, low poly PS2 style.
+
+**Meshy, Text to 3D:**
+> A board game box standing upright, a flat square cardboard box about 5 times
+> as wide as it is deep, with a slightly larger lid sitting on it. Lid front: a
+> tall tower of pale pine wooden blocks in alternating layers of three, one
+> block sticking halfway out, one tumbling off the top, on a red-orange
+> background with a warm spotlight. Across the top of the lid front, the word
+> "TIMBER" in chunky blocky pale-wood letters with dark outlines. Box sides
+> deep red cardboard with worn corners. PlayStation 2 era game asset, low poly,
+> hard edges, small low-resolution hand-painted texture, slightly faded and
+> scuffed.
+
+Negative prompt: *exclamation mark, extra text, misspelled letters, logos,
+people, hands, open box, photorealistic, high detail, smooth subdivided
+surfaces, blurry text.* Settings: Realistic style, low polycount (about
+500-2,000), textures on.

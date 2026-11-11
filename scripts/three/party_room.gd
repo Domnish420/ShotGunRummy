@@ -165,6 +165,10 @@ static func _game_box(parent: Node3D, game: Dictionary, base: Vector3) -> void:
 	node.position = base + Vector3(0, BOX.y * 0.5, 0)
 	node.rotation.y = 0.3
 	parent.add_child(node)
+	# a model of the box (Meshy, say): it's used as it is, sized to the shelf
+	var model_path := "res://models/boxes/%s.glb" % game["id"]
+	if ResourceLoader.exists(model_path) and _box_model(node, load(model_path)):
+		return
 	var side := Props.plain(Color(game["color"]).darkened(0.25), 0.7)
 	Props.box(node, BOX, side, Vector3.ZERO)
 	# the lid: a little bigger than the box, with the art on its face
@@ -204,6 +208,31 @@ static func _game_box(parent: Node3D, game: Dictionary, base: Vector3) -> void:
 	spot.light_energy = 1.2
 	spot.omni_range = 0.9
 	node.add_child(spot)
+
+
+## Puts a box model on the shelf: scaled so it's the box's height, standing
+## on the shelf, its front (the model's +Z, the way Meshy faces them) turned
+## to the room. Returns false if it isn't a usable scene.
+static func _box_model(node: Node3D, scene) -> bool:
+	if not (scene is PackedScene):
+		return false
+	var m: Node3D = scene.instantiate()
+	node.add_child(m)
+	var box := AABB()
+	var first := true
+	for mi in m.find_children("*", "MeshInstance3D", true, false):
+		var bb: AABB = (m.global_transform.affine_inverse() * mi.global_transform) * mi.get_aabb()
+		box = bb if first else box.merge(bb)
+		first = false
+	if first or box.size.y <= 0.0:
+		m.queue_free()
+		return false
+	var k := BOX.y / box.size.y
+	m.scale = Vector3.ONE * k
+	m.rotation.y = -PI / 2.0 # its front, +Z, faces the room (-X here)
+	var c := box.get_center()
+	m.position = Basis(Vector3.UP, -PI / 2.0) * Vector3(-c.x, -c.y, -c.z) * k
+	return true
 
 
 ## Lid art painted in code: a pixel tower of pine blocks, a couple sticking
