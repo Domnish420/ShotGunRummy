@@ -221,7 +221,14 @@ static func _box_model(node: Node3D, scene) -> bool:
 	var box := AABB()
 	var first := true
 	for mi in m.find_children("*", "MeshInstance3D", true, false):
-		var bb: AABB = (m.global_transform.affine_inverse() * mi.global_transform) * mi.get_aabb()
+		# its place inside the model, from the transforms on the way up
+		var xf: Transform3D = mi.transform
+		var up: Node = mi.get_parent()
+		while up != null and up != m:
+			if up is Node3D:
+				xf = (up as Node3D).transform * xf
+			up = up.get_parent()
+		var bb: AABB = xf * mi.get_aabb()
 		box = bb if first else box.merge(bb)
 		first = false
 	if first or box.size.y <= 0.0:
