@@ -18,7 +18,7 @@ const L := 0.18 # block length
 const W := 0.06 # width (3 side by side make a square layer)
 const H := 0.036 # height
 const LAYERS := 18
-const MASS := 0.12
+const MASS := 0.015 # a real tower block: about 15 g. Any push moves one; a tight one drags the tower
 const GAP := 0.002 # between blocks side by side
 const TOP_Y := 0.03 # the table top (world3d.TABLE_TOP)
 
@@ -370,12 +370,12 @@ func discard(b: RigidBody3D) -> void:
 func _physics_process(delta: float) -> void:
 	if _held != null and is_instance_valid(_held):
 		var grip: Vector3 = _held.to_global(_hold_grip)
-		var k := 260.0
-		var c := 14.0
+		var k := 60.0 # a light grip for a light block
+		var c := 2.0 * sqrt(k * MASS)
 		var v: Vector3 = _held.linear_velocity
 		var f := (_hold_at - grip) * k - v * c
 		# a pinch can only pull so hard: yank too hard and it slips
-		var most := 7.0
+		var most := 3.0
 		if f.length() > most * 1.8:
 			release()
 			return

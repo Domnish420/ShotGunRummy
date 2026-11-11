@@ -14,7 +14,7 @@ extends Node3D
 
 const TOOLS := ["poke", "two", "pinch", "flat"]
 ## How hard each tool can push (newtons), and how quick it gets there.
-const STRENGTH := {"poke": 7.0, "two": 13.0, "pinch": 0.0, "flat": 30.0}
+const STRENGTH := {"poke": 3.0, "two": 5.0, "pinch": 0.0, "flat": 10.0}
 const BONE := Color(0.92, 0.88, 0.76)
 
 var tool := "poke"
@@ -35,7 +35,7 @@ func _ready() -> void:
 	_build_bones()
 	tip = RigidBody3D.new()
 	tip.gravity_scale = 0.0
-	tip.mass = 0.12
+	tip.mass = 0.03
 	tip.lock_rotation = true
 	tip.can_sleep = false
 	tip.continuous_cd = true
@@ -101,7 +101,7 @@ func _physics_process(_delta: float) -> void:
 	if tip == null or not visible:
 		return
 	var most: float = STRENGTH.get(tool, 5.0) * boost
-	var k := 500.0 if tool != "flat" else 900.0
+	var k := 150.0 if tool != "flat" else 300.0
 	var c := 2.0 * sqrt(k * tip.mass)
 	var f := (target - tip.global_position) * k - tip.linear_velocity * c
 	if tool == "pinch":
