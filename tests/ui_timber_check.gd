@@ -77,6 +77,7 @@ func _play() -> void:
 	var vs: Vector2 = main.get_viewport_rect().size
 	var tried := {}
 	var push_frames := 0
+	var top_at := Vector3.ZERO
 	var thumb_y := 0.0
 	for step in range(600000):
 		await process_frame
@@ -100,10 +101,15 @@ func _play() -> void:
 			continue
 		if ui.state == "choose" and ui._my_turn():
 			# pick a block: a middle one we haven't tried this tower
+			# like a person: a middle block from low down first (they're often loose)
 			var b = null
+			var best := 1e9
 			for o in main.world.tower.blocks:
-				if main.world.tower.takeable(o) and not tried.has(o) and (b == null or int(o.get_meta("slot")) == 1):
-					b = o
+				if main.world.tower.takeable(o) and not tried.has(o):
+					var score: float = int(o.get_meta("layer")) + (0.0 if int(o.get_meta("slot")) == 1 else 30.0)
+					if score < best:
+						best = score
+						b = o
 			if b == null:
 				tried.clear()
 				continue
@@ -113,6 +119,7 @@ func _play() -> void:
 			ui._choose(b)
 			push_frames = 0
 			thumb_y = vs.y * 0.75
+			top_at = main.world.tower.blocks[-1].global_position
 			ui._press(Vector2(vs.x * 0.5, thumb_y))
 		elif ui.state == "work" and ui._my_turn():
 			push_frames += 1
@@ -121,7 +128,9 @@ func _play() -> void:
 			var strain: float = (main.world.hand.target - main.world.hand.tip.global_position).length()
 			if OS.get_environment("V") != "" and push_frames % 20 == 0:
 				print("    f%d target %s tip %s blk %s strain %.3f top %s" % [push_frames, main.world.hand.target, main.world.hand.tip.global_position, ui.block.global_position, strain, main.world.tower.blocks[-1].global_position])
-			if push_frames > 40 and strain > 0.02 or push_frames > 400:
+			# watching the tower: if the top moves, or it won't go, back off
+			var sway: float = main.world.tower.blocks[-1].global_position.distance_to(top_at)
+			if push_frames > 20 and (strain > 0.015 or sway > 0.008) or push_frames > 400:
 				# it won't go: let go and try another
 				ui._release(Vector2(vs.x * 0.5, thumb_y))
 				ui._let_go_block()
