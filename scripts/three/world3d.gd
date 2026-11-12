@@ -2620,6 +2620,7 @@ func _sync_darts(game, viewer: int) -> void:
 # ================================================================ timber
 
 var tower: Node3D # tower3d.gd, while TIMBER's on
+var landing: MeshInstance3D # the mark under a block you're holding
 var hand: Node3D # hand3d.gd
 var _timber_on := false # the camera's on the tower
 var _timber_round := -1
@@ -2641,6 +2642,18 @@ func timber_ready() -> void:
 	add_child(tower)
 	hand = Hand3D.new()
 	add_child(hand)
+	# where a block you're holding will come down
+	var lm := StandardMaterial3D.new()
+	lm.albedo_color = Color(1.0, 0.85, 0.3, 0.4)
+	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var lb := BoxMesh.new()
+	lb.size = Vector3(tower.L, 0.004, tower.W)
+	landing = MeshInstance3D.new()
+	landing.mesh = lb
+	landing.material_override = lm
+	landing.visible = false
+	add_child(landing)
 	var gm := StandardMaterial3D.new()
 	gm.albedo_color = Color(1, 1, 1, 0.35)
 	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -2675,8 +2688,11 @@ func timber_ready() -> void:
 func timber_off() -> void:
 	_timber_on = false
 	_timber_round = -1
+	Engine.physics_ticks_per_second = 60
 	if tower != null:
 		tower.clear()
+		tower.visible = false # its lights too
+		landing.visible = false
 		hand.park()
 		_ghost.visible = false
 		_strain_line.visible = false
@@ -2684,6 +2700,9 @@ func timber_off() -> void:
 
 func _sync_timber(game, viewer: int) -> void:
 	timber_ready()
+	tower.visible = true
+	# small stacked blocks need a fine time step; only while TIMBER's on
+	Engine.physics_ticks_per_second = 240
 	set_standing(false)
 	_viewer = viewer
 	dealing = false

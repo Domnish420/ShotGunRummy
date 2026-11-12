@@ -580,7 +580,7 @@ and you're out; last one standing wins.
   spring with a limited push, so a steady finger is a steady push and a
   twitchy one shoves. Push it out the far side (or pull it out) and it comes
   up in your hand: drag it over the top of the tower, **TURN** it if you like,
-  **SET IT DOWN**, then **DONE**. ✕ lets go of a block to try another.
+  **SET IT DOWN** (a gold mark shows where it'll land), then **DONE**. ✕ lets go of a block to try another.
 - **Two fingers move the camera**: drag to walk round the tower and look up and
   down it, pinch to come closer or back off (right-drag and the scroll wheel
   on a computer). ◀ ▶ step round a quarter at a time.

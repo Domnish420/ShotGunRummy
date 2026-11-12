@@ -14,8 +14,9 @@ extends "res://scripts/ui/modes/table_mode.gd"
 ## Tools: POKE, TWO (firmer), PINCH (grips the end that sticks out: hold and
 ## drag back; yank and it slips) and SWIPE (the flat hand: drag it across the
 ## layer yourself; let go and whatever's out of that layer is out of the
-## game). Push or pull a block clear and it's laid on top for you. Bring the
-## tower down and the player on your right shoots you.
+## game). Push or pull a block clear and it's in your hand: drag it over the
+## top, TURN, SET IT DOWN (a mark shows where), DONE. Bring the tower down
+## and the player on your right shoots you.
 
 const Driver = preload("res://scripts/three/timber_driver.gd")
 
@@ -24,7 +25,7 @@ const FOLLOW := 0.6 # how fast the fingertip can chase your thumb (m/s)
 const THUMB := 0.0006 # metres of push per pixel of thumb: 300 px is a whole block
 const SIDEWAYS := 0.035 # how far off-centre a finger can drift
 
-var state := "" # choose | work | sweep | carry | settle | down | bot | ""
+var state := "" # choose | work | place | placed | carry | settle | down | bot | ""
 var block: RigidBody3D = null
 var _seat := -1 # whose turn we're running
 var _round := -1
@@ -42,7 +43,6 @@ var _target_at := Vector3.ZERO # the fingertip's target when the drag started
 var _desired := Vector3.ZERO # where your thumb wants the fingertip
 var _dragging := false
 var _moved := 0.0
-var _pinch_gap := 0.0
 var _axis := Vector3.ZERO # the block's length, pointing the way a push goes
 var _y := 0.0 # the level the hand works on
 var _buzz := 0.0
@@ -203,8 +203,6 @@ func status() -> String:
 				"flat":
 					return "DRAG THE FLAT HAND ACROSS THE LAYER · TWO FINGERS: CAMERA"
 			return "DRAG TO PUSH · TWO FINGERS: CAMERA"
-		"sweep":
-			return "PRAY..."
 		"place":
 			return "DRAG IT OVER THE TOP · TURN · SET IT DOWN"
 		"placed":
@@ -246,6 +244,15 @@ func _tick() -> void:
 		_drive_hand(delta)
 	elif state == "place":
 		_hold_hand()
+	elif state == "bot" and _driver != null and _driver.block != null and is_instance_valid(_driver.block):
+		block = _driver.block
+		if not _cam_manual:
+			_look_at_block(_driver.block, _driver._axis, delta)
+		w.show_strain(_driver.state == "push")
+		_top_view.visible = w.hand.visible
+		_slide_sound(delta)
+	if w.landing != null:
+		w.landing.visible = state == "place"
 	_update_top_view()
 	if _top_view != null:
 		_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS if _top_view.visible else SubViewport.UPDATE_DISABLED
@@ -263,6 +270,19 @@ func _start_turn() -> void:
 	main.world.tower_focus = Vector3(0, main.world.tower.height() * 0.48, 0)
 	main.world.tower_dist = 0.8
 	main.world.tower_rise = 0.12
+	_cam_manual = false
+	var any := false
+	for b in main.world.tower.blocks:
+		if main.world.tower.takeable(b):
+			any = true
+			break
+	if not any:
+		# nothing left that may be taken: the turn passes
+		main.world.announce("NO BLOCK TO TAKE")
+		state = "settle"
+		_timer = 1.0
+		main._refresh()
+		return
 	if main._is_bot(_seat):
 		state = "bot"
 		_driver = Driver.new(main.world.tower, main.world.hand, g.players[_seat].bot)
@@ -277,14 +297,13 @@ func _physics_tick() -> void:
 	if g == null or main.mode_ui != self or main.world.tower == null:
 		return
 	var tower = main.world.tower
-	if g.phase == "play" and tower.down and state not in ["down", ""]:
+	if g.phase == "play" and tower.down and state != "down":
+		# it can come down between turns too: then it's on whoever's go it is
+		_seat = g.turn
 		_tower_down()
 		return
 	if state == "bot" and _driver != null:
 		var r: String = _driver.step(main.get_physics_process_delta_time())
-		if _driver.block != null:
-			_look_at_block(_driver.block, _driver._axis)
-			main.world.show_strain(true)
 		if r == "out":
 			block = _driver.block
 			_carry()
@@ -328,7 +347,8 @@ func _tower_down() -> void:
 	_timer = 1.6
 	_end_work()
 	main.world.announce("TIMBER!")
-	main._sound("blast")
+	main.world.landing.visible = false
+	main._sound("clatter")
 	main._shake()
 	main._log("%s brought the tower down." % main._name(_seat))
 	main._refresh()
@@ -342,14 +362,15 @@ func _walk(step: int) -> void:
 
 
 ## An AI's turn: the camera keeps an eye on what it's doing.
-func _look_at_block(b: RigidBody3D, push: Vector3) -> void:
+func _look_at_block(b: RigidBody3D, push: Vector3, delta: float) -> void:
 	var w = main.world
 	var back := -push # the camera's on the side the push comes from
 	var yaw := atan2(back.x, back.z) + 0.6
-	w.tower_yaw = lerp_angle(w.tower_yaw, yaw, 0.08)
-	w.tower_focus = w.tower_focus.lerp(b.global_position, 0.1)
-	w.tower_dist = lerpf(w.tower_dist, 0.62, 0.1)
-	w.tower_rise = lerpf(w.tower_rise, 0.22, 0.1)
+	var k := minf(1.0, delta * 2.5)
+	w.tower_yaw = lerp_angle(w.tower_yaw, yaw, k)
+	w.tower_focus = w.tower_focus.lerp(b.global_position, k)
+	w.tower_dist = lerpf(w.tower_dist, 0.7, k)
+	w.tower_rise = lerpf(w.tower_rise, 0.22, k)
 
 
 ## Your block: the camera goes round to its end once; after that it's yours
@@ -367,11 +388,12 @@ func _aim_camera(b: RigidBody3D, push: Vector3) -> void:
 ## round the tower and look up or down it, pinch to come closer or back off.
 func _turn_camera(move: Vector2, zoom: float) -> void:
 	var w = main.world
+	_cam_manual = true # yours now: it stops following the AI's hand this turn
 	w.tower_yaw -= move.x * 0.007
 	w.tower_rise = clampf(w.tower_rise + move.y * 0.0025, -0.05, 0.9)
 	w.tower_dist = clampf(w.tower_dist * zoom, 0.3, 1.6)
-	if state == "choose":
-		# looking round for a block: aim up and down the tower too
+	if state in ["choose", "bot"]:
+		# looking round: aim up and down the tower too
 		w.tower_focus.y = clampf(w.tower_focus.y + move.y * 0.0012, 0.08, w.tower.height())
 
 
@@ -385,11 +407,16 @@ var _two := false # two fingers have been down (the camera): ignore the one-fing
 var _cam_mid := Vector2.ZERO
 var _cam_gap := 0.0
 var _right_drag := false
+var _cam_manual := false # you've moved the camera this turn
+var _turn_yaw := 0.0 # which way the held block's been turned to
+var _scrape := 0.0
 
 
 func _on_pad(event: InputEvent) -> void:
-	if not _my_turn():
+	var g = main.game
+	if g == null or g.phase != "play":
 		return
+	var mine := _my_turn() # the camera's always yours; the hand only on your turn
 	# real fingers: two or more move the camera
 	if event is InputEventScreenTouch:
 		if event.pressed:
@@ -418,7 +445,7 @@ func _on_pad(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
-				if _two:
+				if _two or not mine:
 					return
 				if event.pressed:
 					_press(event.position)
@@ -433,7 +460,7 @@ func _on_pad(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _right_drag:
 			_turn_camera(event.relative, 1.0)
-		elif _dragging and not _two:
+		elif _dragging and not _two and mine:
 			_drag(event.position)
 
 
@@ -686,8 +713,19 @@ func _drive_hand(delta: float) -> void:
 			if main.sound_on:
 				main._sound("tick")
 			Input.vibrate_handheld(int(15 + 25 * strain))
+	_slide_sound(delta)
 	if hand.tool != "flat" and tower.is_out(block):
 		_hold_block()
+
+
+## Wood on wood, while the block's sliding.
+func _slide_sound(delta: float) -> void:
+	_scrape -= delta
+	if block == null or not is_instance_valid(block) or block.freeze:
+		return
+	if _scrape <= 0.0 and block.linear_velocity.length() > 0.035:
+		_scrape = 0.16
+		main._sound("scrape")
 
 
 ## You've swept with the flat hand and let go: whatever's out of that layer
@@ -728,9 +766,9 @@ func _hold_block() -> void:
 	state = "place"
 	var axis: Vector3 = _spot["axis"]
 	var above: Vector3 = _spot["center"] + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.05, 0)
-	var t := block.create_tween()
-	t.tween_property(block, "global_position", above, 0.4).set_trans(Tween.TRANS_SINE)
-	t.parallel().tween_property(block, "global_basis", Basis(Vector3.UP, atan2(-axis.z, axis.x)), 0.4)
+	_turn_yaw = atan2(-axis.z, axis.x)
+	block.global_position = above
+	block.global_basis = Basis(Vector3.UP, _turn_yaw)
 	w.hand.set_tool("pinch")
 	w.hand.grip = 1.0
 	w.tower_focus = Vector3(_spot["center"].x, _spot["top"], _spot["center"].z)
@@ -753,7 +791,7 @@ func _drag_held(at: Vector2) -> void:
 	away = away.normalized()
 	var p := _held_at + (right * d.x + away * (-d.y)) * THUMB
 	var c: Vector3 = _spot["center"]
-	var off := Vector3(p.x - c.x, 0, p.z - c.z).limit_length(0.3)
+	var off := Vector3(p.x - c.x, 0, p.z - c.z).limit_length(0.12) # over the tower: it goes on top, not on the table
 	block.global_position = Vector3(c.x + off.x, block.global_position.y, c.z + off.z)
 
 
@@ -770,13 +808,17 @@ func _hold_hand() -> void:
 	hand.show_hand()
 	hand.grip = 1.0
 	hand.jump_to(grip, -axis * side)
+	# the mark where it'll come down
+	var mark: MeshInstance3D = main.world.landing
+	mark.global_transform = Transform3D(block.global_basis, Vector3(block.global_position.x, tower.rest_height(block) + 0.003, block.global_position.z))
 
 
 func _turn_block() -> void:
 	if state != "place":
 		return
+	_turn_yaw += PI * 0.5 # always a clean quarter, however fast it's tapped
 	var t := block.create_tween()
-	t.tween_property(block, "global_basis", block.global_basis.rotated(Vector3.UP, PI * 0.5), 0.2)
+	t.tween_property(block, "global_basis", Basis(Vector3.UP, _turn_yaw), 0.15)
 	main._sound("tick")
 
 
@@ -787,10 +829,11 @@ func _set_it_down() -> void:
 	var tower = main.world.tower
 	tower.set_down(block, int(_spot["layer"]))
 	main.world.hand.park()
+	main.world.landing.visible = false
+	main._sound("knock")
 	if _top_view != null:
 		_top_view.visible = false
 	_show_tools(true)
-	main._sound("slap")
 	main._refresh()
 
 

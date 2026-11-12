@@ -281,6 +281,17 @@ static func make(name_: String) -> AudioStreamWAV:
 		"tap":
 			_note(out, 1200.0, 0.025, "pulse", 0.14)
 		# --- darts
+		# --- timber
+		"scrape": # wood sliding on wood
+			_note(out, 700.0 + randf() * 200.0, 0.07, "noise", 0.1, 0.2)
+		"knock": # a block set down
+			_note(out, 1400.0, 0.012, "noise", 0.3, -0.5)
+			_note(out, 320.0, 0.05, "tri", 0.3, -0.6)
+		"clatter": # the tower coming down
+			for i in range(16):
+				_note(out, 900.0 + randf() * 1200.0, 0.02, "noise", 0.34, -0.4)
+				_note(out, 200.0 + randf() * 250.0, 0.03, "tri", 0.26, -0.5)
+				_rest(out, randf() * 0.04)
 		"whoosh": # a dart leaves your hand
 			_note(out, 2400.0, 0.09, "noise", 0.12, 0.6)
 		"thunk": # and sticks in the board

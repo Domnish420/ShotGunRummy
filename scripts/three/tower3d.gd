@@ -11,7 +11,6 @@ extends Node3D
 ## moved ending up off the tower, down on the table, or tipped right over.
 
 signal toppled
-signal block_out(block: RigidBody3D) # the moving block's clear of the tower
 signal dropped(block: RigidBody3D) # a lone block slid out by itself (out of the game)
 
 const L := 0.18 # block length
@@ -125,18 +124,6 @@ func _wood_face() -> Image:
 				c = Color(0.45, 0.3, 0.18) if (x == 0 or y == 0 or x == n - 1 or y == n - 1) else c.darkened(0.25)
 			img.set_pixel(x, y, Color(c.r, c.g, c.b))
 	return img
-
-
-## How grippy a block is: some are loose and slide right out (more often the
-## middle ones), most are snug, and some are tight and drag the tower along.
-func _grip(slot: int) -> float:
-	var r := _rng.randf()
-	var loose := 0.45 if slot == 1 else 0.25
-	if r < loose:
-		return _rng.randf_range(0.08, 0.16)
-	if r < loose + 0.35:
-		return _rng.randf_range(0.3, 0.45)
-	return _rng.randf_range(0.6, 0.8)
 
 
 func _block(mat: Material, height: float, grip: float = 0.5) -> RigidBody3D:
@@ -414,6 +401,22 @@ func lift(b: RigidBody3D) -> void:
 	b.freeze = true
 	b.collision_layer = 0
 	b.collision_mask = 0
+
+
+## The height of whatever's under a lifted block (the tower's top there, or
+## the table).
+func rest_height(b: RigidBody3D) -> float:
+	var axis := block_axis(b)
+	var across := Vector3(-axis.z, 0, axis.x)
+	var space := get_world_3d().direct_space_state
+	var rest := TOP_Y - 1.0
+	for along in [-0.4, 0.0, 0.4]:
+		for side in [-0.4, 0.0, 0.4]:
+			var from: Vector3 = b.global_position + axis * (L * along) + across * (W * side)
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 1.5, 1))
+			if not hit.is_empty():
+				rest = maxf(rest, hit["position"].y)
+	return rest if rest > TOP_Y - 0.5 else TOP_Y
 
 
 ## Lowers a lifted block straight down onto whatever's under it, gently, then

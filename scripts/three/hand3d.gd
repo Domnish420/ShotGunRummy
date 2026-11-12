@@ -80,7 +80,7 @@ func jump_to(at: Vector3, face: Vector3) -> void:
 	target = at
 	tip.global_position = at
 	tip.linear_velocity = Vector3.ZERO
-	_shapes["flat"].rotation.y = 0.0
+	_shapes["two"].global_basis = Basis.looking_at(facing, Vector3.UP)
 	_place_bones()
 
 
