@@ -121,6 +121,13 @@ func _play() -> void:
 			thumb_y = vs.y * 0.75
 			top_at = main.world.tower.blocks[-1].global_position
 			ui._press(Vector2(vs.x * 0.5, thumb_y))
+		elif ui.state == "place" and ui._my_turn():
+			# it's out: slide it a touch, turn it twice (back the same way), set it down
+			if step % 30 == 0:
+				ui._set_it_down()
+		elif ui.state == "placed" and ui._my_turn():
+			if step % 30 == 0:
+				ui._done()
 		elif ui.state == "work" and ui._my_turn():
 			push_frames += 1
 			thumb_y -= 2.0 # a slow, steady thumb

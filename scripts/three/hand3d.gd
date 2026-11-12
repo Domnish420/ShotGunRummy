@@ -97,18 +97,22 @@ func show_hand() -> void:
 	set_tool(tool)
 
 
-func _physics_process(_delta: float) -> void:
+## The fingertip glides to the target and stops dead there (it matches a
+## speed towards it, no spring to overshoot and wobble), but it can only push
+## so hard: a block that won't give stops it.
+func _physics_process(delta: float) -> void:
 	if tip == null or not visible:
 		return
-	var most: float = STRENGTH.get(tool, 5.0) * boost
-	var k := 150.0 if tool != "flat" else 300.0
-	var c := 2.0 * sqrt(k * tip.mass)
-	var f := (target - tip.global_position) * k - tip.linear_velocity * c
 	if tool == "pinch":
 		# the pinch doesn't push: the tower holds the block; the hand just goes
 		tip.linear_velocity = (target - tip.global_position) * 20.0
 		return
-	tip.apply_central_force(f.limit_length(most + tip.mass * 9.8 * 0.0))
+	var most: float = STRENGTH.get(tool, 5.0) * boost
+	var to := target - tip.global_position
+	var top_speed := 0.8 if tool != "flat" else 1.6
+	var want := (to * 14.0).limit_length(top_speed) # slows as it arrives
+	var f := (want - tip.linear_velocity) * tip.mass / maxf(delta, 0.001)
+	tip.apply_central_force(f.limit_length(most))
 	_speed = tip.linear_velocity.length()
 
 

@@ -105,7 +105,7 @@ func _ensure_screen() -> void:
 	_sub.world_3d = main.world.get_world_3d()
 	_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_sub_cam = Camera3D.new()
-	_sub_cam.fov = 55.0
+	_sub_cam.fov = 48.0
 	_sub_cam.near = 0.01
 	_sub_cam.far = 8.0
 	_sub.add_child(_sub_cam)
@@ -144,6 +144,13 @@ func _show_tools(on: bool) -> void:
 	_tools.visible = on
 	if not on:
 		return
+	if state == "place":
+		_tools.add_child(main._bubble("TURN", _turn_block, main.FLOAT_YELLOW, 40))
+		_tools.add_child(main._bubble("SET IT DOWN", _set_it_down, Palette.GOLD, 44))
+		return
+	if state == "placed":
+		_tools.add_child(main._bubble("DONE", _done, Palette.GOLD, 60))
+		return
 	var current: String = main.world.hand.tool
 	for pair in TOOL_WORDS:
 		var t: String = pair[0]
@@ -175,7 +182,7 @@ func refresh() -> void:
 	main.status_label.add_theme_color_override("font_color", Palette.PINK if main.message != "" else Palette.AMBER)
 	main.status_label.text = main.message.to_upper() if main.message != "" else status()
 	main.go_out_label.visible = false
-	_orbit.visible = g.phase == "play" and state in ["choose", "work", "bot", "settle"]
+	_orbit.visible = g.phase == "play" and state in ["choose", "work", "bot", "settle", "place", "placed"]
 
 
 func status() -> String:
@@ -198,6 +205,10 @@ func status() -> String:
 			return "DRAG TO PUSH · TWO FINGERS: CAMERA"
 		"sweep":
 			return "PRAY..."
+		"place":
+			return "DRAG IT OVER THE TOP · TURN · SET IT DOWN"
+		"placed":
+			return "HAPPY WITH IT? PRESS DONE"
 		"carry", "settle":
 			return "STEADY..."
 	return ""
@@ -233,6 +244,8 @@ func _tick() -> void:
 		_start_turn()
 	if state == "work":
 		_drive_hand(delta)
+	elif state == "place":
+		_hold_hand()
 	_update_top_view()
 	if _top_view != null:
 		_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS if _top_view.visible else SubViewport.UPDATE_DISABLED
@@ -344,7 +357,7 @@ func _look_at_block(b: RigidBody3D, push: Vector3) -> void:
 func _aim_camera(b: RigidBody3D, push: Vector3) -> void:
 	var w = main.world
 	var back := -push
-	w.tower_yaw = atan2(back.x, back.z) + 0.4
+	w.tower_yaw = atan2(back.x, back.z) + 0.18
 	w.tower_focus = b.global_position
 	w.tower_dist = 0.62
 	w.tower_rise = 0.18
@@ -452,6 +465,8 @@ func _press(at: Vector2) -> void:
 	_dragging = true
 	_moved = 0.0
 	_down_at = at
+	if state == "place":
+		_held_at = block.global_position
 	if state == "work":
 		var hand = main.world.hand
 		_target_at = hand.target
@@ -464,6 +479,9 @@ func _press(at: Vector2) -> void:
 ## the screen is away from you, sideways is sideways.
 func _drag(at: Vector2) -> void:
 	_moved = maxf(_moved, at.distance_to(_down_at))
+	if state == "place":
+		_drag_held(at)
+		return
 	if state != "work":
 		return
 	var d := at - _down_at
@@ -476,6 +494,15 @@ func _drag(at: Vector2) -> void:
 	away = away.normalized()
 	var want := _target_at + (right * d.x + away * (-d.y)) * THUMB
 	want.y = _y
+	# the finger stays on the block's line: in and out freely, only a little
+	# off to the side (enough to slip off-centre, not to wander off the end)
+	var line_from: Vector3 = block.global_position
+	var rel := want - line_from
+	rel.y = 0.0
+	var along := rel.dot(_axis)
+	var across := Vector3(-_axis.z, 0, _axis.x)
+	var side := clampf(rel.dot(across), -SIDEWAYS, SIDEWAYS)
+	want = Vector3(line_from.x, _y, line_from.z) + _axis * along + across * side
 	# don't let it wander far from the block
 	var from: Vector3 = block.global_position
 	var off := want - from
@@ -488,6 +515,8 @@ func _drag(at: Vector2) -> void:
 func _release(at: Vector2) -> void:
 	_dragging = false
 	var hand = main.world.hand
+	if state in ["place", "placed"]:
+		return
 	if state == "choose" or (state == "work" and _moved < 12.0 and hand.tool != "pinch"):
 		# a tap: pick (or switch) a block
 		if _moved < 12.0:
@@ -658,7 +687,7 @@ func _drive_hand(delta: float) -> void:
 				main._sound("tick")
 			Input.vibrate_handheld(int(15 + 25 * strain))
 	if hand.tool != "flat" and tower.is_out(block):
-		_carry()
+		_hold_block()
 
 
 ## You've swept with the flat hand and let go: whatever's out of that layer
@@ -682,6 +711,100 @@ func _swiped() -> void:
 	main._refresh()
 
 
+# ---------------------------------------------------------------- placing it yourself
+
+var _held_at := Vector3.ZERO # where the held block was when this drag started
+var _spot := {} # tower3d.next_spot()
+
+
+## It's out: it stays in your hand, up over the top of the tower. Drag it into
+## place, TURN it if you like, and SET IT DOWN.
+func _hold_block() -> void:
+	var w = main.world
+	var tower = w.tower
+	w.show_strain(false)
+	_spot = tower.next_spot(block)
+	tower.lift(block)
+	state = "place"
+	var axis: Vector3 = _spot["axis"]
+	var above: Vector3 = _spot["center"] + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.05, 0)
+	var t := block.create_tween()
+	t.tween_property(block, "global_position", above, 0.4).set_trans(Tween.TRANS_SINE)
+	t.parallel().tween_property(block, "global_basis", Basis(Vector3.UP, atan2(-axis.z, axis.x)), 0.4)
+	w.hand.set_tool("pinch")
+	w.hand.grip = 1.0
+	w.tower_focus = Vector3(_spot["center"].x, _spot["top"], _spot["center"].z)
+	w.tower_rise = 0.32
+	w.tower_dist = 0.75
+	_show_tools(true)
+	main._sound("slap")
+	main._refresh()
+
+
+## One finger slides the held block about over the top, as you see it.
+func _drag_held(at: Vector2) -> void:
+	var d := at - _down_at
+	var cam: Camera3D = main.world.camera
+	var right := cam.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var away := -cam.global_basis.z
+	away.y = 0.0
+	away = away.normalized()
+	var p := _held_at + (right * d.x + away * (-d.y)) * THUMB
+	var c: Vector3 = _spot["center"]
+	var off := Vector3(p.x - c.x, 0, p.z - c.z).limit_length(0.3)
+	block.global_position = Vector3(c.x + off.x, block.global_position.y, c.z + off.z)
+
+
+## The hand holds the block by its end while you place it.
+func _hold_hand() -> void:
+	if block == null or not is_instance_valid(block):
+		return
+	var hand = main.world.hand
+	var tower = main.world.tower
+	var axis: Vector3 = tower.block_axis(block)
+	var cam: Vector3 = main.world.camera.global_position
+	var side := 1.0 if axis.dot(cam - block.global_position) > 0.0 else -1.0
+	var grip: Vector3 = block.global_position + axis * side * (tower.L * 0.5 - 0.01)
+	hand.show_hand()
+	hand.grip = 1.0
+	hand.jump_to(grip, -axis * side)
+
+
+func _turn_block() -> void:
+	if state != "place":
+		return
+	var t := block.create_tween()
+	t.tween_property(block, "global_basis", block.global_basis.rotated(Vector3.UP, PI * 0.5), 0.2)
+	main._sound("tick")
+
+
+func _set_it_down() -> void:
+	if state != "place":
+		return
+	state = "placed"
+	var tower = main.world.tower
+	tower.set_down(block, int(_spot["layer"]))
+	main.world.hand.park()
+	if _top_view != null:
+		_top_view.visible = false
+	_show_tools(true)
+	main._sound("slap")
+	main._refresh()
+
+
+func _done() -> void:
+	if state != "placed":
+		return
+	state = "settle"
+	_timer = 1.2
+	_show_tools(false)
+	if _top_view != null:
+		_top_view.visible = false
+	main._refresh()
+
+
 ## Out it comes: up and onto the top.
 func _carry() -> void:
 	var w = main.world
@@ -702,14 +825,15 @@ func _update_top_view() -> void:
 	if _top_view == null or not _top_view.visible or block == null or not is_instance_valid(block):
 		return
 	var hand = main.world.hand
-	var tip: Vector3 = hand.tip.global_position
+	var tip: Vector3 = hand.tip.global_position if state == "work" else hand.working_point()
 	var f: Vector3 = hand.facing
 	f.y = 0.0
 	f = f.normalized() if f.length() > 0.01 else Vector3(0, 0, -1)
 	var side := Vector3(-f.z, 0, f.x)
-	# over the shoulder: behind the hand, up a bit, off to the side
-	var from := tip - f * 0.32 + Vector3.UP * 0.13 + side * 0.07
-	_sub_cam.global_transform = Transform3D(Basis.looking_at((tip + f * 0.06) - from, Vector3.UP), from)
+	# close in, just behind and above the fingers, looking where they go
+	var from := tip - f * 0.16 + Vector3.UP * 0.075 + side * 0.035
+	var goal := Transform3D(Basis.looking_at((tip + f * 0.05) - from, Vector3.UP), from)
+	_sub_cam.global_transform = _sub_cam.global_transform.interpolate_with(goal, 0.25)
 
 
 # ---------------------------------------------------------------- events, results, rules
@@ -737,7 +861,8 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TOWER. 18 layers of 3 wooden blocks. Some are loose and slide right out; some carry the weight and drag the tower with them.",
-		"YOUR TURN. Tap a block (not the bottom layer, the top layer, nor the one under it while the top's unfinished). ONE finger drives the hand, level with the block: drag up the screen to push away from you, sideways to move across. Push it out the other side, or pull it out, and it's laid on top for you.",
+		"YOUR TURN. Tap a block (not the bottom layer, the top layer, nor the one under it while the top's unfinished). ONE finger drives the hand, level with the block: drag up the screen to push away from you, sideways to move across. Push it out the other side, or pull it out, and it's in your hand.",
+		"PLACE IT. Drag it over the top of the tower, TURN it if you like, SET IT DOWN, then DONE. Knock the tower doing it and it's still on you.",
 		"THE CAMERA. TWO fingers: drag to walk round the tower and look up and down it, pinch to come closer or back off. ◀ ▶ step round a quarter at a time. The round window is a camera over the hand's shoulder.",
 		"FEEL IT. A faint ghost shows where your finger wants the hand. The line from it to the real finger goes red, the hand shakes and the phone buzzes when the block fights back.",
 		"THE HAND. POKE (one finger), TWO (firmer), PINCH (grips the end that sticks out: hold and drag back; yank too hard and it slips) and SWIPE (the flat hand: drag it across the layer yourself; let go and whatever's out of that layer is gone for good. It thins the tower for everyone after you, if it stands).",

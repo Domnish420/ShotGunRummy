@@ -360,6 +360,77 @@ func place_on_top(b: RigidBody3D) -> float:
 	return 1.1
 
 
+## Placing by hand: where a block taken out goes next. The layer it'd be in,
+## which way it should lie (across the layer under it, or with the top layer
+## if that's not finished), the top of the tower there, and its middle.
+func next_spot(b: RigidBody3D) -> Dictionary:
+	var ls := layer_blocks()
+	var top := -1
+	for i in range(ls.size() - 1, -1, -1):
+		if not ls[i].filter(func(o): return o != b).is_empty():
+			top = i
+			break
+	var top_blocks: Array = ls[top].filter(func(o): return o != b) if top >= 0 else []
+	var layer := top if top_blocks.size() < 3 else top + 1
+	var under: Array = (ls[layer - 1] if layer >= 1 and layer - 1 < ls.size() else []).filter(func(o): return o != b)
+	var high := TOP_Y
+	var center := tower_center()
+	for o in under:
+		high = maxf(high, o.global_position.y + float(o.get_meta("height")) * 0.5)
+	var axis := Vector3(1, 0, 0)
+	if layer == top and not top_blocks.is_empty():
+		axis = block_axis(top_blocks[0])
+	elif not under.is_empty():
+		var ua := block_axis(under[0])
+		axis = Vector3(-ua.z, 0, ua.x)
+	return {"layer": layer, "axis": axis, "top": high, "center": Vector3(center.x, high, center.z)}
+
+
+## Picks the block up to place by hand: it floats where it's put (touching
+## nothing) till it's set down.
+func lift(b: RigidBody3D) -> void:
+	release()
+	active = b
+	b.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	b.freeze = true
+	b.collision_layer = 0
+	b.collision_mask = 0
+
+
+## Lowers a lifted block straight down onto whatever's under it, gently, then
+## lets it go. Returns the time it takes.
+func set_down(b: RigidBody3D, layer: int) -> float:
+	var axis := block_axis(b)
+	var across := Vector3(-axis.z, 0, axis.x)
+	var h := float(b.get_meta("height"))
+	var space := get_world_3d().direct_space_state
+	var rest := TOP_Y - 1.0
+	for along in [-0.4, 0.0, 0.4]:
+		for side in [-0.4, 0.0, 0.4]:
+			var from: Vector3 = b.global_position + axis * (L * along) + across * (W * side)
+			var q := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 1.5, 1)
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty():
+				rest = maxf(rest, hit["position"].y)
+	if rest < TOP_Y - 0.5:
+		rest = TOP_Y # nothing under it: the table
+	var target := Vector3(b.global_position.x, rest + h * 0.5 + 0.0015, b.global_position.z)
+	b.set_meta("layer", layer)
+	var c := tower_center()
+	b.set_meta("slot", clampi(int(round((b.global_position - c).dot(across) / (W + GAP))) + 1, 0, 2))
+	var t := create_tween()
+	t.tween_property(b, "global_position", target, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.tween_callback(func() -> void:
+		b.collision_layer = 1
+		b.collision_mask = 1
+		b.freeze = false
+		b.linear_velocity = Vector3.ZERO
+		b.angular_velocity = Vector3.ZERO
+		if active == b:
+			active = null)
+	return 0.4
+
+
 ## Take a block out of the game (swiped off the tower).
 func discard(b: RigidBody3D) -> void:
 	removed[b] = true
