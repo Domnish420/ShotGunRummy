@@ -16,6 +16,8 @@ const TOOLS := ["poke", "two", "pinch", "flat"]
 ## How hard each tool can push (newtons), and how quick it gets there.
 const STRENGTH := {"poke": 3.0, "two": 5.0, "pinch": 0.0, "flat": 10.0}
 const BONE := Color(0.92, 0.88, 0.76)
+const SIZE := 0.55 # a real hand, about 19 cm wrist to fingertip
+const TILT := -0.32 # poking, the fingers point a little down: the knuckles ride above the block, clear of the table
 
 var tool := "poke"
 var tip: RigidBody3D
@@ -160,6 +162,7 @@ func _bone(parent: Node3D, length: float, thick: float, at: Vector3) -> Node3D:
 ## Fingers point down -z, the palm faces -y. The wrist is the origin.
 func _build_bones() -> void:
 	_wrist = Node3D.new()
+	_wrist.scale = Vector3.ONE * SIZE # built at twice life size; this is a real hand
 	add_child(_wrist)
 	_palm = Node3D.new()
 	_wrist.add_child(_palm)
@@ -217,6 +220,8 @@ func _place_bones() -> void:
 	var f := facing if facing.length() > 0.1 else Vector3(0, 0, -1)
 	var b := Basis.looking_at(f, Vector3.UP) # -z along `facing`, palm down
 	match tool:
+		"poke", "two":
+			b = b * Basis(Vector3.RIGHT, TILT)
 		"flat":
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) # on its edge
 		"pinch":

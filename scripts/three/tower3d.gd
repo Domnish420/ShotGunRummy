@@ -73,14 +73,17 @@ func build(seed_value: int = -1) -> void:
 			o.light_energy = 0.9
 			o.omni_range = 1.6
 			add_child(o)
-	# pale pine, each block a shade different (like the real thing)
+	# pale pine with darker edges (so every block reads on its own), each a
+	# shade different, like the real thing
+	var tex := ImageTexture.create_from_image(_wood_face())
 	var wood := []
 	for i in range(6):
 		var m := StandardMaterial3D.new()
-		m.albedo_color = Color(0.98, 0.86, 0.62).lerp(Color(0.86, 0.68, 0.45), i / 5.0)
+		m.albedo_texture = tex
+		m.albedo_color = Color(1.0, 0.93, 0.8).lerp(Color(0.86, 0.72, 0.55), i / 5.0)
+		m.uv1_scale = Vector3(3, 2, 1) # a box's faces each get the whole picture
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 		m.roughness = 0.85
-		m.emission_enabled = true # a touch of its own light: you can always read the blocks
-		m.emission = m.albedo_color * 0.12
 		wood.append(m)
 	var y := TOP_Y
 	for layer in range(LAYERS):
@@ -106,6 +109,22 @@ func build(seed_value: int = -1) -> void:
 			b.set_meta("slot", k)
 			blocks.append(b)
 		y += tallest
+
+
+## A block face: pine grain and a dark edge, 32 px (PS2-grade).
+func _wood_face() -> Image:
+	var n := 32
+	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
+	var r := RandomNumberGenerator.new()
+	r.seed = 7
+	for y in range(n):
+		var grain := 0.9 + 0.1 * sin(y * 0.9 + r.randf() * 0.6)
+		for x in range(n):
+			var c := Color(0.96, 0.84, 0.62) * (grain + r.randf_range(-0.03, 0.03))
+			if x <= 1 or y <= 1 or x >= n - 2 or y >= n - 2:
+				c = Color(0.45, 0.3, 0.18) if (x == 0 or y == 0 or x == n - 1 or y == n - 1) else c.darkened(0.25)
+			img.set_pixel(x, y, Color(c.r, c.g, c.b))
+	return img
 
 
 ## How grippy a block is: some are loose and slide right out (more often the

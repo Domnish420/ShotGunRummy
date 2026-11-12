@@ -831,7 +831,7 @@ func _update_top_view() -> void:
 	f = f.normalized() if f.length() > 0.01 else Vector3(0, 0, -1)
 	var side := Vector3(-f.z, 0, f.x)
 	# close in, just behind and above the fingers, looking where they go
-	var from := tip - f * 0.16 + Vector3.UP * 0.075 + side * 0.035
+	var from := tip - f * 0.11 + Vector3.UP * 0.05 + side * 0.025
 	var goal := Transform3D(Basis.looking_at((tip + f * 0.05) - from, Vector3.UP), from)
 	_sub_cam.global_transform = _sub_cam.global_transform.interpolate_with(goal, 0.25)
 
