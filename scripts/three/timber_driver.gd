@@ -59,9 +59,17 @@ func _cfg(k: String) -> float:
 ## easy one anywhere.
 func _pick() -> RigidBody3D:
 	var options := []
+	var risky := []
 	for b in tower.blocks:
 		if tower.takeable(b) and not _tried.has(b):
-			options.append(b)
+			# a layer stands on its middle block, or on both its sides: taking
+			# anything else out from under the tower brings it down
+			if _leaves_standing(b) or (level == "easy" and rng.randf() < 0.25):
+				options.append(b)
+			else:
+				risky.append(b)
+	if options.is_empty():
+		options = risky # nothing safe left: someone has to
 	if options.is_empty():
 		return null
 	options.shuffle()
@@ -79,6 +87,15 @@ func _pick() -> RigidBody3D:
 			best_score = score
 			best = b
 	return best
+
+
+## Would the layer still hold the tower up without this block?
+func _leaves_standing(b: RigidBody3D) -> bool:
+	var left := {}
+	for o in tower.blocks:
+		if o != b and not tower.removed.has(o) and int(o.get_meta("layer")) == int(b.get_meta("layer")):
+			left[int(o.get_meta("slot"))] = true
+	return left.has(1) or (left.has(0) and left.has(2))
 
 
 ## The least troublesome block it's tried (when it's out of patience).

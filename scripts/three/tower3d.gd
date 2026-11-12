@@ -19,6 +19,12 @@ const H := 0.036 # height
 const LAYERS := 18
 const MASS := 0.015 # a real tower block: about 15 g. Any push moves one; a tight one drags the tower
 const GAP := 0.002 # between blocks side by side
+## Friction. Where two things touch, the lower of their two frictions counts.
+## The tower grips itself firmly (GRIP); the block being worked on is given
+## its own, lower "slide", so it comes out past its neighbours instead of
+## dragging the layers above along. Loose blocks barely rub; tight ones rub
+## enough that a careless shove still shifts the tower.
+const GRIP := 0.9
 const TOP_Y := 0.03 # the table top (world3d.TABLE_TOP)
 
 var blocks: Array = [] # every RigidBody3D
@@ -46,7 +52,7 @@ func build(seed_value: int = -1) -> void:
 	down = false
 	_watch = true
 	_mat = PhysicsMaterial.new()
-	_mat.friction = 0.55
+	_mat.friction = GRIP
 	_mat.bounce = 0.0
 	if _floor == null:
 		_floor = StaticBody3D.new()
@@ -86,15 +92,16 @@ func build(seed_value: int = -1) -> void:
 		wood.append(m)
 	var y := TOP_Y
 	for layer in range(LAYERS):
-		# loose blocks are a hair thinner, so the layer above doesn't rest on
-		# them: they slide right out. Mostly middles; now and then a side.
-		var heights := []
-		for k in range(3):
-			var loose := k == 1 and _rng.randf() < 0.7
-			heights.append(H * (1.0 - (_rng.randf_range(0.035, 0.05) if loose else 0.0)))
+		# every block's the same height and carries its share (take a side
+		# block and the middle still holds the tower up). Some just slide more
+		# easily than others: mostly middles, now and then a side.
+		var heights := [H, H, H]
 		var tallest: float = heights.max()
 		for k in range(3):
-			var b := _block(wood[_rng.randi() % wood.size()], heights[k], 0.38)
+			var b := _block(wood[_rng.randi() % wood.size()], heights[k], GRIP)
+			var loose := _rng.randf() < (0.65 if k == 1 else 0.2)
+			b.set_meta("loose", loose)
+			b.set_meta("slide", _rng.randf_range(0.03, 0.06) if loose else _rng.randf_range(0.14, 0.24))
 			var along_x := layer % 2 == 0
 			var off := (k - 1) * (W + GAP)
 			var pos := Vector3(0 if along_x else off, y + heights[k] * 0.5, off if along_x else 0)
@@ -257,6 +264,7 @@ func set_touchable(list: Array) -> void:
 		moving[o] = true
 	for o in blocks:
 		var on := list.has(o)
+		(o.physics_material_override as PhysicsMaterial).friction = float(o.get_meta("slide", 0.15)) if on else GRIP
 		o.collision_layer = 1 | (2 if on else 0)
 		o.collision_mask = 1 | (4 if on else 0) # and it feels the fingers back
 
@@ -389,7 +397,19 @@ func next_spot(b: RigidBody3D) -> Dictionary:
 	elif not under.is_empty():
 		var ua := block_axis(under[0])
 		axis = Vector3(-ua.z, 0, ua.x)
-	return {"layer": layer, "axis": axis, "top": high, "center": Vector3(center.x, high, center.z)}
+	# the first free place in that layer: the middle, then a side
+	var across := Vector3(-axis.z, 0, axis.x)
+	var used := {}
+	if layer == top:
+		for o in top_blocks:
+			used[clampi(int(round((o.global_position - center).dot(across) / (W + GAP))), -1, 1)] = true
+	var free := 0
+	for k in [0, -1, 1]:
+		if not used.has(k):
+			free = k
+			break
+	var c := Vector3(center.x, high, center.z)
+	return {"layer": layer, "axis": axis, "top": high, "center": c, "start": c + across * (free * (W + GAP))}
 
 
 ## Picks the block up to place by hand: it floats where it's put (touching

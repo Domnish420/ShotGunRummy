@@ -765,7 +765,8 @@ func _hold_block() -> void:
 	tower.lift(block)
 	state = "place"
 	var axis: Vector3 = _spot["axis"]
-	var above: Vector3 = _spot["center"] + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.05, 0)
+	# it starts over the first free place in the top layer
+	var above: Vector3 = _spot["start"] + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.05, 0)
 	_turn_yaw = atan2(-axis.z, axis.x)
 	block.global_position = above
 	block.global_basis = Basis(Vector3.UP, _turn_yaw)
