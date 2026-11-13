@@ -6,6 +6,7 @@ extends Node3D
 ##   two    two fingers: a wider, firmer push
 ##   pinch  thumb and finger: grips the end that sticks out and pulls
 ##   flat   flat hand on its edge: sweeps a whole layer out sideways
+##   carry  an overhand grab from above: holds a block you've picked up
 ##
 ## What touches the blocks is `tip`, a small physics body pulled toward
 ## `target` by a spring with a limited strength: a loose block slides, a
@@ -105,7 +106,7 @@ func show_hand() -> void:
 func _physics_process(delta: float) -> void:
 	if tip == null or not visible:
 		return
-	if tool == "pinch":
+	if tool == "pinch" or tool == "carry":
 		# the pinch doesn't push: the tower holds the block; the hand just goes
 		tip.linear_velocity = (target - tip.global_position) * 20.0
 		return
@@ -204,6 +205,11 @@ func _pose(delta: float = 1.0) -> void:
 		"flat":
 			curl = [0.0, 0.0, 0.0, 0.0]
 			thumb = [0.0, 0.0]
+		"carry":
+			# an overhand grab: the palm over the block, fingers curled down
+			# its far side, the thumb down the near one
+			curl = [0.3, 0.3, 0.3, 0.3]
+			thumb = [1.2, 0.5]
 	var t := minf(1.0, delta * 12.0)
 	for i in range(4):
 		for j in range(3):
@@ -226,6 +232,8 @@ func _place_bones() -> void:
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) # on its edge
 		"pinch":
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) * Basis(Vector3(1, 0, 0), 0.15)
+		"carry":
+			b = b * Basis(Vector3.RIGHT, -0.12) # palm down, flat over the block
 	# put the hand down roughly, then slide it so the working fingertip (as the
 	# bones really are, curled or not) sits exactly on the tip that touches the
 	# blocks: what you see touching is what's touching
@@ -252,4 +260,7 @@ func working_point() -> Vector3:
 			return (_end_of(_fingers[0][2]) + _end_of(_thumb[1])) * 0.5
 		"flat":
 			return (_fingers[3][1].global_position + _fingers[0][1].global_position) * 0.5
+		"carry":
+			# the middle of the palm's underside: it rests on top of the block
+			return _wrist.global_transform * Vector3(0, -0.02, -0.19)
 	return _end_of(_fingers[0][2])

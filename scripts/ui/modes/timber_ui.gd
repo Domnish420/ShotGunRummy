@@ -25,6 +25,7 @@ const TOOL_WORDS := [["poke", "POKE"], ["two", "TWO"], ["pinch", "PINCH"], ["fla
 const FOLLOW := 0.6 # how fast the fingertip can chase your thumb (m/s)
 const THUMB := 0.0006 # metres of push per pixel of thumb: 300 px is a whole block
 const SIDEWAYS := 0.035 # how far off-centre a finger can drift
+const CARRY_CLEAR := 0.06 # a carried block stays this far off the table: room for the fingers under it
 
 var state := "" # choose | work | place | placed | carry | settle | down | bot | ""
 var block: RigidBody3D = null
@@ -841,8 +842,12 @@ func _start_lift() -> void:
 	var axis: Vector3 = tower.block_axis(block)
 	_turn_yaw = atan2(-axis.z, axis.x)
 	block.global_basis = Basis(Vector3.UP, _turn_yaw) # level in your fingers
-	w.hand.set_tool("pinch")
-	w.hand.grip = 1.0
+	# picked up: straight off the table, so the fingers under it clear the top
+	var clear_y: float = tower.TOP_Y + float(block.get_meta("height")) * 0.5 + CARRY_CLEAR
+	if block.global_position.y < clear_y:
+		block.global_position.y = clear_y
+	_lift_from = block.global_position
+	w.hand.set_tool("carry")
 	_show_tools(false)
 	if _top_view != null:
 		_top_view.visible = false # the main view shows the carry
@@ -864,7 +869,7 @@ func _drag_lift(at: Vector2) -> void:
 	var c: Vector3 = _spot["center"]
 	var h := float(block.get_meta("height"))
 	var over: float = float(_spot["top"]) + h * 0.5 + 0.05 # carrying height over the top
-	var y := clampf(_held_at.y - d.y * THUMB * 1.6, w.tower.TOP_Y + h * 0.5, over)
+	var y := clampf(_held_at.y - d.y * THUMB * 1.6, w.tower.TOP_Y + h * 0.5 + CARRY_CLEAR, over)
 	var side := clampf((_held_at - c).dot(right) + d.x * THUMB, -0.4, 0.4)
 	var t := clampf((y - _lift_from.y) / maxf(0.01, over - _lift_from.y), 0.0, 1.0)
 	var pos := c + right * side + away * (_lift_depth * (1.0 - t))
@@ -882,8 +887,7 @@ func _hold_block() -> void:
 	state = "place"
 	if _top_view != null:
 		_top_view.visible = true
-	w.hand.set_tool("pinch")
-	w.hand.grip = 1.0
+	w.hand.set_tool("carry")
 	w.tower_focus = Vector3(_spot["center"].x, _spot["top"], _spot["center"].z)
 	w.tower_rise = 0.32
 	w.tower_dist = 0.75
@@ -907,19 +911,23 @@ func _drag_held(at: Vector2) -> void:
 	block.global_position = Vector3(c.x + off.x, block.global_position.y, c.z + off.z)
 
 
-## The hand holds the block by its end while you place it.
+## The hand holds the block from above (an overhand grab, clear of the
+## table) while you carry and place it.
 func _hold_hand() -> void:
 	if block == null or not is_instance_valid(block):
 		return
 	var hand = main.world.hand
 	var tower = main.world.tower
 	var axis: Vector3 = tower.block_axis(block)
-	var cam: Vector3 = main.world.camera.global_position
-	var side := 1.0 if axis.dot(cam - block.global_position) > 0.0 else -1.0
-	var grip: Vector3 = block.global_position + axis * side * (tower.L * 0.5 - 0.01)
-	hand.show_hand()
-	hand.grip = 1.0
-	hand.jump_to(grip, -axis * side)
+	var across := Vector3(-axis.z, 0, axis.x)
+	# reaching over it from your side
+	if across.dot(block.global_position - main.world.camera.global_position) < 0.0:
+		across = -across
+	var top: Vector3 = block.global_position + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.004, 0)
+	if hand.tool != "carry" or not hand.visible:
+		hand.set_tool("carry")
+		hand.show_hand()
+	hand.jump_to(top, across)
 	# the mark where it'll come down
 	var mark: MeshInstance3D = main.world.landing
 	mark.global_transform = Transform3D(block.global_basis, Vector3(block.global_position.x, tower.rest_height(block) + 0.003, block.global_position.z))
