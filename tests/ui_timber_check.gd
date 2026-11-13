@@ -77,6 +77,7 @@ func _play() -> void:
 	var vs: Vector2 = main.get_viewport_rect().size
 	var tried := {}
 	var push_frames := 0
+	var lift_y := 0.0
 	var top_at := Vector3.ZERO
 	var thumb_y := 0.0
 	for step in range(600000):
@@ -121,9 +122,24 @@ func _play() -> void:
 			thumb_y = vs.y * 0.75
 			top_at = main.world.tower.blocks[-1].global_position
 			ui._press(Vector2(vs.x * 0.5, thumb_y))
+		elif ui.state == "pickup" and ui._my_turn():
+			if step % 20 == 0:
+				ui._pick_up()
+				lift_y = vs.y * 0.8
+				ui._press(Vector2(vs.x * 0.5, lift_y))
+		elif ui.state == "lift" and ui._my_turn():
+			lift_y -= 6.0 # carry it up
+			if lift_y < 20.0:
+				ui._release(Vector2(vs.x * 0.5, lift_y))
+				lift_y = vs.y * 0.8
+				ui._press(Vector2(vs.x * 0.5, lift_y))
+			ui._drag(Vector2(vs.x * 0.5, lift_y))
 		elif ui.state == "place" and ui._my_turn():
 			# it's out: slide it a touch, turn it twice (back the same way), set it down
 			if step % 30 == 0:
+				# slide it over the free place first, like you would
+				var spot: Vector3 = ui._spot["start"]
+				ui.block.global_position = Vector3(spot.x, ui.block.global_position.y, spot.z)
 				ui._set_it_down()
 		elif ui.state == "placed" and ui._my_turn():
 			if step % 30 == 0:
@@ -137,7 +153,7 @@ func _play() -> void:
 				print("    f%d target %s tip %s blk %s strain %.3f top %s" % [push_frames, main.world.hand.target, main.world.hand.tip.global_position, ui.block.global_position, strain, main.world.tower.blocks[-1].global_position])
 			# watching the tower: if the top moves, or it won't go, back off
 			var sway: float = main.world.tower.blocks[-1].global_position.distance_to(top_at)
-			if push_frames > 20 and (strain > 0.015 or sway > 0.008) or push_frames > 400:
+			if push_frames > 20 and (strain > 0.015 or sway > 0.008) or push_frames > 900:
 				# it won't go: let go and try another
 				ui._release(Vector2(vs.x * 0.5, thumb_y))
 				ui._let_go_block()

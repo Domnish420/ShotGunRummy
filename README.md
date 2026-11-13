@@ -578,8 +578,9 @@ and you're out; last one standing wins.
 - **One finger moves the hand**, level with that block, as you see it: drag up
   the screen to push away from you, sideways to move across. It follows on a
   spring with a limited push, so a steady finger is a steady push and a
-  twitchy one shoves. Push it out the far side (or pull it out) and it comes
-  up in your hand: drag it over the top of the tower, **TURN** it if you like,
+  twitchy one shoves. Push it right out the far side and it drops onto the
+  table. Nobody catches it for you: tap it to pick it up, drag up the screen
+  to carry it to the top of the tower, slide it into place, **TURN** it if you like,
   **SET IT DOWN** (a gold mark shows where it'll land), then **DONE**. ✕ lets go of a block to try another.
 - **Two fingers move the camera**: drag to walk round the tower and look up and
   down it, pinch to come closer or back off (right-drag and the scroll wheel

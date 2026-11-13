@@ -14,8 +14,9 @@ extends "res://scripts/ui/modes/table_mode.gd"
 ## Tools: POKE, TWO (firmer), PINCH (grips the end that sticks out: hold and
 ## drag back; yank and it slips) and SWIPE (the flat hand: drag it across the
 ## layer yourself; let go and whatever's out of that layer is out of the
-## game). Push or pull a block clear and it's in your hand: drag it over the
-## top, TURN, SET IT DOWN (a mark shows where), DONE. Bring the tower down
+## game). Push a block right out and it drops onto the table: tap it to pick
+## it up, drag up to carry it to the top, slide it into place, TURN, SET IT
+## DOWN (a mark shows where), DONE. Bring the tower down
 ## and the player on your right shoots you.
 
 const Driver = preload("res://scripts/three/timber_driver.gd")
@@ -182,7 +183,7 @@ func refresh() -> void:
 	main.status_label.add_theme_color_override("font_color", Palette.PINK if main.message != "" else Palette.AMBER)
 	main.status_label.text = main.message.to_upper() if main.message != "" else status()
 	main.go_out_label.visible = false
-	_orbit.visible = g.phase == "play" and state in ["choose", "work", "bot", "settle", "place", "placed"]
+	_orbit.visible = g.phase == "play" and state in ["choose", "work", "bot", "settle", "pickup", "lift", "place", "placed"]
 
 
 func status() -> String:
@@ -203,6 +204,10 @@ func status() -> String:
 				"flat":
 					return "DRAG THE FLAT HAND ACROSS THE LAYER · TWO FINGERS: CAMERA"
 			return "DRAG TO PUSH · TWO FINGERS: CAMERA"
+		"pickup":
+			return "IT'S OUT: TAP THE BLOCK TO PICK IT UP"
+		"lift":
+			return "DRAG UP: CARRY IT TO THE TOP OF THE TOWER"
 		"place":
 			return "DRAG IT OVER THE TOP · TURN · SET IT DOWN"
 		"placed":
@@ -244,6 +249,9 @@ func _tick() -> void:
 		_drive_hand(delta)
 	elif state == "place":
 		_hold_hand()
+	elif state == "lift":
+		_hold_hand()
+		w.tower_focus = w.tower_focus.lerp(Vector3(_spot["center"].x, block.global_position.y, _spot["center"].z), minf(1.0, delta * 4.0))
 	elif state == "bot" and _driver != null and _driver.block != null and is_instance_valid(_driver.block):
 		block = _driver.block
 		if not _cam_manual:
@@ -492,7 +500,7 @@ func _press(at: Vector2) -> void:
 	_dragging = true
 	_moved = 0.0
 	_down_at = at
-	if state == "place":
+	if state in ["place", "lift"]:
 		_held_at = block.global_position
 	if state == "work":
 		var hand = main.world.hand
@@ -506,8 +514,12 @@ func _press(at: Vector2) -> void:
 ## the screen is away from you, sideways is sideways.
 func _drag(at: Vector2) -> void:
 	_moved = maxf(_moved, at.distance_to(_down_at))
+	_last_at = at
 	if state == "place":
 		_drag_held(at)
+		return
+	if state == "lift":
+		_drag_lift(at)
 		return
 	if state != "work":
 		return
@@ -542,7 +554,15 @@ func _drag(at: Vector2) -> void:
 func _release(at: Vector2) -> void:
 	_dragging = false
 	var hand = main.world.hand
-	if state in ["place", "placed"]:
+	if state in ["place", "placed", "lift"]:
+		return
+	if state == "pickup":
+		# a tap on (or near) the block on the table: you pick it up
+		if _moved < 12.0:
+			var cam: Camera3D = main.world.camera
+			var on_screen: Vector2 = cam.unproject_position(block.global_position) * main.view_rect.size / Vector2(main.view3d.size)
+			if on_screen.distance_to(at) < 120.0 or main.world.pick_block(_view(at)) == block:
+				_pick_up()
 		return
 	if state == "choose" or (state == "work" and _moved < 12.0 and hand.tool != "pinch"):
 		# a tap: pick (or switch) a block
@@ -714,8 +734,23 @@ func _drive_hand(delta: float) -> void:
 				main._sound("tick")
 			Input.vibrate_handheld(int(15 + 25 * strain))
 	_slide_sound(delta)
-	if hand.tool != "flat" and tower.is_out(block):
-		_hold_block()
+	if hand.tool == "flat":
+		return
+	var p: Vector3 = block.global_position
+	var away: Vector3 = p - tower.tower_center()
+	away.y = 0.0
+	if hand.tool == "pinch" and hand.grip > 0.0 and tower._held == block and away.length() > tower.L * 1.02:
+		# pulled right out and still in your fingers: it's in your hand
+		_spot = tower.next_spot(block)
+		_start_lift()
+	elif p.y < tower.TOP_Y - 0.15:
+		# it went off the table: back onto it, beside the tower
+		block.global_position = tower.tower_center() + _axis * 0.3 + Vector3(0, tower.H, 0)
+		block.linear_velocity = Vector3.ZERO
+		block.angular_velocity = Vector3.ZERO
+	elif away.length() > tower.L * 0.6 and p.y < _y - tower.H * 0.6 and block.linear_velocity.length() < 0.2:
+		# pushed right out, and it's dropped onto the table
+		_dropped()
 
 
 ## Wood on wood, while the block's sliding.
@@ -755,28 +790,104 @@ var _held_at := Vector3.ZERO # where the held block was when this drag started
 var _spot := {} # tower3d.next_spot()
 
 
-## It's out: it stays in your hand, up over the top of the tower. Drag it into
-## place, TURN it if you like, and SET IT DOWN.
-func _hold_block() -> void:
+var _last_at := Vector2.ZERO # where your finger is
+var _lift_from := Vector3.ZERO # where the block was picked up
+var _lift_depth := 0.0 # how far in front of (or behind) the tower it was, from where you stand
+
+
+## The block's dropped onto the table. Nobody catches it for you: tap it to
+## pick it up, then carry it to the top yourself.
+func _dropped() -> void:
+	var w = main.world
+	w.hand.park()
+	w.show_strain(false)
+	_dragging = false
+	state = "pickup"
+	_spot = w.tower.next_spot(block)
+	_show_tools(false)
+	if _top_view != null:
+		_top_view.visible = false
+	# step back so the block on the table and the top of the tower both show
+	# and round to the side it fell on, so it's in front of you
+	var to_block: Vector3 = block.global_position - _spot["center"]
+	w.tower_yaw = atan2(to_block.x, to_block.z) + 0.45
+	w.tower_focus = Vector3(_spot["center"].x, _spot["top"] * 0.5, _spot["center"].z)
+	w.tower_dist = 1.0
+	w.tower_rise = 0.3
+	main._sound("knock")
+	main._refresh()
+
+
+func _pick_up() -> void:
+	if state != "pickup":
+		return
+	_start_lift()
+	main._sound("tap")
+
+
+## The block's in your hand: drag up the screen to carry it up the tower
+## (sideways to move it across). Over the top, you place it.
+func _start_lift() -> void:
 	var w = main.world
 	var tower = w.tower
 	w.show_strain(false)
-	_spot = tower.next_spot(block)
 	tower.lift(block)
-	state = "place"
-	var axis: Vector3 = _spot["axis"]
-	# it starts over the first free place in the top layer
-	var above: Vector3 = _spot["start"] + Vector3(0, float(block.get_meta("height")) * 0.5 + 0.05, 0)
+	state = "lift"
+	_dragging = false
+	_lift_from = block.global_position
+	var away: Vector3 = -w.camera.global_basis.z
+	away.y = 0.0
+	_lift_depth = (block.global_position - _spot["center"]).dot(away.normalized())
+	var axis: Vector3 = tower.block_axis(block)
 	_turn_yaw = atan2(-axis.z, axis.x)
-	block.global_position = above
-	block.global_basis = Basis(Vector3.UP, _turn_yaw)
+	block.global_basis = Basis(Vector3.UP, _turn_yaw) # level in your fingers
+	w.hand.set_tool("pinch")
+	w.hand.grip = 1.0
+	_show_tools(false)
+	if _top_view != null:
+		_top_view.visible = false # the main view shows the carry
+	main._refresh()
+
+
+## Carrying: up the screen is up, sideways is sideways. It comes in over the
+## tower as it rises; once it's above the top, you're placing it.
+func _drag_lift(at: Vector2) -> void:
+	var w = main.world
+	var d := at - _down_at
+	var cam: Camera3D = w.camera
+	var right: Vector3 = cam.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var away: Vector3 = -cam.global_basis.z
+	away.y = 0.0
+	away = away.normalized()
+	var c: Vector3 = _spot["center"]
+	var h := float(block.get_meta("height"))
+	var over: float = float(_spot["top"]) + h * 0.5 + 0.05 # carrying height over the top
+	var y := clampf(_held_at.y - d.y * THUMB * 1.6, w.tower.TOP_Y + h * 0.5, over)
+	var side := clampf((_held_at - c).dot(right) + d.x * THUMB, -0.4, 0.4)
+	var t := clampf((y - _lift_from.y) / maxf(0.01, over - _lift_from.y), 0.0, 1.0)
+	var pos := c + right * side + away * (_lift_depth * (1.0 - t))
+	block.global_position = Vector3(pos.x, y, pos.z)
+	if y >= over - 0.001 and Vector3(pos.x - c.x, 0, pos.z - c.z).length() < 0.14:
+		_hold_block()
+		_held_at = block.global_position
+		_down_at = at
+
+
+## It's over the top of the tower: slide it into place, TURN it if you
+## like, and SET IT DOWN.
+func _hold_block() -> void:
+	var w = main.world
+	state = "place"
+	if _top_view != null:
+		_top_view.visible = true
 	w.hand.set_tool("pinch")
 	w.hand.grip = 1.0
 	w.tower_focus = Vector3(_spot["center"].x, _spot["top"], _spot["center"].z)
 	w.tower_rise = 0.32
 	w.tower_dist = 0.75
 	_show_tools(true)
-	main._sound("slap")
 	main._refresh()
 
 
@@ -905,8 +1016,8 @@ func show_result(box: VBoxContainer) -> void:
 func rules() -> Array:
 	return [
 		"THE TOWER. 18 layers of 3 wooden blocks. Some are loose and slide right out; some carry the weight and drag the tower with them.",
-		"YOUR TURN. Tap a block (not the bottom layer, the top layer, nor the one under it while the top's unfinished). ONE finger drives the hand, level with the block: drag up the screen to push away from you, sideways to move across. Push it out the other side, or pull it out, and it's in your hand.",
-		"PLACE IT. Drag it over the top of the tower, TURN it if you like, SET IT DOWN, then DONE. Knock the tower doing it and it's still on you.",
+		"YOUR TURN. Tap a block (not the bottom layer, the top layer, nor the one under it while the top's unfinished). ONE finger drives the hand, level with the block: drag up the screen to push away from you, sideways to move across. Push it right out the other side and it drops onto the table.",
+		"PICK IT UP. Nobody catches it for you: tap the block on the table to pick it up, then drag up the screen to carry it to the top of the tower. Over the top, slide it into place, TURN it if you like, SET IT DOWN, then DONE. Knock the tower doing it and it's still on you.",
 		"THE CAMERA. TWO fingers: drag to walk round the tower and look up and down it, pinch to come closer or back off. ◀ ▶ step round a quarter at a time. The round window is a camera over the hand's shoulder.",
 		"FEEL IT. A faint ghost shows where your finger wants the hand. The line from it to the real finger goes red, the hand shakes and the phone buzzes when the block fights back.",
 		"THE HAND. POKE (one finger), TWO (firmer), PINCH (grips the end that sticks out: hold and drag back; yank too hard and it slips) and SWIPE (the flat hand: drag it across the layer yourself; let go and whatever's out of that layer is gone for good. It thins the tower for everyone after you, if it stands).",
