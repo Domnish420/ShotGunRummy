@@ -1,0 +1,5491 @@
+extends Control
+## Shotgun Party UI (phone first): the room, the table and every game.
+##
+## Screens are built in code: main menu -> lobby (same Wi-Fi) or pass-and-play
+## setup -> table, with overlays on top for "pass the phone", item reveals,
+## round results, the shotgun, rules and the log.
+##
+## In pass-and-play the table shows whoever's turn it is (AI players play
+## themselves while it waits for the next person). Online, each phone
+## shows its own seat and actions go to the host's game (see session.gd).
+
+const Game = preload("res://scripts/core/game.gd")
+const Cards = preload("res://scripts/core/cards.gd")
+const Items = preload("res://scripts/core/items.gd")
+const Palette = preload("res://scripts/ui/palette.gd")
+const CardView = preload("res://scripts/ui/card_view.gd")
+const World3DScene = preload("res://scripts/three/world3d.gd")
+const Session = preload("res://scripts/net/session.gd")
+const Looks = preload("res://scripts/core/looks.gd")
+const Bot = preload("res://scripts/core/bot.gd")
+const Blackjack = preload("res://scripts/core/blackjack.gd")
+const BlackjackBot = preload("res://scripts/core/blackjack_bot.gd")
+
+const Games = preload("res://scripts/core/games.gd")
+const Chiptune = preload("res://scripts/audio/chiptune.gd")
+const DemoLessons = preload("res://scripts/ui/demo_lessons.gd")
+const GoFishUI = preload("res://scripts/ui/modes/gofish_ui.gd")
+const CheatUI = preload("res://scripts/ui/modes/cheat_ui.gd")
+const TricksUI = preload("res://scripts/ui/modes/tricks_ui.gd")
+const SnapUI = preload("res://scripts/ui/modes/snap_ui.gd")
+const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
+const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
+const Crazy8UI = preload("res://scripts/ui/modes/crazy8_ui.gd")
+const DartsUI = preload("res://scripts/ui/modes/darts_ui.gd")
+const TimberUI = preload("res://scripts/ui/modes/timber_ui.gd")
+const DartsT = preload("res://scripts/core/darts.gd")
+const SnapBot = preload("res://scripts/core/snap_bot.gd")
+const Unlocks = preload("res://scripts/core/unlocks.gd")
+const CardSkins = preload("res://scripts/ui/card_skins.gd")
+const CardArt = preload("res://scripts/ui/card_art.gd")
+const Gacha = preload("res://scripts/core/gacha.gd")
+const GunSkins = preload("res://scripts/core/gun_skins.gd")
+
+const SETTINGS_PATH := "user://settings.cfg"
+const MIN_PLAYERS := 2
+const MAX_PLAYERS := 6
+
+var game: Game
+var world: World3DScene
+var view3d: SubViewport
+var view_rect: TextureRect
+var graphics := "PS3"
+var session: Session
+var profile_name := ""
+var my_look: Dictionary = {} # your character, from the customiser
+var setup_looks: Array = [] # pass & play: each player's character
+var setup_bots: Array = [] # pass & play: "" for a person, or an AI's level
+var _editing: Dictionary = {} # the look being made in the creator
+var _editing_index := -1 # which of your characters it is (-1: a new one)
+var _picked: Dictionary = {} # highlighted on the character select screen
+var custom_looks: Array = [] # characters you've made
+var player_names: Array = ["PLAYER 1", "PLAYER 2"]
+var hide_hands := true
+var game_kind := "rummy" # which cartridge: see games.gd
+var normal_mode := false # the plain game: no items, no shotgun
+var tutorial := false # this game is the demo (watching it, or the practice)
+var demo_stage := "" # "watch": it plays itself and explains; "practice": your go
+const DEMO_ROUNDS := 3 # practice rounds after watching
+var _lessons: Array = [] # [trigger, text, done] for this demo
+var _lesson_queue: Array = [] # { text, then } waiting to be shown
+var _lesson_panel: PanelContainer
+var _lesson_text: Label
+var _lesson_time := 0.0 # seconds left on the card showing
+var _lesson_then := Callable()
+var _demo_wait := 0.0
+var played := {} # kind -> shotgun matches finished (normal mode unlocks)
+var stats := {} # your stats, for unlocks (see unlocks.gd)
+var tried_kinds := {} # kind -> true: cartridges you've finished a match of
+var card_skin := "classic" # how your cards look (see card_skins.gd)
+var gun_skin := "standard" # how the shotgun looks in your hands (see gun_skins.gd)
+var owned := {} # gacha prizes you've won (see gacha.gd), and codes found (secrets.gd)
+var eggs_on := {} # easter egg -> on/off (only eggs you've found count)
+# the SETTINGS menu (see _build_settings)
+var master_vol := 8 # 0..10
+var sfx_vol := 8
+var music_vol := 7
+var jingles_on := true # the little tune on each cartridge
+var screen_shake := true
+var flashes := true # the screen flashing white/red on shots
+var fullscreen := false
+var ai_speed := "NORMAL" # SLOW, NORMAL, FAST
+var auto_next := true # deal the next round by itself after the gun
+var table_zoom := true # pinch / mouse wheel zoom at the table
+var coins := 0 # gacha coins: one for every round you win, a bonus for the match
+var _last_shooter := -1 # who fired the last shell, for knockouts
+var tutorial_offered := false
+var mode_ui = null # the table screen for games that have their own (scripts/ui/modes)
+var coach_label: Label
+var _sfx: Dictionary = {} # name -> AudioStream
+var _sfx_players: Array = []
+var _jingle_player: AudioStreamPlayer
+var sound_on := true
+var music_on := true
+var _music_player: AudioStreamPlayer
+var _music_id := "" # which track is playing (room, or a game's own)
+const MUSIC_DB := -11.0
+const MUSIC_GAP := 1.5 # seconds between the end of a song and its start
+var solo_opponents := 3 # vs AI: how many AIs
+var solo_level := "normal" # vs AI: easy | normal | hard | mixed
+var local_mode := "pass" # the last game on this phone: "solo" (vs AI) or "pass"
+var _table: Dictionary = {} # that game's players: names, looks, bots
+var menu_message := ""
+var _pending_cb := Callable() # waiting on the host to answer this phone's action
+var _overlay_kind := ""
+var _last_shot_text := ""
+var _hand_hidden := false # pass-and-play: your cards stay face down until you take the phone
+var _waiting_for_deal := false
+var _drawing_again := false # Double Down: first of the two cards is drawn
+var _viewer := 0 # pass-and-play: the person holding the phone (AIs don't)
+var _ai_wait := 0.0 # seconds until the AI's next move
+var _ai_memory := {} # seat -> what that AI remembers this turn
+var _ai_phase := ""
+var _ai_held: Array = [] # an AI move held back while its aim plays out (darts)
+var darts_mode := "shootout" # which darts game: shootout, clock or 301
+var _card_kind := "rummy" # the last cartridge, for coming back from the party room
+var _ip_edit: LineEdit
+var _name_edit: LineEdit
+
+var selected: Array = [] # playing card ids
+var selected_item := ""
+var lit_card := "" # the card just drawn, glows in your hand
+var sort_by_rank := false
+var hints := true
+var message := ""
+var log_lines: Array = []
+var seen_upto := {} # seat -> how many log lines that player has seen
+var turn_counter := 0
+var shown_turn := -1
+var shown_result_round := 0
+
+# layers
+var screen: Control
+var overlay_layer: Control
+var flash_rect: ColorRect
+
+# table widgets
+var hud: Control
+var round_label: Label
+var go_out_label: Label
+var me_name: Label
+var me_hp: HBoxContainer
+var deadwood_label: Label
+var status_label: Label
+var meld_btn: Button
+var use_btn: Button
+var discard_btn: Button
+var sort_btn: Button
+
+
+## Plays a little sound: "tick", "swish", "clunk", "select" or
+## "jingle:<cartridge>".
+## The gacha machine's own sounds, a bit louder than the rest.
+const SFX_BOOST := {"roll_common": 3.0, "roll_rare": 3.0, "roll_epic": 3.0, "roll_legendary": 3.0, "coin_in": 5.0, "crank": 4.0, "rattle": 4.0, "capsule_drop": 6.0, "capsule_land": 6.0, "capsule_settle": 5.0, "capsule_wobble": 5.0, "capsule_pop": 5.0}
+
+
+func _sound(name_: String) -> void:
+	if not sound_on:
+		return
+	if not _sfx.has(name_):
+		if name_.begins_with("jingle:"):
+			_sfx[name_] = Chiptune.jingle(name_.trim_prefix("jingle:"))
+		else:
+			var made := _make_sound(name_)
+			if made != null:
+				_sfx[name_] = made
+	var stream: AudioStream = _sfx.get(name_, null)
+	if stream == null:
+		return
+	if name_.begins_with("jingle:"):
+		if not jingles_on:
+			return
+		if _jingle_player == null:
+			_jingle_player = AudioStreamPlayer.new()
+			_jingle_player.volume_db = -18.0 # a quarter of the loudness: a little jingle under the music
+			add_child(_jingle_player)
+		_jingle_player.volume_db = -18.0 + _vol_db(sfx_vol)
+		_jingle_player.stream = stream # a new tune cuts off the last one
+		_jingle_player.play()
+		return
+	var boost: float = SFX_BOOST.get(name_, 0.0)
+	for pl in _sfx_players:
+		if not pl.playing:
+			pl.stream = stream
+			pl.volume_db = -4.0 + boost + _vol_db(sfx_vol)
+			pl.play()
+			return
+	if _sfx_players.size() < 6:
+		var pl := AudioStreamPlayer.new()
+		pl.volume_db = -4.0 + boost + _vol_db(sfx_vol)
+		add_child(pl)
+		_sfx_players.append(pl)
+		pl.stream = stream
+		pl.play()
+
+
+func _ready() -> void:
+	theme = Palette.make_theme()
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_load_settings()
+	_apply_eggs.call_deferred() # once the room's built
+
+	# the 3D table renders small, then is scaled up with crisp pixels and the
+	# gritty post-processing shader
+	view3d = SubViewport.new()
+	view3d.own_world_3d = true
+	view3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	view3d.msaa_3d = Viewport.MSAA_DISABLED
+	add_child(view3d)
+	view_rect = TextureRect.new()
+	view_rect.texture = view3d.get_texture()
+	view_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	view_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	view_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	view_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var post := ShaderMaterial.new()
+	post.shader = load("res://shaders/post.gdshader")
+	view_rect.material = post
+	add_child(_full(view_rect))
+	_fit_view()
+	world = World3DScene.new()
+	view3d.add_child(world)
+	world.deal_finished.connect(_on_deal_finished)
+	world.sfx.connect(_sound)
+
+	screen = _full(Control.new())
+	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(screen)
+
+	overlay_layer = _full(Control.new())
+	overlay_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay_layer)
+
+	# the in-game settings float over everything and never stop the game
+	settings_layer = _full(Control.new())
+	settings_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(settings_layer)
+
+	_build_lesson_panel()
+
+	flash_rect = ColorRect.new()
+	flash_rect.color = Color(1, 1, 1, 0)
+	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_full(flash_rect))
+
+	session = Session.new()
+	session.name = "Session"
+	add_child(session)
+	session.roster_changed.connect(_on_roster_changed)
+	session.lobbies_changed.connect(_on_lobbies_changed)
+	session.match_started.connect(_on_online_match_started)
+	session.updated.connect(_on_net_update)
+	session.ended.connect(_on_session_ended)
+
+	get_tree().root.size_changed.connect(_fit_window)
+	_fit_window()
+	show_menu()
+
+
+func _make_sound(name_: String) -> AudioStream:
+	return Chiptune.make(name_)
+
+
+func _toggle_sound() -> void:
+	sound_on = not sound_on
+	_save_settings()
+	if sound_on:
+		_sound("select")
+	else:
+		if _jingle_player != null:
+			_jingle_player.stop()
+	_play_music(_music_id, true)
+
+
+## A song's finished: a short pause, then the same one again (unless the
+## music's been turned off or changed meanwhile).
+func _on_music_finished() -> void:
+	var id := _music_id
+	await get_tree().create_timer(MUSIC_GAP).timeout
+	if id == _music_id and sound_on and music_on and _music_player != null and not _music_player.playing:
+		_music_player.volume_db = _music_db()
+		_music_player.play()
+
+
+## Which file to play for `id`. Real recordings dropped into music/ (named
+## room.ogg, poker.mp3, snap.wav...) come first; a game without its own uses
+## the room's recording; only with no recordings at all does it fall back to
+## the tracks made in code (music/<id>.res, from tools/make_music.gd).
+const MUSIC_EXTS := ["ogg", "mp3", "wav"]
+
+
+func _music_path(id: String) -> String:
+	for name_ in [id, "room"]:
+		for ext in MUSIC_EXTS:
+			var p := "res://music/%s.%s" % [name_, ext]
+			if ResourceLoader.exists(p):
+				return p
+	for name_ in [id, "room"]:
+		var made := "res://music/%s.res" % name_
+		if ResourceLoader.exists(made):
+			return made
+	return ""
+
+
+## Let go of the music on the way out, so nothing's left playing.
+func _exit_tree() -> void:
+	if _music_player != null:
+		_music_player.stop()
+		_music_player.stream = null
+
+
+func _toggle_music() -> void:
+	music_on = not music_on
+	_save_settings()
+	_play_music(_music_id, true)
+
+
+# ================================================================ music
+
+## The saloon music (scripts/audio/saloon.gd, made by tools/make_music.gd):
+## the room has its tune, every game its own twist on it. Changing track
+## fades one out and the next in.
+func _play_music(id: String, force: bool = false) -> void:
+	if id == "":
+		id = "room"
+	if _music_player == null:
+		_music_player = AudioStreamPlayer.new()
+		_music_player.volume_db = _music_db()
+		add_child(_music_player)
+		_music_player.finished.connect(_on_music_finished)
+	if not (sound_on and music_on):
+		_music_player.stop()
+		_music_id = id
+		return
+	if id == _music_id and _music_player.playing and not force:
+		return
+	var path := _music_path(id)
+	if path == "":
+		return
+	var next: AudioStream = load(path)
+	# recordings are whole songs that fade out at the end: they play through,
+	# take a breath, and start again (see _on_music_finished). The tracks
+	# made in code loop seamlessly by themselves.
+	if "loop" in next:
+		next.set("loop", false)
+	if _music_player.playing and _music_player.stream == next:
+		_music_id = id
+		return
+	_music_id = id
+	var t := create_tween()
+	if _music_player.playing:
+		t.tween_property(_music_player, "volume_db", -40.0, 0.5)
+	t.tween_callback(func() -> void:
+		_music_player.stream = next
+		_music_player.volume_db = -40.0
+		_music_player.play())
+	t.tween_property(_music_player, "volume_db", _music_db(), 0.8)
+
+
+## How sharp the 3D is: a share of the screen's resolution.
+const GRAPHICS := {"PS2": 0.42, "PS3": 0.6, "SHARP": 1.0}
+
+
+func _fit_view() -> void:
+	var s := get_viewport_rect().size
+	var scale: float = GRAPHICS.get(graphics, 0.6)
+	view3d.size = Vector2i(maxi(64, int(s.x * scale)), maxi(64, int(s.y * scale)))
+	var post := view_rect.material as ShaderMaterial
+	# full-resolution play needs less grit to look right
+	post.set_shader_parameter("dither", 0.0 if graphics == "SHARP" else 1.0)
+	post.set_shader_parameter("levels", 64.0 if graphics == "SHARP" else 28.0)
+
+
+## A point on screen, in the 3D view's (smaller) pixels.
+func _to_view(screen_pos: Vector2) -> Vector2:
+	return screen_pos * Vector2(view3d.size) / view_rect.size
+
+
+func _cycle_graphics() -> void:
+	var order := GRAPHICS.keys()
+	graphics = order[(order.find(graphics) + 1) % order.size()]
+	_save_settings()
+	_fit_view()
+	if game == null:
+		show_menu()
+	else:
+		_show_menu()
+
+
+## Phones in portrait lay out at 720x1280; wide screens (PC, a phone on its
+## side) at 1280x720 so buttons and text stay a sensible size.
+func _fit_window() -> void:
+	var win := get_tree().root
+	var s := win.size
+	var want := Vector2i(1280, 720) if s.x > s.y else Vector2i(720, 1280)
+	if win.content_scale_size != want:
+		win.content_scale_size = want
+	if view3d != null:
+		_fit_view.call_deferred()
+
+
+# ================================================================ helpers
+
+func _full(c: Control) -> Control:
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	return c
+
+
+func _label(text: String, font_size: int = 30, color: Color = Palette.INK, center: bool = false) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if center:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return l
+
+
+## A single-line label for use inside rows.
+func _tag(text: String, font_size: int = 30, color: Color = Palette.INK) -> Label:
+	var l := _label(text, font_size, color)
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	return l
+
+
+func _button(text: String, on_press: Callable, font_size: int = 30) -> Button:
+	var b := _plain_button(text, on_press, font_size)
+	b.pressed.connect(_sound.bind("tick"))
+	return b
+
+
+## A soft blip for each key typed into a name box.
+func _typing_sounds(edit: LineEdit) -> void:
+	edit.text_changed.connect(func(_t: String) -> void: _sound("type"))
+	edit.text_submitted.connect(func(_t: String) -> void: _sound("select"))
+
+
+## Every button is a bubble word: big outlined letters that bob, no box.
+func _plain_button(text: String, on_press: Callable, font_size: int = 30) -> Button:
+	var b := BubbleWord.new()
+	b.setup(text, on_press, Palette.INK, int(round(font_size * 1.25)))
+	b.remove_theme_color_override("font_disabled_color") # the theme's dim grey
+	b.add_theme_color_override("font_pressed_color", Palette.AMBER)
+	b.custom_minimum_size = Vector2(0, 64)
+	return b
+
+
+func _clear(node: Node) -> void:
+	for c in node.get_children():
+		node.remove_child(c)
+		c.queue_free()
+
+
+func _hp_bar(p, seg: Vector2 = Vector2(26, 14)) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	if game != null and not game.options.get("shotgun", true):
+		# normal mode: round wins instead of health
+		row.add_child(_tag("WINS %d/%d" % [p.rounds_won, game.options["rounds_to_win"]], int(seg.y * 1.6), Palette.GOLD))
+		return row
+	for i in range(p.max_hp):
+		var s := ColorRect.new()
+		s.custom_minimum_size = seg
+		s.color = Palette.RED if i < p.hp else Palette.HP_EMPTY
+		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(s)
+	return row
+
+
+func _flags(p) -> String:
+	var f := ""
+	if p.cuffed:
+		f += " ⛓️"
+	if p.sawed:
+		f += " 🪚"
+	if p.ultimatum:
+		f += " 🔫"
+	if p.extra_draws > 0:
+		f += " 🎲"
+	return f
+
+
+func _flash(color: Color) -> void:
+	if not flashes:
+		return
+	flash_rect.color = Color(color, 0.9)
+	var t := create_tween()
+	t.tween_property(flash_rect, "color:a", 0.0, 0.45)
+
+
+func _shake() -> void:
+	if not screen_shake:
+		return
+	world.shake()
+	Input.vibrate_handheld(250)
+
+
+func _name(seat: int) -> String:
+	return game.players[seat].name
+
+
+# ================================================================ settings
+
+func _load_settings() -> void:
+	stats = Unlocks.clean_stats({})
+	coins = Gacha.STARTING_COINS
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		# the game used to be called Shotgun Cards, and before that Shotgun
+		# Rummy: on a computer its settings (your characters, coins and
+		# collection) were saved in a folder by that name
+		var found := false
+		for old_name in ["Shotgun Cards", "Shotgun Rummy"]:
+			var old := OS.get_user_data_dir().get_base_dir().path_join(old_name).path_join("settings.cfg")
+			if FileAccess.file_exists(old) and cfg.load(old) == OK:
+				found = true
+				break
+		if not found:
+			return
+	player_names = cfg.get_value("setup", "names", player_names)
+	hide_hands = cfg.get_value("setup", "hide_hands", true)
+	setup_bots = cfg.get_value("setup", "bots", [])
+	game_kind = str(cfg.get_value("setup", "game", "rummy"))
+	if not Games.has(game_kind):
+		game_kind = "rummy"
+	_card_kind = game_kind if Games.LIST.has(game_kind) else "rummy"
+	darts_mode = str(cfg.get_value("setup", "darts_mode", "shootout"))
+	if not DartsT.MODES.has(darts_mode):
+		darts_mode = "shootout"
+	played = cfg.get_value("progress", "played", {})
+	sound_on = cfg.get_value("audio", "on", true)
+	music_on = cfg.get_value("audio", "music", true)
+	tutorial_offered = cfg.get_value("progress", "tutorial_offered", false)
+	normal_mode = cfg.get_value("setup", "normal", false) and _normal_unlocked(game_kind)
+	solo_opponents = clampi(int(cfg.get_value("solo", "opponents", 3)), 1, MAX_PLAYERS - 1)
+	solo_level = str(cfg.get_value("solo", "level", "normal"))
+	profile_name = cfg.get_value("profile", "name", "")
+	graphics = cfg.get_value("video", "graphics", "PS3")
+	master_vol = int(cfg.get_value("audio", "master", 8))
+	sfx_vol = int(cfg.get_value("audio", "sfx", 8))
+	music_vol = int(cfg.get_value("audio", "music_vol", 7))
+	jingles_on = bool(cfg.get_value("audio", "jingles", true))
+	screen_shake = bool(cfg.get_value("video", "shake", true))
+	flashes = bool(cfg.get_value("video", "flashes", true))
+	fullscreen = bool(cfg.get_value("video", "fullscreen", false))
+	ai_speed = str(cfg.get_value("game", "ai_speed", "NORMAL"))
+	auto_next = bool(cfg.get_value("game", "auto_next", true))
+	table_zoom = bool(cfg.get_value("game", "zoom", true))
+	sort_by_rank = bool(cfg.get_value("game", "sort_by_rank", false))
+	hints = bool(cfg.get_value("game", "hints", true))
+	_apply_settings.call_deferred()
+	my_look = Looks.clean(cfg.get_value("profile", "look", Looks.preset(1)))
+	custom_looks = []
+	for c in cfg.get_value("profile", "customs", []):
+		custom_looks.append(Looks.clean(c))
+	stats = Unlocks.clean_stats(cfg.get_value("progress", "stats", {}))
+	tried_kinds = cfg.get_value("progress", "tried", {})
+	eggs_on = cfg.get_value("progress", "eggs_on", {})
+	if cfg.has_section_key("progress", "owned"):
+		owned = cfg.get_value("progress", "owned", {})
+		coins = maxi(0, int(cfg.get_value("progress", "coins", 0)))
+	else:
+		# from before the gacha machine: keep whatever your stats had unlocked
+		owned = Unlocks.legacy_owned(stats)
+		coins = Gacha.STARTING_COINS
+	gun_skin = GunSkins.clean(cfg.get_value("profile", "gun", "standard"))
+	if not Unlocks.is_unlocked("gun", gun_skin, owned):
+		gun_skin = "standard"
+	my_look["gun"] = gun_skin
+	card_skin = CardSkins.clean(cfg.get_value("profile", "cards", "classic"))
+	if not Unlocks.is_unlocked("card", card_skin, owned):
+		card_skin = "classic"
+	CardArt.skin = CardSkins.get_skin(card_skin)
+
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("setup", "names", player_names)
+	cfg.set_value("setup", "hide_hands", hide_hands)
+	cfg.set_value("setup", "bots", setup_bots)
+	cfg.set_value("setup", "game", game_kind)
+	cfg.set_value("setup", "darts_mode", darts_mode)
+	cfg.set_value("setup", "normal", normal_mode)
+	cfg.set_value("progress", "played", played)
+	cfg.set_value("audio", "on", sound_on)
+	cfg.set_value("audio", "music", music_on)
+	cfg.set_value("progress", "tutorial_offered", tutorial_offered)
+	cfg.set_value("solo", "opponents", solo_opponents)
+	cfg.set_value("solo", "level", solo_level)
+	cfg.set_value("profile", "name", profile_name)
+	cfg.set_value("video", "graphics", graphics)
+	cfg.set_value("audio", "master", master_vol)
+	cfg.set_value("audio", "sfx", sfx_vol)
+	cfg.set_value("audio", "music_vol", music_vol)
+	cfg.set_value("audio", "jingles", jingles_on)
+	cfg.set_value("video", "shake", screen_shake)
+	cfg.set_value("video", "flashes", flashes)
+	cfg.set_value("video", "fullscreen", fullscreen)
+	cfg.set_value("game", "ai_speed", ai_speed)
+	cfg.set_value("game", "auto_next", auto_next)
+	cfg.set_value("game", "zoom", table_zoom)
+	cfg.set_value("game", "sort_by_rank", sort_by_rank)
+	cfg.set_value("game", "hints", hints)
+	cfg.set_value("profile", "look", my_look)
+	cfg.set_value("profile", "customs", custom_looks)
+	cfg.set_value("progress", "stats", stats)
+	cfg.set_value("progress", "tried", tried_kinds)
+	cfg.set_value("profile", "cards", card_skin)
+	cfg.set_value("profile", "gun", gun_skin)
+	cfg.set_value("progress", "owned", owned)
+	cfg.set_value("progress", "eggs_on", eggs_on)
+	cfg.set_value("progress", "coins", coins)
+	cfg.save(SETTINGS_PATH)
+
+
+# ================================================================ main menu
+
+## A menu with no card behind it: just the words, floating over the room in
+## big yellow letters with a dark edge, and bubble-word buttons. (These
+## screens used to be printed on a sheet of paper.) Scrolls if it's tall.
+func _paper(width: float = 620.0) -> VBoxContainer:
+	_close_overlay()
+	_clear(screen)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	screen.add_child(_full(sc))
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.custom_minimum_size = get_viewport_rect().size
+	sc.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	box.custom_minimum_size = Vector2(minf(width, get_viewport_rect().size.x - 32.0), 0)
+	center.add_child(box)
+	box.child_entered_tree.connect(_float_text)
+	_hide_signs_soon()
+	return box
+
+
+## The room's signs would show through the words: off until the menu goes.
+func _hide_signs_soon() -> void:
+	await get_tree().process_frame # after whatever brought us here turned them on
+	if world != null and screen.get_child_count() > 0 and screen.get_child(0) is ScrollContainer:
+		world.set_signs(false)
+
+
+const FLOAT_YELLOW := Color(1.0, 0.86, 0.25)
+
+
+## Restyles what goes on a _paper menu: ink-black writing becomes big yellow
+## letters (titles bright red-orange), name boxes get yellow text.
+func _float_text(node: Node) -> void:
+	if node is Label:
+		var l := node as Label
+		var col: Color = l.get_theme_color("font_color")
+		var dark := col.get_luminance() < 0.3
+		if dark:
+			var title := col.r > col.g * 2.0 and col.r > 0.2 # the dark red titles
+			l.add_theme_color_override("font_color", Color(1.0, 0.42, 0.22) if title else (Color(1.0, 0.45, 0.4) if col.r > 0.5 else FLOAT_YELLOW))
+		var fs := l.get_theme_font_size("font_size")
+		var big := mini(fs * 2, 52) if fs < 50 else mini(int(fs * 1.25), 96)
+		if _in_grid(l):
+			big = mini(int(fs * 1.4), 34) # two to a row: room to breathe
+		l.add_theme_font_size_override("font_size", big)
+		l.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		l.add_theme_constant_override("outline_size", 12 if big < 60 else 18)
+	elif node is LineEdit:
+		var e := node as LineEdit
+		e.add_theme_color_override("font_color", FLOAT_YELLOW)
+		e.add_theme_color_override("caret_color", FLOAT_YELLOW)
+		e.add_theme_color_override("font_placeholder_color", Color(1.0, 0.86, 0.25, 0.45))
+		e.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		e.add_theme_constant_override("outline_size", 10)
+		e.add_theme_font_size_override("font_size", maxi(e.get_theme_font_size("font_size"), 36) + 12)
+		var line := Palette.box(Color(0, 0, 0, 0.25), FLOAT_YELLOW, 0, 0, 6)
+		line.border_width_bottom = 3
+		e.add_theme_stylebox_override("normal", line)
+		e.add_theme_stylebox_override("focus", line)
+	elif node is CheckBox:
+		var c := node as CheckBox
+		for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+			c.add_theme_color_override(k, FLOAT_YELLOW)
+		c.add_theme_font_size_override("font_size", 40)
+		c.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		c.add_theme_constant_override("outline_size", 10)
+	elif node is Button:
+		for k in ["normal", "hover", "pressed", "focus", "disabled"]:
+			node.add_theme_stylebox_override(k, StyleBoxEmpty.new()) # no ink blocks
+		# big bubble words; a bit smaller when several share a row
+		var crowded: bool = (node.get_parent() is HBoxContainer and node.get_parent().get_child_count() > 3 and node.text.strip_edges().length() > 2) or _in_grid(node)
+		var fs: int = node.get_theme_font_size("font_size")
+		node.add_theme_font_size_override("font_size", mini(int(fs * (1.15 if crowded else 1.6)), 64))
+	for child in node.get_children():
+		_float_text(child)
+	# things added to it later (a list filled in after it's on screen) too
+	if node is Container and not node.child_entered_tree.is_connected(_float_text):
+		node.child_entered_tree.connect(_float_text)
+
+
+func _in_grid(n: Node) -> bool:
+	var p := n.get_parent()
+	while p != null and p != screen:
+		if p is GridContainer:
+			return true
+		p = p.get_parent()
+	return false
+
+
+func _paper_button(text: String, on_press: Callable, font_size: int = 32) -> Button:
+	return _button(text, on_press, font_size)
+
+
+## The first thing you see: sign your name. After that it's yours (change it
+## from the character screen).
+func show_name_screen() -> void:
+	world.hide_carousel()
+	world.set_menu_mode(true)
+	var box := _paper()
+	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("WHO'S PLAYING?", 34, Palette.CARD_INK, true))
+	if menu_message != "":
+		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
+		menu_message = ""
+	_name_edit = LineEdit.new()
+	_typing_sounds(_name_edit)
+	_name_edit.text = profile_name
+	_name_edit.placeholder_text = "SIGN HERE"
+	_name_edit.max_length = 10
+	_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_edit.add_theme_font_size_override("font_size", 40)
+	_name_edit.text_submitted.connect(func(_t: String) -> void: _confirm_name())
+	box.add_child(_name_edit)
+	box.add_child(_paper_button("THAT'S ME", _confirm_name, 30))
+	_name_edit.grab_focus.call_deferred()
+
+
+func _confirm_name() -> void:
+	var n := _name_edit.text.strip_edges().to_upper().left(10) if _name_edit != null and is_instance_valid(_name_edit) else ""
+	if n == "":
+		menu_message = "Sign your name first."
+		show_name_screen()
+		return
+	_sound("save")
+	profile_name = n
+	if not player_names.is_empty():
+		player_names[0] = n
+	_name_edit = null
+	_save_settings()
+	show_menu()
+
+
+func _change_name() -> void:
+	world.hide_preview()
+	var old := profile_name
+	profile_name = ""
+	show_menu()
+	_name_edit.text = old
+
+
+func show_menu() -> void:
+	_stop_match()
+	if profile_name == "":
+		show_name_screen()
+		return
+	if Games.LIST.has(game_kind):
+		world.set_cartridge(game_kind)
+	_play_music("party" if world.room_id == "party" else "room")
+	_room_hud()
+	if not tutorial_offered:
+		tutorial_offered = true
+		_save_settings()
+		_offer_tutorial()
+
+
+## Ends whatever's being played (or watched) and puts the room back: the game,
+## its table screen, the AIs, the lobby, the demo.
+func _stop_match() -> void:
+	_computer_open = false
+	_hide_settings()
+	_item_pick = {}
+	_item_pick_players = []
+	_hide_pick_bar()
+	if world != null:
+		world._item_pick = {}
+		world.mark_targets([])
+	_humans_out = false
+	session.leave()
+	session.stop_scan()
+	game = null
+	round_label = null
+	if mode_ui != null and mode_ui.has_method("clear"):
+		mode_ui.clear()
+	mode_ui = null
+	tutorial = false
+	demo_stage = ""
+	_lesson_queue = []
+	if _lesson_panel != null:
+		_lesson_panel.visible = false
+	world.hide_carousel()
+	world.set_menu_mode(true)
+
+
+# ================================================================ the room
+
+var _room_press := Vector2.ZERO
+var _room_moved := 0.0
+var _room_down := false
+
+## The room is the menu: drag to look round, tap a station to go to it.
+## Up top, who you are and your coins; at the bottom, how it works.
+func _room_hud() -> void:
+	_close_overlay()
+	_clear(screen)
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_room_input)
+	screen.add_child(_full(touch))
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 30)
+	margin.add_theme_constant_override("margin_bottom", 28)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 6)
+	margin.add_child(col)
+	var title := _label("THE PARTY ROOM" if world.room_id == "party" else "SHOTGUN PARTY", 44, Color(0.75, 0.4, 1.0) if world.room_id == "party" else Color(0.85, 0.15, 0.1), true)
+	var who := _label("%s · %d GACHA COIN%s" % [profile_name, coins, "" if coins == 1 else "S"], 24, Palette.INK, true)
+	var parts: Array = [title, who]
+	if menu_message != "":
+		parts.append(_label(menu_message, 24, Palette.PINK, true))
+		menu_message = ""
+	var gap := Control.new()
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parts.append(gap)
+	parts.append(_label("DRAG TO LOOK AROUND · TAP SOMETHING TO GO TO IT", 20, Palette.DIM, true))
+	for l in parts:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if l is Label:
+			l.add_theme_color_override("font_outline_color", Color.BLACK)
+			l.add_theme_constant_override("outline_size", 8)
+		col.add_child(l)
+
+
+func _on_room_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_room_down = true
+			_room_press = event.position
+			_room_moved = 0.0
+		elif _room_down:
+			_room_down = false
+			if _room_moved < 14.0:
+				_go_station(world.room_pick(_to_view(event.position)))
+	elif event is InputEventMouseMotion:
+		if _room_down:
+			_room_moved += event.relative.length()
+			world.room_look(event.relative)
+		else:
+			var over := world.room_hover(_to_view(event.position))
+			(screen.get_child(0) as Control).mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if over != "" else Control.CURSOR_ARROW
+
+
+## Off to a station.
+func _go_station(id: String) -> void:
+	if id == "":
+		return
+	_sound("select")
+	match id:
+		"table":
+			show_cartridges()
+		"wardrobe":
+			_open_customiser()
+		"bar":
+			show_bar()
+		"gacha":
+			show_gacha()
+		"door":
+			show_door()
+		"computer":
+			show_computer()
+		"party":
+			_walk_to_room("party")
+		"back":
+			_walk_to_room("bar")
+		"darts":
+			show_darts()
+		"boxes":
+			show_board_games()
+
+
+## Through a door to the other room: walk up to it, the screen fades out, the
+## other room's swapped in, and it fades back up.
+func _walk_to_room(id: String) -> void:
+	_clear(screen)
+	world.focus_station("party" if id == "party" else "back")
+	await get_tree().create_timer(0.75).timeout
+	var black := ColorRect.new()
+	black.color = Color(0, 0, 0, 0)
+	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_full(black))
+	var t := black.create_tween()
+	t.tween_property(black, "color:a", 1.0, 0.3)
+	await t.finished
+	world.goto_room(id)
+	world.enter_room()
+	_play_music("party" if id == "party" else "room")
+	_room_hud()
+	var back := black.create_tween()
+	back.tween_property(black, "color:a", 0.0, 0.4)
+	await back.finished
+	black.queue_free()
+
+
+## The dartboard: everything about a game of darts, round the board itself.
+## Above it, which game (and what it pays); on the bull, TAKE AIM!; below
+## it, who's throwing and how good the AIs are. Floating words, no boxes.
+const DARTS_LEVELS := [["easy", "PUB"], ["normal", "LEAGUE"], ["hard", "PRO"], ["mixed", "MIXED"]]
+const DARTS_ABOUT := {
+	"shootout": "3 darts each. Highest score wins.",
+	"clock": "Hit 1 to 20, then the bull. First round wins.",
+	"301": "Count down to exactly 0. Go under and you bust.",
+}
+
+
+func show_darts() -> void:
+	world.focus_station("darts_menu")
+	_close_overlay()
+	_clear(screen)
+	game_kind = "darts"
+	if not _normal_unlocked("darts"):
+		normal_mode = false
+	var cream := Color(0.95, 0.9, 0.75)
+	var dart_red := Color(0.95, 0.25, 0.22)
+	var dart_green := Color(0.35, 0.85, 0.45)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 2)
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 34)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label("SHOTGUN DARTS" if not normal_mode else "DARTS", 50, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 12)
+	col.add_child(title)
+	# the game: three words, the chosen one big
+	var games := HFlowContainer.new()
+	games.alignment = FlowContainer.ALIGNMENT_CENTER
+	games.add_theme_constant_override("h_separation", 26)
+	games.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for m in DartsT.MODES:
+		games.add_child(_bubble(DartsT.MODE_NAMES[m], _set_darts_mode.bind(m), FLOAT_YELLOW if m == darts_mode else Palette.DIM, 40 if m == darts_mode else 30))
+	col.add_child(games)
+	var about := _label(DARTS_ABOUT[darts_mode], 24, cream, true)
+	about.add_theme_color_override("font_outline_color", Color.BLACK)
+	about.add_theme_constant_override("outline_size", 8)
+	col.add_child(about)
+	if not normal_mode:
+		var stakes := "1 SHELL · 2 FOR A BULLSEYE" if darts_mode == "shootout" else "%d SHELLS" % DartsT.STAKES[darts_mode]
+		var st := _label(stakes, 26, dart_red, true)
+		st.add_theme_color_override("font_outline_color", Color.BLACK)
+		st.add_theme_constant_override("outline_size", 8)
+		col.add_child(st)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the board shows through here
+	# who's throwing: big words, a row each, so nothing's cramped
+	var who := HBoxContainer.new()
+	who.alignment = BoxContainer.ALIGNMENT_CENTER
+	who.add_theme_constant_override("separation", 18)
+	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	who.add_child(_bubble("◀", _change_darts_count.bind(-1), cream, 56))
+	var count := _label("YOU + %d AI" % solo_opponents, 44, cream, true)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	count.add_theme_color_override("font_outline_color", Color.BLACK)
+	count.add_theme_constant_override("outline_size", 10)
+	who.add_child(count)
+	who.add_child(_bubble("▶", _change_darts_count.bind(1), cream, 56))
+	col.add_child(who)
+	var levels := HBoxContainer.new()
+	levels.alignment = BoxContainer.ALIGNMENT_CENTER
+	levels.add_theme_constant_override("separation", 26)
+	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for pair in DARTS_LEVELS:
+		levels.add_child(_bubble(pair[1], _set_darts_level.bind(pair[0]), dart_green if solo_level == pair[0] else Palette.DIM, 42 if solo_level == pair[0] else 34))
+	col.add_child(levels)
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 40)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_darts_normal.bind(false), dart_red if not normal_mode else Palette.DIM, 40))
+	var plain := _bubble("NORMAL" if _normal_unlocked("darts") else "NORMAL 🔒%d/%d" % [int(played.get("darts", 0)), Games.UNLOCK_NORMAL_AFTER], _set_darts_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 40)
+	plain.disabled = not _normal_unlocked("darts")
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	var more := HBoxContainer.new()
+	more.alignment = BoxContainer.ALIGNMENT_CENTER
+	more.add_theme_constant_override("separation", 34)
+	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 38))
+	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 38))
+	col.add_child(more)
+	var last := HBoxContainer.new()
+	last.alignment = BoxContainer.ALIGNMENT_CENTER
+	last.add_theme_constant_override("separation", 44)
+	last.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not OS.has_feature("web"):
+		last.add_child(_bubble("HOST", _on_host_pressed, Color(0.55, 0.85, 1.0), 36))
+		last.add_child(_bubble("JOIN", _on_join_pressed, Color(0.55, 0.85, 1.0), 36))
+	last.add_child(_bubble("BACK", show_menu, Palette.DIM, 36))
+	col.add_child(last)
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 30)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+	# TAKE AIM! sits right on the bull
+	var aim := _bubble("TAKE AIM!", _start_solo, Palette.GOLD, 64)
+	screen.add_child(aim)
+	_pin_to_bull(aim)
+
+
+## Keep a word centred on the bull of the board (the camera's walking there).
+func _pin_to_bull(word: Control) -> void:
+	for i in range(60):
+		if not is_instance_valid(word) or not word.is_inside_tree():
+			return
+		var at: Vector2 = world.camera.unproject_position(world.dartboard.board_to_world(Vector2.ZERO))
+		at = at * view_rect.size / Vector2(view3d.size)
+		word.position = at - word.size * 0.5
+		await get_tree().process_frame
+
+
+func _change_darts_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	_save_settings()
+	show_darts()
+
+
+func _set_darts_level(level: String) -> void:
+	solo_level = level
+	_save_settings()
+	show_darts()
+
+
+func _set_darts_mode(m: String) -> void:
+	darts_mode = m
+	_save_settings()
+	show_darts()
+
+
+func _set_darts_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked("darts")
+	_save_settings()
+	show_darts()
+
+
+## The board game shelf. TIMBER's the box on top: everything about it
+## floats over the shelf in its own colours. (The rest are still wrapped.)
+const TIMBER_LEVELS := [["easy", "SHAKY"], ["normal", "STEADY"], ["hard", "SURGEON"], ["mixed", "MIXED"]]
+
+
+func show_board_games() -> void:
+	world.focus_station("boxes")
+	_close_overlay()
+	_clear(screen)
+	game_kind = "timber"
+	if not _normal_unlocked("timber"):
+		normal_mode = false
+	var wood := Color(0.95, 0.78, 0.5)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 4)
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 40)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label("TIMBER!", 66, wood, true)
+	title.add_theme_color_override("font_outline_color", Color(0.2, 0.1, 0.04))
+	title.add_theme_constant_override("outline_size", 14)
+	col.add_child(title)
+	for line in ["Pull a block. Put it on top. Don't bring it down.", "Bring it down and the player on your right shoots you." if not normal_mode else "Bring it down and you're out."]:
+		var l := _label(line, 24, Color(0.95, 0.9, 0.8), true)
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 8)
+		col.add_child(l)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the shelf shows through here
+	var who := HBoxContainer.new()
+	who.alignment = BoxContainer.ALIGNMENT_CENTER
+	who.add_theme_constant_override("separation", 14)
+	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	who.add_child(_bubble("◀", _change_timber_count.bind(-1), wood, 44))
+	var count := _label("YOU + %d AI" % solo_opponents, 34, wood, true)
+	count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	count.add_theme_color_override("font_outline_color", Color.BLACK)
+	count.add_theme_constant_override("outline_size", 8)
+	who.add_child(count)
+	who.add_child(_bubble("▶", _change_timber_count.bind(1), wood, 44))
+	col.add_child(who)
+	var levels := HBoxContainer.new()
+	levels.alignment = BoxContainer.ALIGNMENT_CENTER
+	levels.add_theme_constant_override("separation", 22)
+	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for pair in TIMBER_LEVELS:
+		levels.add_child(_bubble(pair[1], _set_timber_level.bind(pair[0]), Color(0.45, 0.9, 0.5) if solo_level == pair[0] else Palette.DIM, 32 if solo_level == pair[0] else 26))
+	col.add_child(levels)
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 36)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_timber_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 30))
+	var plain := _bubble("NORMAL" if _normal_unlocked("timber") else "NORMAL 🔒%d/%d" % [int(played.get("timber", 0)), Games.UNLOCK_NORMAL_AFTER], _set_timber_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 30)
+	plain.disabled = not _normal_unlocked("timber")
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	col.add_child(_bubble("STACK 'EM!", _start_solo, Palette.GOLD, 66))
+	var more := HBoxContainer.new()
+	more.alignment = BoxContainer.ALIGNMENT_CENTER
+	more.add_theme_constant_override("separation", 30)
+	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 28))
+	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 28))
+	col.add_child(more)
+	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 30))
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 26)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+
+
+func _change_timber_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	_save_settings()
+	show_board_games()
+
+
+func _set_timber_level(level: String) -> void:
+	solo_level = level
+	_save_settings()
+	show_board_games()
+
+
+func _set_timber_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked("timber")
+	_save_settings()
+	show_board_games()
+
+
+## The options a new game of `kind` starts with (which darts game, say).
+func _game_opts(kind: String) -> Dictionary:
+	return {"mode": darts_mode} if kind == "darts" else {}
+
+
+## A dark panel along the bottom (the room shows above it). Returns its box.
+func _station_panel(title: String) -> VBoxContainer:
+	_close_overlay()
+	_clear(screen)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 36)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(col)
+	var head := _label(title, 48, Palette.GOLD, true)
+	head.add_theme_color_override("font_outline_color", Color.BLACK)
+	head.add_theme_constant_override("outline_size", 10)
+	col.add_child(head)
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _soft_panel())
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	box.child_entered_tree.connect(_station_text)
+	return box
+
+
+## Nothing on a station's panel too small to read on a phone: words at
+## least 22, buttons at least 34 (and anything added to it later too).
+func _station_text(node: Node) -> void:
+	if node is Button:
+		var b := node as Button
+		b.add_theme_font_size_override("font_size", maxi(b.get_theme_font_size("font_size"), 34))
+	elif node is Label:
+		var l := node as Label
+		l.add_theme_font_size_override("font_size", maxi(l.get_theme_font_size("font_size"), 22))
+	for c in node.get_children():
+		_station_text(c)
+	if node is Container and not node.child_entered_tree.is_connected(_station_text):
+		node.child_entered_tree.connect(_station_text)
+
+
+## A soft, see-through backing for floating words (no hard box).
+static func _soft_panel() -> StyleBoxFlat:
+	return Palette.box(Color(0.02, 0.015, 0.01, 0.5), Color(0, 0, 0, 0), 0, 26, 14)
+
+
+func _panel_button(box: Container, text: String, on_press: Callable, size: int = 26) -> Button:
+	var b := _button(text, on_press, size)
+	b.custom_minimum_size = Vector2(0, 58)
+	box.add_child(b)
+	return b
+
+
+## The bar: settings over a drink.
+func show_bar() -> void:
+	world.focus_station("bar")
+	_clear(screen)
+	_close_overlay()
+	_settings_from_bar = true
+	_settings_tab = "DISPLAY" if _settings_tab == "" else _settings_tab
+	_sound("open")
+	_build_settings()
+
+
+# ================================================================ the computer
+
+const Secrets = preload("res://scripts/core/secrets.gd")
+var _code_input := "" # the presses so far (U D L R A B)
+var _code_label: Label
+var _code_note: Label
+var _computer_open := false
+var _computer_flash := "" # the last thing the screen said, kept till the next press
+
+
+## The computer in the corner: once every game's been played it boots, and
+## its arcade stick takes cheat codes for secret skins and easter eggs.
+func show_computer() -> void:
+	_keep_menu_name()
+	world.focus_station("computer")
+	var box := _station_panel("THE ARCADE")
+	_computer_open = false
+	var kinds := Games.kinds()
+	if not Secrets.computer_unlocked(tried_kinds, kinds):
+		world.computer_screen("", false)
+		var missing := Secrets.missing_games(tried_kinds, kinds)
+		box.add_child(_label("It won't start. Finish a match of every game at the table to power it up.", 26, Palette.INK, true))
+		box.add_child(_label("GAMES PLAYED: %d/%d" % [kinds.size() - missing.size(), kinds.size()], 30, FLOAT_YELLOW, true))
+		box.add_child(_label("Still to play: " + ", ".join(missing.map(func(k): return Games.label(k))), 22, Palette.DIM, true))
+		var back0 := _panel_button(box, "BACK", show_menu, 30)
+		Palette.accent(back0, Palette.DIM)
+		return
+	_computer_open = true
+	_code_input = ""
+	_code_label = _label("", 40, Color(0.45, 1.0, 0.5), true)
+	box.add_child(_code_label)
+	_code_note = _label("", 22, Palette.INK, true)
+	box.add_child(_code_note)
+	box.add_child(_label("Push the stick and hit A and B on the cabinet.", 20, Palette.DIM, true))
+	# the controls are on the cabinet: taps on the 3D view land here
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_arcade_input)
+	screen.add_child(_full(touch))
+	screen.move_child(touch, 0) # under the panel
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 26)
+	box.add_child(row)
+	row.add_child(_bubble("EGGS", show_eggs, Palette.GOLD, 34))
+	row.add_child(_bubble("HINTS", show_code_hints, Color(0.55, 0.85, 1.0), 34))
+	row.add_child(_bubble("BACK", show_menu, Palette.DIM, 34))
+	_computer_flash = ""
+	_update_code_screen()
+
+
+func _update_code_screen() -> void:
+	var found := Secrets.found(owned).size()
+	var typed := Secrets.pretty(_code_input) if _code_input != "" else ""
+	if _code_label != null and is_instance_valid(_code_label):
+		_code_label.text = (typed + " _") if typed != "" else "ENTER A CODE"
+	if _code_note != null and is_instance_valid(_code_note):
+		_code_note.text = _computer_flash if _computer_flash != "" else "CODES FOUND: %d/%d" % [found, Secrets.CODES.size()]
+	var screen_text := "SHOTGUN OS 1.0\nCODES FOUND %d/%d\n\n> %s_" % [found, Secrets.CODES.size(), typed]
+	if _computer_flash != "":
+		screen_text += "\n\n" + _computer_flash.get_slice("\n", 0) # the headline; the rest is below
+	world.computer_screen(screen_text)
+
+
+func _on_arcade_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var k: String = world.arcade_pick(_to_view(event.position))
+		if k != "":
+			_code_press(k)
+
+
+## One press on the stick.
+func _code_press(button: String) -> void:
+	if not _computer_open:
+		return
+	world.computer_press(button)
+	_sound("type")
+	_computer_flash = ""
+	_code_input = (_code_input + button).right(Secrets.MAX_INPUT)
+	var code := Secrets.match_input(_code_input)
+	if not code.is_empty():
+		_code_input = ""
+		_enter_code(code)
+		return
+	_update_code_screen()
+
+
+func _enter_code(code: Dictionary) -> void:
+	var was_found := owned.has("code:" + code["id"])
+	var fresh := Secrets.redeem(code, owned)
+	for p in fresh:
+		if str(p).begins_with("egg:"):
+			eggs_on[str(p).trim_prefix("egg:")] = true # a new egg starts switched on
+	_save_settings()
+	_apply_eggs()
+	_sound("prize_legendary" if not was_found else "ding")
+	var lines := ["CODE ACCEPTED: %s" % code["name"], str(code["message"])]
+	if was_found:
+		lines.append("(You found this one already.)")
+	for p in fresh:
+		lines.append("UNLOCKED: " + Gacha.prize_name(p))
+	_computer_flash = "\n".join(lines)
+	_update_code_screen()
+	world.burst_at_computer()
+
+
+## The easter eggs you've found: switch each on or off.
+func show_eggs() -> void:
+	_computer_open = false
+	var box := _station_panel("EASTER EGGS")
+	for id in Secrets.EGGS:
+		var e: Dictionary = Secrets.EGGS[id]
+		if Secrets.egg_found(id, owned):
+			var on := bool(eggs_on.get(id, false))
+			var b := _bubble("%s: %s" % [e["name"], "ON" if on else "OFF"], _toggle_egg.bind(id), Palette.GOLD if on else Palette.DIM, 34)
+			box.add_child(b)
+			box.add_child(_label(e["text"], 20, Palette.INK, true))
+		else:
+			box.add_child(_label("??? (find its code)", 26, Palette.DIM, true))
+	box.add_child(_bubble("BACK", show_computer, Palette.DIM, 34))
+
+
+func _toggle_egg(id: String) -> void:
+	eggs_on[id] = not bool(eggs_on.get(id, false))
+	_save_settings()
+	_apply_eggs()
+	show_eggs()
+
+
+var _egg_filter: ColorRect
+
+
+## Switches the easter eggs you've found on or off, as eggs_on says.
+func egg_on(id: String) -> bool:
+	return Secrets.egg_found(id, owned) and bool(eggs_on.get(id, false))
+
+
+func _apply_eggs() -> void:
+	if world != null:
+		world.egg_disco = egg_on("disco")
+		world.egg_confetti = egg_on("confetti")
+	var mode := 1 if egg_on("pocket") else (2 if egg_on("noir") else 0)
+	if mode == 0:
+		if _egg_filter != null:
+			_egg_filter.visible = false
+		return
+	if _egg_filter == null:
+		_egg_filter = ColorRect.new()
+		_egg_filter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var m := ShaderMaterial.new()
+		m.shader = load("res://shaders/egg_filter.gdshader")
+		_egg_filter.material = m
+		add_child(_full(_egg_filter))
+	move_child(_egg_filter, get_child_count() - 1) # over everything
+	_egg_filter.visible = true
+	(_egg_filter.material as ShaderMaterial).set_shader_parameter("mode", mode)
+
+
+## The codes: found ones in full, the rest as riddles.
+func show_code_hints() -> void:
+	_computer_open = false
+	var box := _station_panel("README.TXT")
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, get_viewport_rect().size.y * 0.42)
+	box.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 10)
+	scroll.add_child(list)
+	for c in Secrets.CODES:
+		if owned.has("code:" + c["id"]):
+			list.add_child(_label("%s  %s" % [c["name"], Secrets.pretty(c["code"])], 24, Color(0.45, 1.0, 0.5), true))
+		else:
+			list.add_child(_label("???  (%d presses)" % str(c["code"]).length(), 24, FLOAT_YELLOW, true))
+			list.add_child(_label(c["hint"], 20, Palette.INK, true))
+	box.add_child(_bubble("BACK", show_computer, Palette.DIM, 34))
+
+
+## Arrow keys and A/B on a keyboard work the stick too.
+func _computer_key(event: InputEvent) -> bool:
+	if not _computer_open or not (event is InputEventKey) or not event.pressed or event.echo:
+		return false
+	var map := {KEY_UP: "U", KEY_DOWN: "D", KEY_LEFT: "L", KEY_RIGHT: "R", KEY_A: "A", KEY_B: "B"}
+	if map.has(event.keycode):
+		_code_press(map[event.keycode])
+		return true
+	return false
+
+
+## The door: leave the game.
+func show_door() -> void:
+	world.focus_station("door")
+	var box := _station_panel("THE DOOR")
+	if OS.has_feature("web"):
+		box.add_child(_label("To leave, just close the tab. See you soon.", 24, Palette.INK, true))
+	else:
+		box.add_child(_label("Calling it a night?", 26, Palette.INK, true))
+		var go := _panel_button(box, "LEAVE THE GAME", _leave_game, 28)
+		Palette.accent(go, Palette.RED)
+	_panel_button(box, "STAY", show_menu, 24)
+
+
+func _leave_game() -> void:
+	_clear(screen)
+	_save_settings()
+	world.open_door()
+	await get_tree().create_timer(1.2).timeout
+	get_tree().quit()
+
+
+## GRAPHICS without leaving the screen you're on.
+func _cycle_graphics_only() -> void:
+	var order := GRAPHICS.keys()
+	graphics = order[(order.find(graphics) + 1) % order.size()]
+	_save_settings()
+	_fit_view()
+
+
+## "SHOTGUN GO FISH", or just "GO FISH" in normal mode.
+static func _game_title(kind: String, normal: bool) -> String:
+	return Games.label(kind) if normal else Games.title(kind)
+
+
+## A new, empty game of `kind`.
+static func new_game(kind: String, normal: bool = false) -> Game:
+	return Games.make(kind, normal)
+
+
+func _normal_unlocked(kind: String) -> bool:
+	return int(played.get(kind, 0)) >= Games.UNLOCK_NORMAL_AFTER
+
+
+# ================================================================ cartridges
+
+## The cartridges: swipe through them (each plays its little tune), then
+## PLAY or DEMO. The words float; there are no boxes here.
+func show_cartridges() -> void:
+	if world.in_room():
+		world.focus_station("table")
+	if _name_edit != null and is_instance_valid(_name_edit) and _name_edit.is_inside_tree():
+		var typed := _name_edit.text.strip_edges().to_upper().left(10)
+		if typed != "":
+			profile_name = typed
+	_close_overlay()
+	_clear(screen)
+	if not Games.LIST.has(game_kind):
+		game_kind = _card_kind
+		normal_mode = normal_mode and _normal_unlocked(game_kind)
+	var kinds := Games.kinds()
+	var at := maxi(0, kinds.find(game_kind))
+	if world._carousel.is_empty():
+		world.show_carousel(kinds, at)
+		_sound("jingle:" + game_kind)
+	else:
+		world.carousel_to(at)
+	# swipes anywhere move the carousel
+	var swipe := _full(Control.new())
+	swipe.mouse_filter = Control.MOUSE_FILTER_STOP
+	swipe.gui_input.connect(_on_carousel_input)
+	screen.add_child(swipe)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_BEGIN
+	screen.add_child(_full(col))
+	var gap_top := Control.new()
+	gap_top.custom_minimum_size = Vector2(0, 60)
+	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_top)
+	var title := _label(_game_title(game_kind, normal_mode), 40, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 40)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mode_row.add_child(_bubble("SHOTGUN", _set_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 34))
+	var plain := _bubble("NORMAL" if _normal_unlocked(game_kind) else "NORMAL 🔒%d/%d" % [int(played.get(game_kind, 0)), Games.UNLOCK_NORMAL_AFTER], _set_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 34)
+	plain.disabled = not _normal_unlocked(game_kind)
+	mode_row.add_child(plain)
+	col.add_child(mode_row)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(spacer) # the cartridges show through here
+	var arrows := HBoxContainer.new()
+	arrows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrows.add_child(_bubble("◀", _scroll_cartridges.bind(-1), Palette.INK, 60))
+	var mid := Control.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrows.add_child(mid)
+	arrows.add_child(_bubble("▶", _scroll_cartridges.bind(1), Palette.INK, 60))
+	col.add_child(arrows)
+	var words := HBoxContainer.new()
+	words.alignment = BoxContainer.ALIGNMENT_CENTER
+	words.add_theme_constant_override("separation", 70)
+	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_child(_bubble("PLAY", _cartridge_play, Palette.GOLD, 72))
+	words.add_child(_bubble("DEMO", _start_demo, Color(0.55, 0.85, 1.0), 72))
+	col.add_child(words)
+	col.add_child(_bubble("BACK", _leave_cartridges, Palette.DIM, 36))
+	var gap_bottom := Control.new()
+	gap_bottom.custom_minimum_size = Vector2(0, 40)
+	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(gap_bottom)
+
+
+const BubbleWord = preload("res://scripts/ui/bubble_word.gd")
+
+
+func _bubble(word: String, on_press: Callable, color: Color, font_size: int = 52) -> Button:
+	var b := BubbleWord.new()
+	b.setup(word, on_press, color, font_size)
+	b.pressed.connect(_sound.bind("tick"))
+	return b
+
+
+var _swipe_from := Vector2.ZERO
+
+
+func _on_carousel_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_swipe_from = event.position
+		else:
+			var dx: float = event.position.x - _swipe_from.x
+			if absf(dx) > 50.0:
+				_scroll_cartridges(-1 if dx > 0 else 1)
+	elif event is InputEventKey and event.pressed:
+		if event.keycode == KEY_LEFT:
+			_scroll_cartridges(-1)
+		elif event.keycode == KEY_RIGHT:
+			_scroll_cartridges(1)
+
+
+func _scroll_cartridges(step: int) -> void:
+	var kinds := Games.kinds()
+	var at := posmod(kinds.find(game_kind) + step, kinds.size())
+	_pick_cartridge(kinds[at])
+
+
+func _pick_cartridge(kind: String) -> void:
+	game_kind = kind
+	_card_kind = kind
+	if not _normal_unlocked(kind):
+		normal_mode = false
+	_save_settings()
+	world.carousel_to(Games.kinds().find(kind))
+	_sound("swish")
+	_sound("jingle:" + kind)
+	show_cartridges()
+
+
+func _set_normal(on: bool) -> void:
+	normal_mode = on and _normal_unlocked(game_kind)
+	_save_settings()
+	_sound("tick")
+	show_cartridges()
+
+
+func _leave_cartridges() -> void:
+	world.hide_carousel()
+	_sound("tick")
+	show_menu()
+
+
+## PLAY: slot it in, then how do you want to play?
+func _cartridge_play() -> void:
+	world.carousel_insert()
+	world.set_cartridge(game_kind)
+	_sound("clunk")
+	show_play_choice()
+
+
+func show_play_choice() -> void:
+	world.hide_carousel()
+	_close_overlay()
+	_clear(screen)
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen.add_child(_full(center))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_child(col)
+	var title := _label(_game_title(game_kind, normal_mode), 44, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	col.add_child(_bubble("VS AI", show_solo, Palette.GOLD, 58))
+	col.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 44))
+	if not OS.has_feature("web"): # browsers can't open the connections lobbies use
+		col.add_child(_bubble("HOST A LOBBY", _on_host_pressed, Color(0.55, 0.85, 1.0), 44))
+		col.add_child(_bubble("JOIN A LOBBY", _on_join_pressed, Color(0.55, 0.85, 1.0), 44))
+	col.add_child(_bubble("BACK", show_darts if Games.is_party(game_kind) else show_cartridges, Palette.DIM, 34))
+
+
+## First time in: point people at the demos.
+func _offer_tutorial() -> void:
+	var box := _open_overlay(0.94, false, "menu")
+	box.add_child(_title("FIRST TIME HERE?"))
+	box.add_child(_label("Every cartridge has a DEMO: a quick normal game against easy AIs, with tips as you go.", 26, Palette.INK, true))
+	box.add_child(_button("PICK A DEMO", _closing(show_cartridges)))
+	box.add_child(_button("NO THANKS", _closing(_noop)))
+
+
+## DEMO: first it plays itself (the same game every time, in shotgun
+## mode) and explains each rule as it comes up, then you play a few
+## practice rounds with tips.
+func _start_demo() -> void:
+	world.carousel_insert()
+	world.set_cartridge(game_kind)
+	_sound("clunk")
+	world.hide_carousel()
+	_start_tutorial()
+
+
+func _start_tutorial() -> void:
+	var me := profile_name if profile_name != "" else "YOU"
+	var names := [me, "DOC", "PEARL"]
+	var looks := [my_look.duplicate(), Looks.preset(4), Looks.preset(9)]
+	local_mode = "solo"
+	demo_stage = "watch"
+	_lessons = []
+	for l in DemoLessons.for_game(game_kind):
+		_lessons.append([l[0], l[1], false])
+	_lesson_queue = []
+	# everyone, you too, is played for you; the same shuffle every time
+	_table = {"names": names, "looks": looks, "bots": ["normal", "normal", "normal"], "kind": game_kind, "normal": false, "tutorial": true, "seed": absi(hash(game_kind)) % 100000}
+	start_match()
+	for l in _lessons:
+		if l[0] == "start":
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+
+
+## A lesson's moment came: queue it (each one only once).
+func _demo_event(kind: String, d: Dictionary) -> void:
+	if demo_stage != "watch":
+		return
+	for l in _lessons:
+		if not l[2] and DemoLessons.matches(l[0], kind, d):
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+
+
+## The watched round is over: whatever didn't come up, then over to you.
+func _end_watch() -> void:
+	demo_stage = "recap"
+	for l in _lessons:
+		if not l[2]:
+			l[2] = true
+			_lesson_queue.append({"text": l[1]})
+	_lesson_queue.append({"text": DemoLessons.PRACTICE % DEMO_ROUNDS, "then": _start_practice})
+
+
+func _start_practice() -> void:
+	demo_stage = "practice"
+	_table["bots"] = ["", "easy", "easy"]
+	_table.erase("seed")
+	start_match()
+
+
+## The card at the top that explains a rule. The game waits while it's up;
+## it moves on by itself after a few seconds, or tap NEXT.
+func _build_lesson_panel() -> void:
+	var layer := _full(MarginContainer.new())
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		layer.add_theme_constant_override("margin_" + side, 24)
+	layer.add_theme_constant_override("margin_top", 110)
+	add_child(layer) # above the table and the pop-ups
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(col)
+	_lesson_panel = PanelContainer.new()
+	_lesson_panel.add_theme_stylebox_override("panel", Palette.box(Color(0.06, 0.05, 0.04, 0.92), Palette.GOLD, 3, 2, 10))
+	_lesson_panel.visible = false
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	_lesson_panel.add_child(inner)
+	inner.add_child(_label("DEMO", 20, Palette.GOLD, true))
+	_lesson_text = _label("", 26, Palette.INK, true)
+	inner.add_child(_lesson_text)
+	var next := _button("NEXT ▸", _next_lesson, 24)
+	next.custom_minimum_size = Vector2(0, 50)
+	inner.add_child(next)
+	col.add_child(_lesson_panel)
+
+
+func _drive_lessons(delta: float) -> void:
+	if _lesson_panel == null or not is_instance_valid(_lesson_panel) or game == null:
+		return
+	if _lesson_panel.visible:
+		_lesson_time -= delta
+		if _lesson_time <= 0.0:
+			_next_lesson()
+		return
+	if _lesson_queue.is_empty() or world.dealing:
+		return
+	var l: Dictionary = _lesson_queue.pop_front()
+	_lesson_text.text = l["text"]
+	_lesson_then = l.get("then", Callable())
+	_lesson_time = 3.0 + l["text"].length() * 0.045
+	_lesson_panel.visible = true
+	_sound("pick_item")
+
+
+func _next_lesson() -> void:
+	if _lesson_panel == null or not _lesson_panel.visible:
+		return
+	_lesson_panel.visible = false
+	var then := _lesson_then
+	_lesson_then = Callable()
+	if then.is_valid():
+		then.call()
+
+
+func _lesson_showing() -> bool:
+	return _lesson_panel != null and is_instance_valid(_lesson_panel) and _lesson_panel.visible
+
+
+## While watching: press the buttons for you (watch the shotgun, then on to
+## your practice).
+func _drive_demo(delta: float) -> void:
+	if demo_stage != "watch" or game == null or _lesson_showing():
+		return
+	if overlay_layer.get_child_count() == 0 or not _overlay_kind in ["result", "gun", "reveal"]:
+		_demo_wait = 2.5
+		return
+	_demo_wait -= delta
+	if _demo_wait > 0.0:
+		return
+	_demo_wait = 2.5
+	if _overlay_kind == "reveal":
+		# a card turned over (CHEAT!, an item): show it, then carry on
+		_close_overlay()
+		_after_action()
+	elif game.gun != null and _overlay_kind == "result":
+		_show_gun()
+	elif game.gun == null and (game.phase == "round_over" or game.phase == "match_over"):
+		_close_overlay()
+		_end_watch()
+
+
+## Practice over: well done.
+func _finish_demo() -> void:
+	demo_stage = ""
+	var box := _open_overlay(0.96, false, "match")
+	box.add_child(_title("YOU'VE GOT IT", Palette.GOLD))
+	box.add_child(_label("That's %s. Ready to play it for real?" % Games.label(game.kind), 28, Palette.INK, true))
+	box.add_child(_button("PLAY %s" % Games.label(game.kind), _closing(show_play_choice)))
+	box.add_child(_button("WATCH THE DEMO AGAIN", _closing(_start_tutorial)))
+	box.add_child(_button("BACK TO THE ROOM", show_menu))
+
+
+func _blackjack() -> bool:
+	return game != null and game.kind == "blackjack"
+
+
+func _menu_sound() -> void:
+	_toggle_sound()
+	show_menu()
+
+
+func _noop() -> void:
+	pass
+
+
+## Reads the name box; returns "" (and complains) if it's empty.
+func _take_name() -> String:
+	var n := profile_name
+	if _name_edit != null and is_instance_valid(_name_edit) and _name_edit.is_inside_tree():
+		n = _name_edit.text.strip_edges().to_upper().left(10)
+	if n == "":
+		menu_message = "Sign your name first."
+		show_menu()
+		return ""
+	profile_name = n
+	_save_settings()
+	return n
+
+
+## Keeps the name typed on the main menu, if there is one.
+func _keep_menu_name() -> void:
+	if _name_edit == null or not is_instance_valid(_name_edit) or not _name_edit.is_inside_tree():
+		return
+	var n := _name_edit.text.strip_edges().to_upper()
+	if n != "":
+		profile_name = n.left(10)
+		player_names[0] = profile_name
+		_save_settings()
+
+
+func _on_this_phone_pressed() -> void:
+	_keep_menu_name()
+	show_this_phone()
+
+
+func _on_pass_and_play_pressed() -> void:
+	_keep_menu_name()
+	show_setup()
+
+
+## Solo against AIs, or everyone passing the phone around.
+func show_this_phone() -> void:
+	var box := _paper()
+	box.add_child(_label("ON THIS PHONE", 52, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label(_game_title(game_kind, normal_mode), 26, Palette.CARD_INK, true))
+	box.add_child(_paper_button("VS AI (SOLO)", show_solo))
+	box.add_child(_label("Just you against AI players.", 22, Palette.CARD_INK, true))
+	box.add_child(_paper_button("PASS THE PHONE", _on_pass_and_play_pressed))
+	box.add_child(_label("Friends share this phone and take turns. You can add AIs too.", 22, Palette.CARD_INK, true))
+	box.add_child(_paper_button("BACK", show_menu, 28))
+
+
+# ================================================================ solo vs AI
+
+const SOLO_LEVELS := ["easy", "normal", "hard", "mixed"]
+
+
+func show_solo() -> void:
+	var box := _paper()
+	box.add_child(_label("VS AI", 60, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label(_game_title(game_kind, normal_mode), 26, Palette.CARD_INK, true))
+	box.add_child(_label("%s, PLAYING AS %s" % [profile_name if profile_name != "" else "YOU", _short_name(my_look)], 24, Palette.CARD_INK, true))
+	var count_row := HBoxContainer.new()
+	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	count_row.add_theme_constant_override("separation", 16)
+	count_row.add_child(_tag("OPPONENTS", 30, Palette.CARD_INK))
+	count_row.add_child(_button("-", _change_solo_count.bind(-1), 52))
+	count_row.add_child(_tag(str(solo_opponents), 40, Palette.CARD_INK))
+	count_row.add_child(_button("+", _change_solo_count.bind(1), 52))
+	box.add_child(count_row)
+	box.add_child(_label("DIFFICULTY", 26, Palette.CARD_INK, true))
+	var level_row := HBoxContainer.new()
+	level_row.add_theme_constant_override("separation", 6)
+	for level in SOLO_LEVELS:
+		var b := _paper_button(str(level).to_upper(), _set_solo_level.bind(level), 22)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if level == solo_level:
+			Palette.accent(b, Palette.RED)
+		level_row.add_child(b)
+	box.add_child(level_row)
+	var about := {
+		"easy": "Sloppy players who throw items around.",
+		"normal": "Solid players who use items when they help.",
+		"hard": "Sharks: they hold out for Rummy and shoot the leader.",
+		"mixed": "A bit of everything: easy, normal and hard at one table.",
+	}
+	box.add_child(_label(about.get(solo_level, ""), 22, Palette.CARD_INK, true))
+	var go := _button("TAKE AIM!" if game_kind == "darts" else "DEAL ME IN", _start_solo, 34)
+	box.add_child(go)
+	box.add_child(_paper_button("BACK", show_this_phone, 28))
+
+
+func _change_solo_count(delta: int) -> void:
+	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
+	show_solo()
+
+
+func _set_solo_level(level: String) -> void:
+	solo_level = level
+	show_solo()
+
+
+## You plus AIs, each with its own name and character.
+func _start_solo() -> void:
+	var me := profile_name if profile_name != "" else "YOU"
+	var names := [me]
+	var looks := [my_look.duplicate()]
+	var bots := [""]
+	var used_looks := [str(my_look.get("name", ""))]
+	var name_pool: Array = Bot.NAMES.duplicate()
+	name_pool.shuffle()
+	var look_pool := range(Looks.PRESETS.size())
+	look_pool.shuffle()
+	for i in range(solo_opponents):
+		var n: String = name_pool[i]
+		while names.has(n):
+			n += "*"
+		names.append(n)
+		var look := {}
+		for k in look_pool:
+			look = Looks.preset(k)
+			if not used_looks.has(str(look.get("name", ""))):
+				break
+		used_looks.append(str(look.get("name", "")))
+		looks.append(look)
+		bots.append(Bot.LEVELS[i % Bot.LEVELS.size()] if solo_level == "mixed" else solo_level)
+	_save_settings()
+	local_mode = "solo"
+	_table = {"names": names, "looks": looks, "bots": bots, "kind": game_kind, "normal": normal_mode}
+	start_match()
+
+
+## NEW PLAYERS after a game on this phone: back to whichever setup it came from.
+func _new_players() -> void:
+	_stop_match() # the match is over: nothing carries on behind the setup
+	_play_music("party" if world.room_id == "party" else "room")
+	if game_kind == "darts" and local_mode == "solo":
+		show_darts() # the party games pick their players at their own station
+	elif game_kind == "timber" and local_mode == "solo":
+		show_board_games()
+	elif local_mode == "solo":
+		show_solo()
+	else:
+		show_setup()
+
+
+func _on_host_pressed() -> void:
+	var n := _take_name()
+	if n == "":
+		return
+	var err := session.host(n, my_look)
+	session.game_kind = game_kind
+	session.normal = normal_mode
+	session.game_opts = _game_opts(game_kind)
+	if err != "":
+		menu_message = err
+		show_menu()
+		return
+	show_lobby()
+
+
+func _on_join_pressed() -> void:
+	if _take_name() == "":
+		return
+	session.start_scan()
+	show_join()
+
+
+func show_join() -> void:
+	var box := _paper()
+	box.add_child(_label("JOIN A LOBBY", 52, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("LOBBIES ON THIS WI-FI", 24, Palette.CARD_INK, true))
+	if session.lobbies.is_empty():
+		box.add_child(_label("Looking... (the host needs to be on the HOST A LOBBY screen)", 22, Palette.CARD_INK, true))
+	for ip in session.lobbies:
+		var l: Dictionary = session.lobbies[ip]
+		var kind_name: String = Games.label(str(l.get("kind", "rummy")))
+		box.add_child(_paper_button("%s · %s (%d/%d)" % [l["name"], kind_name, l["players"], l["max"]], _join_ip.bind(ip), 26))
+	box.add_child(_label("OR JOIN BY IP (shown on the host's screen)", 22, Palette.CARD_INK, true))
+	var row := HBoxContainer.new()
+	_ip_edit = LineEdit.new()
+	_typing_sounds(_ip_edit)
+	_ip_edit.placeholder_text = "192.168.1.20"
+	_ip_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(_ip_edit)
+	row.add_child(_paper_button("JOIN", _join_typed_ip, 28))
+	box.add_child(row)
+	box.add_child(_paper_button("BACK", show_menu, 28))
+
+
+func _on_lobbies_changed() -> void:
+	if session.mode == "offline" and _ip_edit != null and is_instance_valid(_ip_edit) and _ip_edit.is_inside_tree():
+		var typed := _ip_edit.text
+		var had_focus := _ip_edit.has_focus()
+		show_join()
+		_ip_edit.text = typed
+		if had_focus:
+			_ip_edit.grab_focus()
+
+
+func _join_typed_ip() -> void:
+	_join_ip(_ip_edit.text)
+
+
+func _join_ip(ip: String) -> void:
+	if ip.strip_edges() == "":
+		return
+	var err := session.join(ip, profile_name, my_look)
+	if err != "":
+		menu_message = err
+		show_menu()
+		return
+	var box := _paper()
+	box.add_child(_label("CONNECTING TO %s..." % ip.strip_edges(), 30, Palette.CARD_INK, true))
+	box.add_child(_paper_button("CANCEL", show_menu, 28))
+
+
+func show_lobby() -> void:
+	var box := _paper()
+	if session.is_host():
+		box.add_child(_label("%s'S TABLE" % profile_name, 48, Color(0.36, 0.06, 0.05), true))
+		box.add_child(_label("Friends on the same Wi-Fi: tap JOIN A LOBBY.", 22, Palette.CARD_INK, true))
+		var ips := Session.local_addresses()
+		if not ips.is_empty():
+			box.add_child(_label("Or join by IP: %s" % ", ".join(ips), 24, Palette.CARD_INK, true))
+	else:
+		box.add_child(_label("IN THE LOBBY", 48, Color(0.36, 0.06, 0.05), true))
+	if session.is_host():
+		box.add_child(_paper_button("CARTRIDGE: %s  ▸" % _game_title(session.game_kind, session.normal), _cycle_lobby_game, 24))
+		if _normal_unlocked(session.game_kind):
+			box.add_child(_paper_button("MODE: %s" % ("NORMAL" if session.normal else "SHOTGUN"), _toggle_lobby_normal, 22))
+	else:
+		box.add_child(_label("CARTRIDGE: %s" % _game_title(session.game_kind, session.normal), 26, Palette.CARD_INK, true))
+	box.add_child(_label("PLAYERS (%d/%d)" % [session.names.size(), Session.MAX_PLAYERS], 26, Palette.CARD_INK))
+	for i in range(session.names.size()):
+		var who: String = session.names[i]
+		var look_name := ""
+		if i < session.looks.size() and session.looks[i] is Dictionary:
+			look_name = "  " + _short_name(session.looks[i])
+		var level: String = str(session.bots[i]) if i < session.bots.size() else ""
+		var line := _label("%d. %s%s%s" % [i + 1, who, " (HOST)" if i == 0 else "", look_name], 28, Palette.CARD_INK)
+		if level == "":
+			box.add_child(line)
+			continue
+		var row := HBoxContainer.new()
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.text = "%d. %s (AI)%s" % [i + 1, who, look_name]
+		row.add_child(line)
+		if session.is_host():
+			var lvl := _paper_button(Bot.level_label(level), session.cycle_bot.bind(i), 20)
+			lvl.custom_minimum_size = Vector2(110, 48)
+			row.add_child(lvl)
+			var drop := _paper_button("X", session.remove_bot.bind(i), 20)
+			drop.custom_minimum_size = Vector2(48, 48)
+			row.add_child(drop)
+		else:
+			row.add_child(_tag(Bot.level_label(level), 22, Palette.CARD_INK))
+		box.add_child(row)
+	if session.is_host():
+		if session.names.size() < Session.MAX_PLAYERS:
+			box.add_child(_paper_button("+ ADD AN AI PLAYER", session.add_bot.bind("normal"), 26))
+		var start := _paper_button("START THE GAME", session.start_match)
+		start.disabled = session.names.size() < 2
+		box.add_child(start)
+		if session.names.size() < 2:
+			box.add_child(_label("Waiting for at least one more player (or add an AI)...", 22, Palette.CARD_INK, true))
+	else:
+		box.add_child(_label("Waiting for the host to start...", 24, Palette.CARD_INK, true))
+	box.add_child(_paper_button("LEAVE", show_menu, 28))
+
+
+func _cycle_lobby_game() -> void:
+	var kinds := Games.kinds()
+	game_kind = kinds[(kinds.find(session.game_kind) + 1) % kinds.size()]
+	_save_settings()
+	session.set_game(game_kind, session.normal and _normal_unlocked(game_kind))
+
+
+func _toggle_lobby_normal() -> void:
+	session.set_game(session.game_kind, not session.normal)
+
+
+var _roster_size := 0
+
+
+func _on_roster_changed() -> void:
+	if session.names.size() != _roster_size:
+		_sound("join" if session.names.size() > _roster_size else "leave")
+		_roster_size = session.names.size()
+	if not session.in_match:
+		show_lobby()
+
+
+func _on_session_ended(reason: String) -> void:
+	menu_message = reason
+	show_menu()
+
+
+# ================================================================ characters
+
+## Presets first, then the player's own creations.
+func _all_characters() -> Array:
+	var out := []
+	for i in range(Looks.PRESETS.size()):
+		out.append(Looks.preset(i))
+	for c in custom_looks:
+		out.append(c)
+	return out
+
+
+func _open_customiser() -> void:
+	_keep_menu_name()
+	_picked = my_look.duplicate()
+	show_character_select()
+
+
+## A 3D preview of the picked character up top; underneath, every character
+## as a tile, with a + tile at the end to make your own.
+func show_character_select() -> void:
+	var box := _character_screen(_picked)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 330)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	box.add_child(scroll)
+	var all := _all_characters()
+	var picked_tile: Control = null
+	for i in range(all.size()):
+		var look: Dictionary = all[i]
+		var locked := not Unlocks.look_unlocked(look, owned)
+		var tile := _button(("🔒 " if locked else "") + _short_name(look), _pick_character.bind(look), 20)
+		tile.custom_minimum_size = Vector2(0, 58)
+		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tile.clip_text = true
+		var mine: bool = i >= Looks.PRESETS.size()
+		if look.get("name", "") == _picked.get("name", "") and look.get("base", "") == _picked.get("base", ""):
+			Palette.accent(tile, Palette.AMBER)
+			picked_tile = tile
+		elif mine:
+			Palette.accent(tile, Palette.PURPLE)
+		grid.add_child(tile)
+	var plus := _button("+", _create_character, 40)
+	plus.custom_minimum_size = Vector2(0, 58)
+	plus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	Palette.accent(plus, Palette.GOLD)
+	grid.add_child(plus)
+	# keep the highlighted character in view
+	if picked_tile != null:
+		scroll.ensure_control_visible.call_deferred(picked_tile)
+
+	var note := _lock_note(_picked)
+	if note != "":
+		box.add_child(_label(note, 22, Palette.PINK, true))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	var choose := _button("PLAY AS %s" % _short_name(_picked) if note == "" else "LOCKED", _choose_character, 24)
+	choose.disabled = note != ""
+	Palette.accent(choose, Palette.AMBER)
+	choose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(choose)
+	if _custom_index(_picked) >= 0:
+		var edit := _button("EDIT", _edit_character, 24)
+		var del := _button("DELETE", _delete_character, 24)
+		Palette.accent(del, Palette.RED)
+		for b in [edit, del]:
+			b.custom_minimum_size = Vector2(110, 64)
+			buttons.add_child(b)
+	box.add_child(buttons)
+	var skins := HBoxContainer.new()
+	skins.add_theme_constant_override("separation", 8)
+	for b in [_button("CARDS: %s" % CardSkins.skin_name(card_skin), show_card_skins, 20), _button("SHOTGUN: %s" % GunSkins.skin_name(gun_skin), show_gun_skins, 20)]:
+		b.custom_minimum_size = Vector2(0, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		skins.add_child(b)
+	box.add_child(skins)
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 8)
+	var rename := _button("NAME: %s" % profile_name, _change_name, 22)
+	var back := _button("BACK", _leave_customiser, 24)
+	for b in [rename, back]:
+		b.custom_minimum_size = Vector2(0, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bottom.add_child(b)
+	box.add_child(bottom)
+
+
+## The shared layout: title, the 3D preview showing through, and a panel at
+## the bottom. Returns the panel's box.
+func _character_screen(look: Dictionary) -> VBoxContainer:
+	_close_overlay()
+	_clear(screen)
+	world.set_menu_mode(false)
+	world.show_preview(look)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 40)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+	var title := _label(str(look.get("name", "CUSTOM")), 44, Palette.AMBER, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _soft_panel())
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	return box
+
+
+func _pick_character(look: Dictionary) -> void:
+	_picked = look.duplicate()
+	show_character_select()
+
+
+## "LOCKED: WIN 3 MATCHES (1/3) FOR THE COWBOY HAT", or "" if it's all yours.
+func _lock_note(look: Dictionary) -> String:
+	var parts := Unlocks.locked_parts(look, owned)
+	if parts.is_empty():
+		return ""
+	var first: Array = parts[0]
+	var more := " (+%d MORE)" % (parts.size() - 1) if parts.size() > 1 else ""
+	return "LOCKED: %s FOR THE %s%s" % [Unlocks.need_text(first[0], first[1], owned), Unlocks.part_name(first[0], first[1]), more]
+
+
+func _choose_character() -> void:
+	if not Unlocks.look_unlocked(_picked, owned):
+		return
+	my_look = Looks.clean(_picked)
+	my_look["gun"] = gun_skin
+	if not setup_looks.is_empty():
+		setup_looks[0] = my_look.duplicate()
+	_save_settings()
+	_leave_customiser()
+
+
+## Which of your own characters this is (-1: a preset).
+func _custom_index(look: Dictionary) -> int:
+	for i in range(custom_looks.size()):
+		if custom_looks[i].get("name", "") == look.get("name", ""):
+			return i
+	return -1
+
+
+func _create_character() -> void:
+	_editing = _picked.duplicate()
+	_editing["name"] = _fresh_custom_name()
+	_editing_index = -1
+	show_creator()
+
+
+func _edit_character() -> void:
+	_editing = _picked.duplicate()
+	_editing_index = _custom_index(_picked)
+	show_creator()
+
+
+func _delete_character() -> void:
+	var i := _custom_index(_picked)
+	if i >= 0:
+		custom_looks.remove_at(i)
+		if my_look.get("name", "") == _picked.get("name", ""):
+			my_look = Looks.preset(1)
+		_picked = my_look.duplicate()
+		_save_settings()
+	show_character_select()
+
+
+func _fresh_custom_name() -> String:
+	var n := 1
+	while true:
+		var candidate := "MY CHARACTER %d" % n
+		if _custom_index({"name": candidate}) < 0:
+			return candidate
+		n += 1
+	return "MY CHARACTER"
+
+
+var _creator_name: LineEdit
+
+
+## Make (or change) one of your own characters.
+func show_creator() -> void:
+	var box := _character_screen(_editing)
+	var name_row := HBoxContainer.new()
+	name_row.add_child(_tag("NAME", 24, Palette.DIM))
+	_creator_name = LineEdit.new()
+	_typing_sounds(_creator_name)
+	_creator_name.text = str(_editing.get("name", ""))
+	_creator_name.max_length = 20
+	_creator_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_creator_name.add_theme_color_override("font_color", Palette.INK)
+	_creator_name.add_theme_stylebox_override("normal", Palette.box(Color(0, 0, 0, 0.4), Palette.BUTTON_EDGE, 2, 2, 6))
+	_creator_name.add_theme_stylebox_override("focus", Palette.box(Color(0, 0, 0, 0.5), Palette.AMBER, 2, 2, 6))
+	_creator_name.text_changed.connect(func(t: String) -> void: _editing["name"] = t.strip_edges().to_upper())
+	name_row.add_child(_creator_name)
+	box.add_child(name_row)
+	for part in [["BODY", "base", Looks.BASES], ["HAT", "hat", Looks.HATS], ["FACE", "face", Looks.FACES]]:
+		var names: Dictionary = part[2]
+		var value = _editing[part[1]]
+		var need := Unlocks.need_text(part[1], value, owned)
+		box.add_child(_choice_row(part[0] if need == "" else "%s · 🔒 %s" % [part[0], need], names[value] + ("" if need == "" else " 🔒"), _step_part.bind(-1, part[1], names.keys()), _step_part.bind(1, part[1], names.keys())))
+	# where the face piece sits
+	var face: String = _editing.get("face", "none")
+	if face != "none":
+		if face in ["cigarette", "cigar", "eyepatch"]:
+			var side_word := "THEIR LEFT" if _editing.get("face_side", "left") == "left" else "THEIR RIGHT"
+			var which := "EYE" if face == "eyepatch" else "MOUTH"
+			box.add_child(_choice_row("  " + which, side_word, _flip_face_side, _flip_face_side))
+		var angle_word: String = {"cigarette": "DROOP", "cigar": "DROOP", "eyepatch": "STRAP", "shades": "TILT", "tash": "CURL", "visor": "TILT"}.get(face, "ANGLE")
+		box.add_child(_choice_row("  " + angle_word, _step_word(int(_editing.get("face_angle", 0))), _nudge_face.bind("face_angle", -1), _nudge_face.bind("face_angle", 1)))
+		box.add_child(_choice_row("  HEIGHT", _step_word(int(_editing.get("face_height", 0))), _nudge_face.bind("face_height", -1), _nudge_face.bind("face_height", 1)))
+	var outfit_need := Unlocks.need_text("outfit", int(_editing["outfit"]), owned)
+	box.add_child(_tag("OUTFIT: %s%s" % [Looks.OUTFITS[int(_editing["outfit"])]["name"], "" if outfit_need == "" else "  🔒 " + outfit_need], 24, Palette.DIM if outfit_need == "" else Palette.PINK))
+	# two neat rows of swatches (there are too many outfits for one row)
+	var swatches := GridContainer.new()
+	swatches.columns = int(ceil(Looks.OUTFITS.size() / 2.0))
+	swatches.add_theme_constant_override("h_separation", 5)
+	swatches.add_theme_constant_override("v_separation", 5)
+	for i in range(Looks.OUTFITS.size()):
+		var sw := Button.new()
+		sw.custom_minimum_size = Vector2(0, 46)
+		sw.add_theme_font_size_override("font_size", 18)
+		sw.clip_text = true
+		sw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var col_c: Color = Looks.OUTFITS[i]["color"]
+		var edge := Palette.AMBER if i == int(_editing["outfit"]) else Palette.BUTTON_EDGE
+		sw.add_theme_stylebox_override("normal", Palette.box(col_c.darkened(0.35) if i > 0 else Color(0.2, 0.18, 0.16), edge, 3, 2, 4))
+		sw.add_theme_stylebox_override("hover", Palette.box(col_c.darkened(0.2) if i > 0 else Color(0.25, 0.22, 0.2), edge, 3, 2, 4))
+		sw.text = "-" if i == 0 else ("🔒" if not Unlocks.is_unlocked("outfit", i, owned) else "")
+		sw.pressed.connect(_sound.bind("part"))
+		sw.pressed.connect(_set_part.bind("outfit", i))
+		swatches.add_child(sw)
+	box.add_child(swatches)
+	var eyes_need := Unlocks.need_text("eyes", true, owned)
+	var eyes := _button("GLOWING EYES: %s" % ("ON" if _editing["eyes"] else "OFF") + ("" if eyes_need == "" else "  🔒 " + eyes_need), _set_part.bind("eyes", not _editing["eyes"]), 22 if eyes_need != "" else 24)
+	eyes.custom_minimum_size = Vector2(0, 52)
+	box.add_child(eyes)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	var note := _lock_note(_editing)
+	if note != "":
+		box.add_child(_label(note, 20, Palette.PINK, true))
+	var save := _button("SAVE" if note == "" else "LOCKED", _save_creation)
+	save.disabled = note != ""
+	Palette.accent(save, Palette.AMBER)
+	var cancel := _button("CANCEL", show_character_select)
+	for b in [save, cancel]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(b)
+	box.add_child(buttons)
+
+
+## [◀] LABEL: value [▶]
+func _choice_row(label: String, value: String, on_prev: Callable, on_next: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var prev := _button(" < ", on_prev, 28)
+	prev.custom_minimum_size = Vector2(64, 52)
+	row.add_child(prev)
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 0)
+	mid.add_child(_label(label, 18, Palette.DIM, true))
+	mid.add_child(_label(value, 28, Palette.INK, true))
+	row.add_child(mid)
+	var nxt := _button(" > ", on_next, 28)
+	nxt.custom_minimum_size = Vector2(64, 52)
+	row.add_child(nxt)
+	return row
+
+
+func _step_part(delta: int, part: String, options: Array) -> void:
+	_sound("part")
+	var at := options.find(_editing[part])
+	_set_part(part, options[posmod(at + delta, options.size())])
+
+
+## -2..2 shown as a little bar: "-- ·" ... "· ++".
+static func _step_word(v: int) -> String:
+	return ["--", "-", "MIDDLE", "+", "++"][clampi(v + 2, 0, 4)]
+
+
+func _flip_face_side() -> void:
+	_sound("part")
+	_set_part("face_side", "right" if _editing.get("face_side", "left") == "left" else "left")
+
+
+func _nudge_face(key: String, delta: int) -> void:
+	_sound("part")
+	_set_part(key, clampi(int(_editing.get(key, 0)) + delta, -2, 2))
+
+
+func _set_part(part: String, value) -> void:
+	_editing[part] = value
+	show_creator()
+
+
+func _save_creation() -> void:
+	if not Unlocks.look_unlocked(_editing, owned):
+		return
+	_sound("save")
+	var char_name := str(_editing.get("name", "")).strip_edges().to_upper().left(20)
+	if char_name == "":
+		char_name = _fresh_custom_name()
+	# a preset's name, or another of yours: make it unique
+	var taken := func(n: String) -> bool:
+		for p in Looks.PRESETS:
+			if p["name"] == n:
+				return true
+		var i := _custom_index({"name": n})
+		return i >= 0 and i != _editing_index
+	while taken.call(char_name):
+		char_name += "*"
+	_editing["name"] = char_name
+	var look := Looks.clean(_editing)
+	look["name"] = char_name
+	if _editing_index >= 0:
+		custom_looks[_editing_index] = look
+	else:
+		custom_looks.append(look)
+	_picked = look.duplicate()
+	_save_settings()
+	show_character_select()
+
+
+func _leave_customiser() -> void:
+	world.hide_preview()
+	show_menu()
+
+
+# ================================================================ setup screen
+
+var _name_edits: Array = []
+
+
+func show_setup() -> void:
+	_fit_setup_looks()
+	var box := _paper()
+	box.add_theme_constant_override("separation", 10)
+	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
+	box.add_child(_label("The undersigned agree to a game of %s." % Games.label(game_kind).capitalize() + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
+
+	var count_row := HBoxContainer.new()
+	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	count_row.add_theme_constant_override("separation", 16)
+	box.add_child(count_row)
+	count_row.add_child(_tag("PLAYERS", 30, Palette.CARD_INK))
+	count_row.add_child(_button("-", _change_count.bind(-1), 52))
+	count_row.add_child(_tag(str(player_names.size()), 40, Palette.CARD_INK))
+	count_row.add_child(_button("+", _change_count.bind(1), 52))
+
+	_name_edits = []
+	for i in range(player_names.size()):
+		var row := HBoxContainer.new()
+		row.add_child(_tag("%d." % (i + 1), 30, Palette.CARD_INK))
+		var edit := LineEdit.new()
+		_typing_sounds(edit)
+		edit.text = str(player_names[i])
+		edit.placeholder_text = "SIGN HERE"
+		edit.max_length = 10
+		edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(edit)
+		var who := _paper_button(_short_name(setup_looks[i]), _cycle_setup_look.bind(i), 20)
+		who.custom_minimum_size = Vector2(170, 56)
+		row.add_child(who)
+		var kind := _paper_button(_seat_kind(i), _cycle_setup_bot.bind(i), 20)
+		kind.custom_minimum_size = Vector2(130, 56)
+		kind.disabled = i == 0 # player 1 is you
+		row.add_child(kind)
+		box.add_child(row)
+		_name_edits.append(edit)
+
+	var hide_box := CheckBox.new()
+	hide_box.text = "HIDE HANDS BETWEEN TURNS"
+	hide_box.button_pressed = hide_hands
+	hide_box.add_theme_color_override("font_color", Palette.CARD_INK)
+	hide_box.add_theme_color_override("font_pressed_color", Palette.CARD_INK)
+	hide_box.add_theme_color_override("font_hover_color", Palette.CARD_INK)
+	hide_box.add_theme_color_override("font_hover_pressed_color", Palette.CARD_INK)
+	hide_box.add_theme_font_size_override("font_size", 26)
+	hide_box.toggled.connect(_on_hide_toggled)
+	hide_box.toggled.connect(func(_on: bool) -> void: _sound("tick"))
+	box.add_child(hide_box)
+
+	var sign_btn := _button("SIGN THE WAIVER", _start_from_setup, 34)
+	box.add_child(sign_btn)
+	box.add_child(_paper_button("BACK", show_this_phone, 28))
+
+
+func _on_hide_toggled(on: bool) -> void:
+	hide_hands = on
+
+
+## Everyone at a pass & play table has a character: player 1 is you.
+func _fit_setup_looks() -> void:
+	while setup_looks.size() < player_names.size():
+		var i := setup_looks.size()
+		setup_looks.append(my_look.duplicate() if i == 0 else Looks.for_seat(i))
+	while setup_looks.size() > player_names.size():
+		setup_looks.pop_back()
+	while setup_bots.size() < player_names.size():
+		setup_bots.append("")
+	while setup_bots.size() > player_names.size():
+		setup_bots.pop_back()
+	setup_bots[0] = ""
+
+
+func _seat_kind(i: int) -> String:
+	var level: String = setup_bots[i] if i < setup_bots.size() else ""
+	return "PERSON" if level == "" else "AI: %s" % Bot.level_label(level)
+
+
+## Person -> AI easy -> AI normal -> AI hard -> person. An AI gets a name of
+## its own unless someone typed one in.
+func _cycle_setup_bot(i: int) -> void:
+	_read_names()
+	var order := [""] + Bot.LEVELS
+	setup_bots[i] = order[(order.find(setup_bots[i]) + 1) % order.size()]
+	var current := str(player_names[i]).strip_edges().to_upper()
+	if setup_bots[i] != "" and (current == "" or current.begins_with("PLAYER")):
+		for n in Bot.NAMES:
+			if not player_names.has(n):
+				player_names[i] = n
+				break
+	elif setup_bots[i] == "" and Bot.NAMES.has(current):
+		player_names[i] = "PLAYER %d" % (i + 1)
+	show_setup()
+
+
+func _short_name(look: Dictionary) -> String:
+	return str(look.get("name", "CUSTOM")).trim_prefix("THE ")
+
+
+func _cycle_setup_look(i: int) -> void:
+	_read_names()
+	var all := _all_characters()
+	var at := -1
+	for k in range(all.size()):
+		if all[k].get("name", "") == setup_looks[i].get("name", ""):
+			at = k
+	setup_looks[i] = all[(at + 1) % all.size()].duplicate()
+	show_setup()
+
+
+func _read_names() -> void:
+	for i in range(_name_edits.size()):
+		player_names[i] = _name_edits[i].text
+
+
+func _change_count(delta: int) -> void:
+	_read_names()
+	var n := clampi(player_names.size() + delta, MIN_PLAYERS, MAX_PLAYERS)
+	while player_names.size() < n:
+		player_names.append("PLAYER %d" % (player_names.size() + 1))
+	while player_names.size() > n:
+		player_names.pop_back()
+	show_setup()
+
+
+func _start_from_setup() -> void:
+	_read_names()
+	var used := {}
+	for i in range(player_names.size()):
+		var n := str(player_names[i]).strip_edges().to_upper()
+		if n == "":
+			n = "PLAYER %d" % (i + 1)
+		while used.has(n):
+			n += "*"
+		used[n] = true
+		player_names[i] = n
+	_save_settings()
+	_fit_setup_looks()
+	local_mode = "pass"
+	_table = {"names": player_names.duplicate(), "looks": setup_looks.duplicate(true), "bots": setup_bots.duplicate(), "kind": game_kind, "normal": normal_mode}
+	start_match()
+
+
+# ================================================================ match flow
+
+## Starts (or restarts) a game on this phone with the players in `_table`.
+func start_match() -> void:
+	_humans_out = false
+	_hide_settings()
+	session.leave()
+	world.hide_carousel()
+	game = new_game(str(_table.get("kind", "rummy")), bool(_table.get("normal", false)))
+	tutorial = bool(_table.get("tutorial", false))
+	if not tutorial:
+		demo_stage = ""
+	game.setup(_table["names"], _game_opts(game.kind), int(_table.get("seed", -1)))
+	for i in range(game.players.size()):
+		game.players[i].look = _table["looks"][i]
+		game.players[i].bot = _table["bots"][i]
+	game.event.connect(_on_game_event)
+	_reset_match_view()
+	_build_table()
+	game.start_round()
+	_after_action()
+
+
+func _reset_match_view() -> void:
+	world.reset_rounds()
+	_hand_hidden = false
+	log_lines = []
+	seen_upto = {}
+	turn_counter = 0
+	shown_turn = -1
+	shown_result_round = 0
+	selected = []
+	selected_item = ""
+	message = ""
+	_pending_cb = Callable()
+	_viewer = 0
+	_ai_memory = {}
+	_ai_wait = 1.0
+	_ai_phase = ""
+	_ai_held = []
+
+
+func _online() -> bool:
+	return session != null and session.is_online()
+
+
+## The seat this screen belongs to: whoever's turn it is in pass-and-play
+## (or the last person to play while an AI has its turn), or this phone's own
+## seat online.
+func _me() -> int:
+	if _online():
+		return session.my_seat
+	return _viewer if _is_bot(game.turn) else game.turn
+
+
+func _is_bot(seat: int) -> bool:
+	return game != null and seat >= 0 and seat < game.players.size() and game.players[seat].bot != ""
+
+
+## People still in the game at this table (pass-and-play).
+func _people_alive() -> int:
+	var n := 0
+	for p in game.players:
+		if p.alive and p.bot == "":
+			n += 1
+	return n
+
+
+func _my_turn() -> bool:
+	return game.is_turn_of(_me())
+
+
+func _on_online_match_started() -> void:
+	game = session.game
+	_reset_match_view()
+	_build_table()
+
+
+## The host's game changed. Replay the public events for the log and effects,
+## then either finish this phone's own action or just redraw.
+func _on_net_update(events: Array, result: Dictionary) -> void:
+	if game == null or round_label == null:
+		return
+	for e in events:
+		_on_game_event(e[0], e[1])
+	if not result.is_empty() and _pending_cb.is_valid():
+		var cb := _pending_cb
+		_pending_cb = Callable()
+		cb.call(result)
+	else:
+		_after_action()
+
+
+## Does `action` for this screen's player: straight on the game for
+## pass-and-play, or as a request to the host online. `then` gets the result.
+func _act(action: String, args: Array, then: Callable) -> void:
+	if world.dealing or world.fx_busy:
+		if action != "next_round" and action != "shoot" and action != "play_again":
+			return # wait for the animation
+	if _online():
+		if _pending_cb.is_valid():
+			return # still waiting on the last one
+		_pending_cb = then
+		session.act(action, args)
+		return
+	var seat := game.turn
+	if action == "shoot" and game.gun != null:
+		seat = game.gun["holder"]
+	if action == "snap":
+		seat = _me() # Snap: anyone, any time
+	if _is_bot(seat) and action != "next_round" and action != "play_again":
+		return # the AI is playing this one
+	then.call(Session.perform(game, seat, action, args, true))
+
+
+func _ignore_result(_res: Dictionary) -> void:
+	_after_action()
+
+
+func _on_game_event(kind: String, d: Dictionary) -> void:
+	if mode_ui != null:
+		mode_ui.on_event(kind, d)
+	_event_sound(kind, d)
+	_demo_event(kind, d)
+	_count_stats(kind, d)
+	match kind:
+		"roulette":
+			world.roulette(d["seat"], d["hit"])
+			var who := _name(d["seat"])
+			if d["hit"]:
+				_log("%s spins the revolver... BANG. -%d health." % [who, d["damage"]])
+				world.announce("BANG!\n%s LOSES %d" % [who, d["damage"]])
+				_flash(Palette.RED)
+				_shake()
+			else:
+				_log("%s spins the revolver... click. They live." % who)
+				world.announce("CLICK.\n%s LIVES" % who)
+		"trump_changed":
+			var to_name := trump_name(int(d["to"]))
+			_log("The trump changes: %s are wild now." % to_name.to_lower().capitalize())
+			world.announce("TRUMP CHANGES\nTO %s" % to_name)
+		"round_start":
+			if d["round"] == 1 and _online():
+				_reset_match_view()
+				_close_overlay()
+			_log("— ROUND %d — %s deals. %s goes first." % [d["round"], _name(d["dealer"]), _name(d["first"])])
+		"turn_start":
+			turn_counter += 1
+		"loot":
+			_log("%s finds an item." % _name(d["seat"]))
+		"hit":
+			_log("%s hits: %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
+		"stand":
+			_log("%s stands%s." % [_name(d["seat"]), " on %d" % d["total"] if d["seat"] == _me() else ""])
+		"bust":
+			_log("%s GOES BUST." % _name(d["seat"]))
+			world.announce("%s\nGOES BUST" % _name(d["seat"]))
+		"turn_skipped":
+			_log("%s is in handcuffs and skips a turn." % _name(d["seat"]))
+		"draw":
+			if d["source"] == "discard":
+				_log("%s takes %s from the discard pile." % [_name(d["seat"]), Cards.card_name(d["card"])])
+			else:
+				if d.get("item", false):
+					_log("%s draws an item from the stock and draws again." % _name(d["seat"]))
+				else:
+					_log("%s draws from the stock." % _name(d["seat"]))
+		"meld":
+			_log("%s melds %s." % [_name(d["seat"]), Cards.cards_text(d["meld"]["cards"])])
+		"layoff":
+			_log("%s lays off %s." % [_name(d["seat"]), Cards.cards_text(d["cards"])])
+		"swap":
+			_log("%s swaps %s in for the trump %s and melds %s." % [_name(d["seat"]), Cards.card_name(d["natural"]), Cards.card_name(d["trump"]), Cards.cards_text(d["new_meld"]["cards"])])
+		"discard":
+			_log("%s discards %s." % [_name(d["seat"]), Cards.card_name(d["card"])])
+		"item_used":
+			_log(str(d["text"]) + ".")
+			world.play_item(d["item"], d["seat"], d["target"])
+			if d["item"] == "flashbang":
+				get_tree().create_timer(0.95).timeout.connect(_flash.bind(Color.WHITE))
+		"damage":
+			_log("%s is down to %d health." % [_name(d["seat"]), d["hp"]])
+		"eliminated":
+			_log("%s IS OUT." % _name(d["seat"]))
+			_check_humans_out()
+		"blackjack_blocked":
+			_log("%s has a Blackjack, but so does the dealer, %s: no free shot." % [_name(d["shooter"]), _name(d["target"])])
+		"blackjack_item":
+			_log("BLACKJACK! %s wins an item: %s." % [_name(d["seat"]), Items.def(d["item"])["name"]])
+			_blackjack_item_fx(int(d["seat"]))
+		"gun_passed":
+			_log("%s picks up the shotgun: %d shell%s." % [_name(d["seat"]), d["shells"], "" if d["shells"] == 1 else "s"])
+		"stock_reshuffled":
+			_log("The discard pile is shuffled into a new stock.")
+		"round_end":
+			if _blackjack():
+				for sh in d.get("shooters", []):
+					world.cheer(sh[0])
+				_log("%s the dealer has %s." % [_name(d["dealer"]), "BUST" if d["dealer_bust"] else str(d["dealer_total"])])
+				for duel in d.get("duels", []):
+					var verdict: String = {"win": "beats the dealer", "lose": "loses to the dealer", "push": "pushes"}.get(duel["outcome"], "")
+					_log("%s %s%s." % [_name(duel["seat"]), verdict, " (%d shell%s)" % [duel["shells"], "" if duel["shells"] == 1 else "s"] if duel["shells"] > 0 else ""])
+				if d["dealer_shells"] > 0:
+					_log("The dealer gets %d shell%s." % [d["dealer_shells"], "" if d["dealer_shells"] == 1 else "s"])
+			elif d["winner"] >= 0:
+				world.cheer(d["winner"])
+			if _blackjack():
+				pass
+			elif d["winner"] < 0:
+				_log("The deck ran dry. Nobody scores.")
+			else:
+				_log("%s goes out%s: %d points, %d shell%s." % [_name(d["winner"]), " with RUMMY" if d["rummy"] else "", d["points"], d["shells"], "" if d["shells"] == 1 else "s"])
+		"shot":
+			_log("%s shoots %s.%s" % [_name(d["shooter"]), _name(d["target"]), " CLICK: a blank." if d.get("blank", false) else ""])
+			if _online() and d.get("blank", false):
+				world.fire(d["shooter"], d["target"], true)
+				_last_shot_text = "CLICK. A BLANK. %s lives." % _name(d["target"])
+			elif _online():
+				# every phone feels it; the target's phone most of all
+				world.fire(d["shooter"], d["target"])
+				if d["target"] == _me():
+					_flash(Palette.RED)
+					_shake()
+				else:
+					_flash(Color.WHITE)
+				_last_shot_text = "BANG. %s shoots %s." % [_name(d["shooter"]), _name(d["target"])]
+		"match_end":
+			if game.options["shotgun"] and not tutorial:
+				played[game.kind] = int(played.get(game.kind, 0)) + 1
+				_save_settings()
+				if int(played[game.kind]) == Games.UNLOCK_NORMAL_AFTER:
+					_log("NORMAL MODE UNLOCKED for %s." % Games.label(game.kind))
+			if d["winner"] >= 0:
+				_log("%s WALKS OUT." % _name(d["winner"]))
+
+
+# ================================================================ card skins
+
+## A card face and back drawn in one skin, side by side.
+class SkinPreview extends Control:
+	const Art = preload("res://scripts/ui/card_art.gd")
+	const Skins = preload("res://scripts/ui/card_skins.gd")
+	var skin_id := "classic"
+	var dim := false
+
+	func _draw() -> void:
+		var keep: Dictionary = Art.skin
+		Art.skin = Skins.get_skin(skin_id)
+		var font := get_theme_default_font()
+		var w := (size.x - 8.0) * 0.5
+		var card_size := Vector2(w, minf(size.y, w * 1.44))
+		Art.draw_card(self, font, Rect2(Vector2.ZERO, card_size), {"id": "KH", "rank": 13, "suit": "H"})
+		Art.draw_card(self, font, Rect2(Vector2(w + 8.0, 0), card_size), {}, true)
+		Art.skin = keep
+		if dim:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.55))
+
+
+## Pick how your cards look. Locked skins say what unlocks them.
+func show_card_skins() -> void:
+	_keep_menu_name()
+	world.hide_gacha()
+	world.hide_carousel()
+	world.set_preview_shown(false) # the character would show through the floating grid
+	var box := _paper(660.0)
+	box.add_child(_label("CARD SKINS", 52, Color(0.36, 0.06, 0.05), true))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 720)
+	box.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	var retro_open := 0
+	for id in CardSkins.RETRO:
+		if Unlocks.is_unlocked("card", id, owned):
+			retro_open += 1
+	for section in [["CLASSIC DECKS", CardSkins.ORDER, ""], ["RETRO DECKS", CardSkins.RETRO, "Each one nods to a famous game. Unlock it to learn a bit of gaming history. (%d/%d)" % [retro_open, CardSkins.RETRO.size()]], ["SECRET DECKS", CardSkins.SECRET, "Never in the gacha machine. Find the codes for the computer."]]:
+		sections.add_child(_label(section[0], 32, Color(0.36, 0.06, 0.05), true))
+		if section[2] != "":
+			sections.add_child(_label(section[2], 18, Palette.CARD_INK, true))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 14)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sections.add_child(grid)
+		for id in section[1]:
+			grid.add_child(_skin_cell(id))
+	box.add_child(_paper_button("BACK", _open_customiser, 26)) # back to the wardrobe
+
+
+## One skin in the picker: face and back, its name, its story if it's a
+## retro deck you've unlocked, and USE (or what unlocks it).
+func _skin_cell(id: String) -> VBoxContainer:
+	var unlocked := Unlocks.is_unlocked("card", id, owned)
+	var cell := VBoxContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.add_theme_constant_override("separation", 4)
+	var preview := SkinPreview.new()
+	preview.skin_id = id
+	preview.dim = not unlocked
+	preview.custom_minimum_size = Vector2(0, 190)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(preview)
+	cell.add_child(_label(CardSkins.skin_name(id), 24, Palette.CARD_INK, true))
+	var fact := CardSkins.fact(id)
+	if fact != "":
+		cell.add_child(_label(fact if unlocked else "???", 15, Color(0.3, 0.25, 0.2), true))
+	var b: Button
+	if id == card_skin:
+		b = _paper_button("IN USE", _noop, 20)
+		Palette.accent(b, Palette.AMBER)
+	elif unlocked:
+		b = _paper_button("USE", _set_card_skin.bind(id), 22)
+	else:
+		b = _paper_button("🔒 " + Unlocks.need_text("card", id, owned), _noop, 16)
+		b.disabled = true
+	b.custom_minimum_size = Vector2(0, 54)
+	b.clip_text = true
+	cell.add_child(b)
+	return cell
+
+
+func _set_card_skin(id: String, stay := false) -> void:
+	if not Unlocks.is_unlocked("card", id, owned):
+		return
+	_sound("part")
+	card_skin = id
+	CardArt.skin = CardSkins.get_skin(id)
+	_save_settings()
+	world.textures.build() # redraw the 3D cards in the new skin
+	if not stay:
+		show_card_skins()
+
+
+# ================================================================ shotgun skins
+
+## A side view of the shotgun in one skin.
+class GunPreview extends Control:
+	const Skins = preload("res://scripts/core/gun_skins.gd")
+	var skin_id := "standard"
+	var dim := false
+
+	func _draw() -> void:
+		var sk := Skins.get_skin(skin_id)
+		var metal: Color = sk["metal"]
+		var wood: Color = sk["wood"]
+		var w := size.x
+		var h := size.y
+		var y := h * 0.42
+		if sk.has("glow"):
+			draw_rect(Rect2(Vector2(w * 0.02, y - h * 0.16), Vector2(w * 0.96, h * 0.42)), Color(sk["glow"], 0.18))
+		# barrels, rib and bead
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.09), Vector2(w * 0.56, h * 0.08)), metal)
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.01), Vector2(w * 0.56, h * 0.08)), metal.darkened(0.15))
+		draw_rect(Rect2(Vector2(w * 0.04, y - h * 0.12), Vector2(w * 0.56, h * 0.03)), metal.darkened(0.3))
+		draw_circle(Vector2(w * 0.05, y - h * 0.13), h * 0.025, Color(0.95, 0.92, 0.8))
+		# fore-end under the barrels
+		draw_rect(Rect2(Vector2(w * 0.3, y + h * 0.07), Vector2(w * 0.24, h * 0.07)), wood)
+		# receiver, trigger guard, trigger
+		draw_rect(Rect2(Vector2(w * 0.58, y - h * 0.11), Vector2(w * 0.12, h * 0.24)), metal.darkened(0.1))
+		draw_arc(Vector2(w * 0.66, y + h * 0.2), h * 0.07, 0.0, PI, 10, metal.darkened(0.2), 3.0)
+		draw_line(Vector2(w * 0.655, y + h * 0.13), Vector2(w * 0.65, y + h * 0.22), metal.darkened(0.35), 3.0)
+		# stock
+		var stock := PackedVector2Array([Vector2(w * 0.7, y - h * 0.08), Vector2(w * 0.96, y + h * 0.02), Vector2(w * 0.96, y + h * 0.3), Vector2(w * 0.7, y + h * 0.12)])
+		draw_colored_polygon(stock, wood)
+		draw_line(Vector2(w * 0.955, y + h * 0.02), Vector2(w * 0.955, y + h * 0.3), Color(0.08, 0.07, 0.06), 5.0)
+		if dim:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.55))
+
+
+## Pick your shotgun skin. Everyone sees it when the gun is in your hands.
+func show_gun_skins() -> void:
+	_keep_menu_name()
+	world.hide_gacha()
+	world.hide_carousel()
+	world.set_preview_shown(false) # the character would show through the floating grid
+	var box := _paper(660.0)
+	box.add_child(_label("SHOTGUN SKINS", 48, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("Everyone at the table sees yours when the gun's in your hands.", 18, Palette.CARD_INK, true))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 700)
+	box.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	for section in [["CLASSIC", GunSkins.ORDER], ["RETRO", GunSkins.RETRO], ["SECRET", GunSkins.SECRET]]:
+		sections.add_child(_label(section[0], 30, Color(0.36, 0.06, 0.05), true))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 14)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sections.add_child(grid)
+		for id in section[1]:
+			grid.add_child(_gun_cell(id))
+	box.add_child(_paper_button("BACK", _open_customiser, 26)) # back to the wardrobe
+
+
+func _gun_cell(id: String) -> VBoxContainer:
+	var unlocked := Unlocks.is_unlocked("gun", id, owned)
+	var cell := VBoxContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.add_theme_constant_override("separation", 4)
+	var preview := GunPreview.new()
+	preview.skin_id = id
+	preview.dim = not unlocked
+	preview.custom_minimum_size = Vector2(0, 120)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(preview)
+	cell.add_child(_label(GunSkins.skin_name(id), 22, Palette.CARD_INK, true))
+	if Gacha.in_machine("gun", id):
+		var rarity_color: Color = Gacha.RARITY_COLORS[Gacha.rarity("gun", id)]
+		cell.add_child(_label(Gacha.RARITY_NAMES[Gacha.rarity("gun", id)], 15, rarity_color.darkened(0.25), true))
+	var fact := GunSkins.fact(id)
+	if fact != "":
+		cell.add_child(_label(fact if unlocked else "???", 15, Color(0.3, 0.25, 0.2), true))
+	var b: Button
+	if id == gun_skin:
+		b = _paper_button("IN USE", _noop, 20)
+		Palette.accent(b, Palette.AMBER)
+	elif unlocked:
+		b = _paper_button("USE", _set_gun_skin.bind(id), 22)
+	else:
+		b = _paper_button("🔒 GACHA", _noop, 18)
+		b.disabled = true
+	b.custom_minimum_size = Vector2(0, 54)
+	cell.add_child(b)
+	return cell
+
+
+func _set_gun_skin(id: String, stay := false) -> void:
+	if not Unlocks.is_unlocked("gun", id, owned):
+		return
+	_sound("rack")
+	gun_skin = id
+	my_look["gun"] = id
+	if not setup_looks.is_empty():
+		setup_looks[0]["gun"] = id
+	_save_settings()
+	if not stay:
+		show_gun_skins()
+
+
+# ================================================================ gacha
+
+var _gacha_busy := false
+var _gacha_buttons: Array = []
+var _gacha_count: Label
+var _gacha_hint: Label
+var _gacha_step := "" # "coin", "crank", "drop", "tap", "open" or ""
+var _gacha_prize := ""
+var _gacha_drag := "" # what your finger is on: "coin" or "crank"
+var _gacha_angle := 0.0 # last finger angle round the crank
+var _gacha_auto := false # AUTO is doing the spin
+
+const GACHA_WOBBLES := {"common": 1, "rare": 2, "epic": 3, "legendary": 4}
+const GACHA_HINTS := {
+	"coin": "DRAG THE COIN INTO THE SLOT",
+	"crank": "TURN THE CRANK: DRAG ROUND IN CIRCLES",
+	"drop": "HERE IT COMES...",
+	"tap": "TAP THE CAPSULE TO CRACK IT OPEN",
+	"open": "",
+}
+
+
+## The gacha machine: the camera walks over to it in the corner of the room.
+## You do it all by hand: drag the coin into the slot, turn the crank round,
+## tap the capsule open. (AUTO does it for you.)
+func show_gacha() -> void:
+	_keep_menu_name()
+	_close_overlay()
+	_clear(screen)
+	world.hide_carousel()
+	world.show_gacha()
+	_gacha_busy = false
+	_gacha_auto = false
+	_gacha_drag = ""
+	# the whole screen is the machine: drags and taps land here
+	var touch := Control.new()
+	touch.mouse_filter = Control.MOUSE_FILTER_STOP
+	touch.gui_input.connect(_on_gacha_input)
+	screen.add_child(_full(touch))
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_top", 36)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	screen.add_child(_full(margin))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+	var title := _label("GACHA MACHINE", 48, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 10)
+	col.add_child(title)
+	_gacha_count = _label("", 26, Palette.INK, true)
+	_gacha_count.add_theme_color_override("font_outline_color", Color.BLACK)
+	_gacha_count.add_theme_constant_override("outline_size", 8)
+	col.add_child(_gacha_count)
+	_gacha_hint = _label("", 30, Palette.AMBER, true)
+	_gacha_hint.add_theme_color_override("font_outline_color", Color.BLACK)
+	_gacha_hint.add_theme_constant_override("outline_size", 8)
+	col.add_child(_gacha_hint)
+	for l in [title, _gacha_count, _gacha_hint]:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _soft_panel())
+	col.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	box.add_child(_label("Win a round: +1 coin. Win the match: +1 more. Card skins, shotgun skins and costumes inside, never a repeat.", 18, Palette.DIM, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var auto := _button("AUTO", _spin_gacha, 26)
+	var back := _button("BACK", show_menu, 26)
+	for b in [auto, back]:
+		b.custom_minimum_size = Vector2(0, 60)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(b)
+	_gacha_buttons = [auto, back]
+	var left := Gacha.remaining(owned).size()
+	if left == 0 or coins <= 0:
+		world.gacha_machine.put_coin_away()
+		_set_gacha_step("")
+		_gacha_hint.text = "YOU'VE GOT EVERYTHING!" if left == 0 else "WIN ROUNDS TO EARN COINS"
+		auto.disabled = true
+	else:
+		world.gacha_machine.offer_coin()
+		_set_gacha_step("coin")
+	_update_gacha_count()
+
+
+func _set_gacha_step(step: String) -> void:
+	_gacha_step = step
+	if _gacha_hint != null and is_instance_valid(_gacha_hint):
+		_gacha_hint.text = GACHA_HINTS.get(step, "")
+		if step == "tap":
+			var left: int = world.gacha_machine.taps_left()
+			if left > 1:
+				_gacha_hint.text += " (%d TAPS)" % left
+
+
+func _update_gacha_count() -> void:
+	if _gacha_count == null or not is_instance_valid(_gacha_count):
+		return
+	var total := Gacha.pool().size()
+	_gacha_count.text = "%d COIN%s · %d/%d COLLECTED" % [coins, "" if coins == 1 else "S", total - Gacha.remaining(owned).size(), total]
+
+
+## Where something in the room is on screen (in the 3D view's pixels).
+func _gacha_screen(at: Vector3) -> Vector2:
+	return world.camera.unproject_position(at)
+
+
+## How close a finger has to be, in the 3D view's pixels.
+func _gacha_reach(fraction: float) -> float:
+	return float(view3d.size.y) * fraction
+
+
+## Your finger on the machine.
+func _on_gacha_input(event: InputEvent) -> void:
+	var m = world.gacha_machine
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var at := _to_view(event.position)
+		if event.pressed:
+			match _gacha_step:
+				"coin":
+					if at.distance_to(_gacha_screen(m.coin_point())) < _gacha_reach(0.09):
+						_gacha_drag = "coin"
+						_sound("tap")
+				"crank":
+					var c := _gacha_screen(m.crank_point())
+					if at.distance_to(c) < _gacha_reach(0.16):
+						_gacha_drag = "crank"
+						_gacha_angle = (at - c).angle()
+				"tap":
+					_gacha_tap()
+		else:
+			if _gacha_drag == "coin":
+				if at.distance_to(_gacha_screen(m.slot_point())) < _gacha_reach(0.08):
+					_gacha_coin_in()
+				else:
+					m.drop_coin()
+			_gacha_drag = ""
+	elif event is InputEventMouseMotion and _gacha_drag != "":
+		var at := _to_view(event.position)
+		match _gacha_drag:
+			"coin":
+				# the coin stays at its distance from the camera, under your finger
+				var cam: Camera3D = world.camera
+				var depth: float = (m.slot_point() - cam.global_position).dot(-cam.global_transform.basis.z)
+				m.hold_coin(cam.project_position(at, depth * 0.85))
+			"crank":
+				var c := _gacha_screen(m.crank_point())
+				if at.distance_to(c) < 4.0:
+					return
+				var angle := (at - c).angle()
+				_gacha_crank(wrapf(angle - _gacha_angle, -PI, PI))
+				_gacha_angle = angle
+
+
+## The coin's in: spend it, pick the prize, and on to the crank.
+func _gacha_coin_in() -> void:
+	if _gacha_step != "coin" or coins <= 0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	_gacha_prize = Gacha.roll(owned, rng)
+	if _gacha_prize == "":
+		return
+	coins -= 1
+	owned[_gacha_prize] = true
+	_save_settings()
+	_update_gacha_count()
+	_set_gacha_step("drop") # nothing to do while it goes in
+	_gacha_busy = true
+	await world.gacha_machine.insert_coin()
+	if _gacha_step == "drop" and world._gacha_view:
+		_set_gacha_step("crank")
+
+
+## The crank turned by your finger (radians). Twice round drops a capsule.
+func _gacha_crank(delta: float) -> void:
+	if _gacha_step != "crank":
+		return
+	var m = world.gacha_machine
+	m.turn_crank(delta)
+	if m.crank_done():
+		_gacha_drag = ""
+		_gacha_drop()
+
+
+func _gacha_drop() -> void:
+	_set_gacha_step("drop")
+	var pv := Gacha.split(_gacha_prize)
+	var rarity := Gacha.rarity(pv[0], pv[1])
+	await world.gacha_machine.shake_out() # it rattles and shakes...
+	_sound("roll_" + rarity) # ...and a little jingle plays as it rolls out: grander the rarer
+	await world.gacha_machine.drop(Gacha.RARITY_COLORS[rarity], int(GACHA_WOBBLES[rarity]))
+	if _gacha_step == "drop" and world._gacha_view:
+		_set_gacha_step("tap")
+
+
+## Tap, tap... pop.
+func _gacha_tap() -> void:
+	if _gacha_step != "tap":
+		return
+	_set_gacha_step("open")
+	var opened: bool = await world.gacha_machine.tap_capsule()
+	if not world._gacha_view:
+		return
+	if not opened:
+		_set_gacha_step("tap")
+		return
+	await get_tree().create_timer(0.5).timeout # a moment to see it open
+	_gacha_busy = false
+	if world._gacha_view:
+		_reveal_prize(_gacha_prize)
+
+
+## AUTO: does whatever's left of the spin by itself.
+func _spin_gacha() -> void:
+	if _gacha_auto or _gacha_step == "":
+		return
+	if _gacha_step == "coin" and (coins <= 0 or Gacha.remaining(owned).is_empty()):
+		return
+	_gacha_auto = true
+	for b in _gacha_buttons:
+		if is_instance_valid(b) and b.text == "AUTO":
+			b.disabled = true
+	if _gacha_step == "coin":
+		world.gacha_machine.hold_coin(world.gacha_machine.slot_point() + Vector3(0, 0.08, 0.08))
+		_gacha_coin_in()
+	while _gacha_step == "drop": # the coin going in
+		await get_tree().process_frame
+	while _gacha_step == "crank":
+		_gacha_crank(TAU / 16.0)
+		await get_tree().create_timer(0.05).timeout
+	while _gacha_step == "drop": # the capsule coming down
+		await get_tree().process_frame
+	while _gacha_step in ["tap", "open"]:
+		if _gacha_step == "tap":
+			await _gacha_tap()
+			await get_tree().create_timer(0.3).timeout
+		else:
+			await get_tree().process_frame
+	_gacha_auto = false
+
+
+## The capsule pops open: what you won, how rare, and a way to use it.
+func _reveal_prize(prize: String) -> void:
+	_gacha_busy = false
+	var pv := Gacha.split(prize)
+	var rarity := Gacha.rarity(pv[0], pv[1])
+	_sound("prize_" + rarity)
+	if rarity == "legendary":
+		_flash(Palette.GOLD)
+	var box := _open_overlay(0.6, false, "reveal", true)
+	for c in screen.get_children():
+		c.visible = false # the machine's own words and buttons, under the prize (SPIN AGAIN brings them back)
+	var banner := _label(Gacha.RARITY_NAMES[rarity] + "!", 56 if rarity == "legendary" else 44, Gacha.RARITY_COLORS[rarity], true)
+	banner.add_theme_color_override("font_outline_color", Color.BLACK)
+	banner.add_theme_constant_override("outline_size", 8)
+	box.add_child(banner)
+	box.add_child(_label(Gacha.prize_kind(prize), 22, Palette.DIM, true))
+	box.add_child(_title(Gacha.prize_name(prize), Palette.AMBER))
+	var prize_fact := Gacha.prize_fact(prize)
+	if prize_fact != "":
+		box.add_child(_label("DID YOU KNOW? " + prize_fact, 21, Palette.INK, true))
+		_log("DID YOU KNOW? " + prize_fact)
+	match pv[0]:
+		"card":
+			var sp := SkinPreview.new()
+			sp.skin_id = str(pv[1])
+			sp.custom_minimum_size = Vector2(320, 230)
+			var holder := CenterContainer.new()
+			holder.add_child(sp)
+			box.add_child(holder)
+			_equip_button(box, "USE THESE CARDS", card_skin == str(pv[1]), func() -> void: _set_card_skin(str(pv[1]), true))
+		"gun":
+			var gp := GunPreview.new()
+			gp.skin_id = str(pv[1])
+			gp.custom_minimum_size = Vector2(0, 170)
+			box.add_child(gp)
+			_equip_button(box, "USE THIS SHOTGUN", gun_skin == str(pv[1]), func() -> void: _set_gun_skin(str(pv[1]), true))
+		_:
+			_equip_button(box, "WEAR IT", my_look.get(pv[0]) == pv[1], func() -> void: _wear_part(str(pv[0]), pv[1]))
+	box.add_child(_button("SPIN AGAIN · %d LEFT" % coins if coins > 0 and not Gacha.remaining(owned).is_empty() else "BACK TO THE MACHINE", _closing(show_gacha)))
+
+
+## An equip button on the prize screen: it puts the prize on in the
+## background and says so, and you stay at the machine.
+func _equip_button(box: Container, word: String, already: bool, equip: Callable) -> void:
+	var b := _button("IN USE" if already else word, func() -> void: pass)
+	b.disabled = already
+	b.pressed.connect(func() -> void:
+		equip.call()
+		b.text = "IN USE"
+		b.disabled = true)
+	box.add_child(b)
+
+
+## A costume prize, straight onto your character.
+func _wear_part(part: String, value) -> void:
+	if not Unlocks.is_unlocked(part, value, owned):
+		return
+	_sound("part")
+	my_look[part] = value
+	if not setup_looks.is_empty():
+		setup_looks[0][part] = value
+	_save_settings()
+
+
+# ================================================================ unlocks
+
+## Your seat, for your stats: online it's yours; at one phone it's the first
+## seat (the name on the phone).
+func _profile_seat() -> int:
+	return session.my_seat if _online() else 0
+
+
+## Keeps your stats up to date as the game goes (not in a demo, and not when
+## the seat is an AI's).
+func _count_stats(kind: String, d: Dictionary) -> void:
+	if game == null or tutorial or demo_stage != "" or _is_bot(_profile_seat()):
+		return
+	var me := _profile_seat()
+	match kind:
+		"round_end":
+			if int(d.get("winner", -1)) == me:
+				_bump({"round_wins": 1})
+				_earn(Gacha.COIN_PER_ROUND, "for winning the round")
+		"shot":
+			_last_shooter = int(d.get("shooter", -1))
+			if _last_shooter == me and int(d.get("damage", 0)) > 0 and int(d.get("target", -1)) != me:
+				_bump({"shells_hit": 1})
+		"damage":
+			if str(d.get("source", "")) != "shotgun":
+				_last_shooter = -1
+		"eliminated":
+			if _last_shooter == me and int(d.get("seat", -1)) != me:
+				_bump({"knockouts": 1})
+		"match_end":
+			tried_kinds[game.kind] = true
+			var more := {"matches": 1, "games_tried": tried_kinds.size() - int(stats.get("games_tried", 0))}
+			if int(d.get("winner", -1)) == me:
+				more["match_wins"] = 1
+				_earn(Gacha.COIN_PER_MATCH, "for winning the match")
+			_bump(more)
+
+
+## Adds to your stats and saves.
+func _bump(more: Dictionary) -> void:
+	for k in more:
+		stats[k] = int(stats.get(k, 0)) + int(more[k])
+	_save_settings()
+
+
+## Gacha coins for a win.
+func _earn(n: int, why: String) -> void:
+	if n <= 0:
+		return
+	coins += n
+	_save_settings()
+	_log("+%d GACHA COIN%s %s (you have %d)." % [n, "" if n == 1 else "S", why, coins])
+	_sound("chip")
+
+
+## Every game event's sound.
+func _event_sound(kind: String, d: Dictionary) -> void:
+	match kind:
+		"round_start":
+			_sound("shuffle")
+		"turn_start":
+			if game != null and int(d.get("seat", -1)) == _me() and not _is_bot(int(d.get("seat", -1))):
+				get_tree().create_timer(0.25).timeout.connect(_sound.bind("your_turn"))
+		"turn_skipped":
+			_sound("item_handcuffs")
+		"loot":
+			_sound("pick_item")
+		"draw", "hit", "flip", "trick_card", "board":
+			_sound("flick")
+		"discard", "play", "president_play", "crazy8_play":
+			_sound("slap" if kind in ["president_play", "crazy8_play"] else "flick")
+		"meld", "layoff", "book", "trick_won":
+			_sound("slap")
+		"swap":
+			_sound("item_switcheroo")
+		"stock_reshuffled":
+			_sound("shuffle")
+		"trump_changed":
+			_sound("item_tarot")
+		"item_used":
+			_sound("item_" + str(d.get("item", "")))
+		"heal":
+			_sound("heal")
+		"damage":
+			_sound("hurt")
+		"eliminated":
+			get_tree().create_timer(0.3).timeout.connect(_sound.bind("eliminated"))
+		"round_end":
+			_sound("cheer" if int(d.get("winner", -1)) >= 0 else "buzzer")
+			if d.get("shells", 0) > 0 and game != null and game.options["shotgun"]:
+				get_tree().create_timer(0.8).timeout.connect(_sound.bind("rack"))
+		"gun_passed":
+			_sound("rack")
+		"gun_empty":
+			_sound("close")
+		"shot":
+			_sound("click" if d.get("blank", false) else "blast")
+		"roulette":
+			_sound("spin")
+			get_tree().create_timer(0.55).timeout.connect(_sound.bind("blast" if d.get("hit", false) else "click"))
+			if not d.get("hit", false):
+				get_tree().create_timer(0.9).timeout.connect(_sound.bind("survive"))
+		"blackjack_item":
+			_sound("sparkle")
+			get_tree().create_timer(0.3).timeout.connect(_sound.bind("pick_item"))
+		"match_end":
+			_sound("fanfare")
+		# Blackjack
+		"stand":
+			_sound("knock")
+		"bust":
+			_sound("buzzer")
+		# Go Fish
+		"ask":
+			_sound("slap" if int(d.get("count", 0)) > 0 else "tap")
+		"go_fish":
+			_sound("sparkle" if d.get("lucky", false) else "splash")
+		# Cheat
+		"called":
+			_sound("sting")
+			get_tree().create_timer(0.5).timeout.connect(_sound.bind("buzzer" if d.get("lie", false) else "ding"))
+		"let_go":
+			_sound("tap")
+		# Hearts and Spades
+		"hearts_broken", "spades_broken":
+			_sound("crack")
+		"queen_taken":
+			_sound("doom")
+		"bid":
+			_sound("chips")
+		# Snap
+		"snap":
+			_sound("pop" if d.get("good", false) else "buzzer")
+			if d.get("good", false):
+				_sound("slap")
+		# President
+		"pass":
+			_sound("knock")
+		"pile_cleared":
+			_sound("sweep")
+		"exchange":
+			_sound("coin")
+		# Poker
+		"bet":
+			match str(d.get("action", "")):
+				"check":
+					_sound("knock")
+				"call":
+					_sound("chips")
+				"raise":
+					_sound("rack")
+				"fold":
+					_sound("close")
+
+
+func _log(text: String) -> void:
+	log_lines.append(text)
+
+
+## Decides what to show after anything happens.
+func _after_action() -> void:
+	if game == null:
+		return
+	if _online():
+		_after_action_online()
+		return
+	match game.phase:
+		"shoot", "round_over":
+			if shown_result_round != game.round_num:
+				shown_result_round = game.round_num
+				_refresh()
+				_show_round_result()
+				return
+			if overlay_layer.get_child_count() == 0:
+				# something closed the results: bring back what's next
+				_refresh()
+				if game.gun != null:
+					_show_gun(_last_shot_text)
+				else:
+					_show_round_result()
+				return
+		"match_over":
+			_refresh()
+			if overlay_layer.get_child_count() == 0:
+				_show_match_end()
+			return
+		"draw", "play":
+			if shown_turn != turn_counter:
+				selected = []
+				selected_item = ""
+				lit_card = ""
+				message = ""
+				_drawing_again = false
+				var private := hide_hands and _people_alive() > 1 and game.has_private_hands()
+				if _is_bot(game.turn):
+					# the AI plays while the phone waits for the next person
+					shown_turn = turn_counter
+					if private:
+						_hand_hidden = true
+				else:
+					var new_hands := game.turn != _viewer
+					_viewer = game.turn
+					if private and (new_hands or _hand_hidden):
+						_hand_hidden = true
+						_refresh()
+						_pass_after_deal()
+						return
+					_hand_hidden = false
+					_mark_turn_seen()
+	_refresh()
+
+
+func _after_action_online() -> void:
+	# don't yank away rules, the log, a reveal or a target picker; they
+	# re-check when closed
+	var busy_overlay := _overlay_kind in ["rules", "log", "menu", "reveal", "target"]
+	match game.phase:
+		"draw", "play":
+			if _overlay_kind in ["result", "gun", "match"]:
+				_close_overlay()
+			if shown_turn != turn_counter:
+				shown_turn = turn_counter
+				selected = []
+				selected_item = ""
+				lit_card = ""
+				message = ""
+				_drawing_again = false
+				if _my_turn():
+					Input.vibrate_handheld(60)
+		"shoot", "round_over":
+			if busy_overlay:
+				pass
+			elif shown_result_round != game.round_num:
+				shown_result_round = game.round_num
+				_refresh()
+				_show_round_result()
+				return
+			elif _overlay_kind == "gun" or overlay_layer.get_child_count() == 0:
+				_refresh()
+				if game.gun != null or _overlay_kind == "gun":
+					_show_gun(_last_shot_text)
+				else:
+					_show_round_result()
+				return
+		"match_over":
+			if not busy_overlay:
+				_refresh()
+				if _overlay_kind == "gun":
+					_show_gun(_last_shot_text)
+				elif _overlay_kind != "match":
+					_show_match_end()
+				return
+	_refresh()
+
+
+func _mark_turn_seen() -> void:
+	shown_turn = turn_counter
+	seen_upto[game.turn] = log_lines.size()
+
+
+func _handle(res: Dictionary) -> bool:
+	if not res["ok"]:
+		_sound("error")
+		message = res["error"]
+		_refresh()
+		return false
+	message = ""
+	selected = []
+	return true
+
+
+# ================================================================ blackjack
+
+const BLACKJACK_RULES := [
+	"THE TABLE. 2 to 6 players, on one phone or in a lobby. One player is the dealer, and everyone else plays against them. The player to the dealer's left goes first, play goes round to the left, and the dealer plays last. Next round the deal moves one seat to the right.",
+	"THE DEAL. Everyone gets 2 cards, one face down and one face up. One card is burned face up onto the discard pile. Items are rare: a random few are shuffled into the stock each round. The deck is shuffled fresh every round.",
+	"YOUR TURN. HIT to take a card (tap the stock or press HIT), as often as you like, then STAND. Use items any time in your turn. If you draw an item, keep it and draw again. 21 or 5 cards stands for you.",
+	"COUNTING. 2 to 10 count their number, J Q K count 10, an ace counts 1 or 11. Go over 21 and you're BUST.",
+	"AGAINST THE DEALER. Bust and you lose. If the dealer goes bust, everyone still in wins. Otherwise the better hand wins: a BLACKJACK (21 with your first 2 cards) beats a FIVE-CARD CHARLIE (5 cards without going bust), which beats the higher total. The same hand is a push. If every player goes bust, the dealer wins without playing.",
+	"BLACKJACK. 21 with your first 2 cards. If you're not the dealer, it wins you an item straight away, and while you hold it nobody can shoot you this round (not even a dealer with a Blackjack).",
+	"THE SHOTGUN. The dealer gets 1 shell for every player who lost (2 at most) and picks who to shoot, but only players who lost. Beat the dealer or push and you're safe. Each shell takes 1 health. Everyone starts with 4, and health carries over. Hit 0 and you're out. Last one standing walks out.",
+]
+
+
+## A Blackjack's item, shown once the cards are dealt.
+func _blackjack_item_fx(seat: int) -> void:
+	if world.dealing:
+		await world.deal_finished
+	if game == null:
+		return
+	world.announce("BLACKJACK!\n%s WINS AN ITEM" % _name(seat))
+	_flash(Palette.GOLD)
+
+
+## The tutorial's tip line.
+func _refresh_coach() -> void:
+	if coach_label == null:
+		return
+	coach_label.visible = tutorial and demo_stage == "practice" and not _hand_hidden
+	if not coach_label.visible:
+		return
+	var tip := ""
+	if mode_ui != null:
+		tip = mode_ui.coach()
+	elif _blackjack():
+		tip = _coach_blackjack()
+	else:
+		tip = _coach_rummy()
+	coach_label.text = "TIP: " + tip if tip != "" else ""
+
+
+func _coach_rummy() -> String:
+	if game.phase != "draw" and game.phase != "play":
+		return ""
+	if not _my_turn():
+		return "Watch what the others pick up from the discard pile: it tells you what they're collecting."
+	var seat := _me()
+	if game.phase == "draw":
+		var top: Dictionary = game.top_discard()
+		if not top.is_empty() and Bot.helps(game, game.players[seat].hand, top):
+			return "The top of the discard pile helps you: tap it to take it."
+		return "Start by drawing: tap the stock (face down) or the discard pile."
+	if not game.can_place(seat):
+		return "First turn: you can't put cards down yet. Tap one card you don't need, then DISCARD."
+	if game.go_out_check(seat)["can"]:
+		return "You can go out! Meld everything, then discard your last card."
+	var best: Dictionary = Cards.best_partition(game.players[seat].hand, game.trump_rank)
+	if not best["melds"].is_empty():
+		return "Gold-outlined cards make a meld. Tap them, then MELD."
+	return "Nothing to meld. Tap your least useful card (a high one), then DISCARD."
+
+
+func _coach_blackjack() -> String:
+	if game.phase != "play" or not _my_turn():
+		return "Everyone plays against the dealer. Beat their total without going over 21."
+	var seat := _me()
+	var t: int = game.hand_total(seat)
+	if seat == game.dealer:
+		return "You're the dealer: you play last and can see everyone's face-up cards. Try to beat them."
+	if t <= 11:
+		return "%d can't go bust with one more card. HIT." % t
+	if t >= 17:
+		return "%d is strong. STAND and let the dealer try to beat it." % t
+	return "%d is in the middle. If the dealer shows 7 or more, HIT; if 2 to 6, STAND and hope they bust." % t
+
+
+func _refresh_blackjack() -> void:
+	var seat := _me()
+	var me = game.players[seat]
+	var my_turn := _my_turn()
+	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
+	me_name.text = me.name + _flags(me)
+	_clear(me_hp)
+	me_hp.add_child(_hp_bar(me))
+	var t: int = game.hand_total(seat)
+	deadwood_label.text = ("BUST %d" % t if me.bust else "TOTAL %d" % t) if not me.hand.is_empty() else ""
+	var can_play: bool = my_turn and game.phase == "play"
+	world.sync({
+		"game": game, "viewer": seat, "hand": me.hand.duplicate(), "selected": [], "selected_item": selected_item,
+		"meld_hints": {}, "lay_hints": {}, "lit": lit_card, "can_draw": can_play, "targets": {},
+		"hide_hand": _hand_hidden,
+	})
+	meld_btn.disabled = not can_play
+	discard_btn.disabled = not can_play
+	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
+	status_label.add_theme_color_override("font_color", Palette.PINK if message != "" else Palette.AMBER)
+	status_label.text = _status_text([], false)
+	go_out_label.visible = can_play and t == 21
+	go_out_label.text = "BLACKJACK!" if game.is_blackjack(seat) else "21! STAND ON IT"
+
+
+func _status_blackjack() -> String:
+	if game.phase != "play":
+		return "ROUND OVER"
+	if world.dealing:
+		return "SHUFFLING AND DEALING..."
+	var seat := _me()
+	var me = game.players[seat]
+	if not _my_turn():
+		var who := "%s IS THINKING..." % _name(game.turn) if _is_bot(game.turn) else "WAITING FOR %s..." % _name(game.turn)
+		if me.bust:
+			return "YOU'RE BUST. " + who
+		if me.stood:
+			return "YOU STAND ON %d. %s" % [game.hand_total(seat), who]
+		return who
+	if selected_item != "":
+		var item := game.find_item(seat, selected_item)
+		if not item.is_empty():
+			var def := Items.def(item["item"])
+			var blocker := game.item_blocker(seat, selected_item)
+			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
+	if me.ultimatum:
+		return "REVOLVER: TAKE A CARD THIS TURN, OR STAND AND SPIN THE CYLINDER"
+	if seat == game.dealer:
+		return "YOU'RE THE DEALER. YOU HAVE %d. HIT OR STAND" % game.hand_total(seat)
+	return "YOU HAVE %d. DEALER SHOWS %d. HIT OR STAND" % [game.hand_total(seat), game.showing_total(game.dealer)]
+
+
+func _hit() -> void:
+	if not _my_turn() or game.phase != "play":
+		return
+	_act("hit", [], _after_hit)
+
+
+func _after_hit(res: Dictionary) -> void:
+	if not _handle(res):
+		return
+	lit_card = res.get("card", {}).get("id", "")
+	_after_action()
+
+
+func _stand() -> void:
+	if not _my_turn() or game.phase != "play":
+		return
+	lit_card = ""
+	_act("stand", [], _after_simple)
+
+
+func _show_blackjack_result() -> void:
+	var r := game.last_result
+	var box := _open_overlay(0.94, true, "result")
+	var dealer_seat: int = r["dealer"]
+	box.add_child(_title("%s DEALT: %s" % [_name(dealer_seat), "BUST" if r["dealer_bust"] else str(r["dealer_total"])], Palette.AMBER))
+	for h in r["hands"]:
+		var line := ""
+		var color := Palette.INK
+		var total_text := "BUST (%d)" % h["points"] if h.get("bust", false) else str(h["points"])
+		if h.get("blackjack", false) and not h.get("bust", false):
+			total_text = "BLACKJACK"
+		elif h.get("charlie", false) and not h.get("bust", false):
+			total_text = "%d, FIVE-CARD CHARLIE" % h["points"]
+		match h.get("outcome", ""):
+			"dealer":
+				line = "%s (DEALER): %s" % [h["name"], total_text]
+				color = Palette.AMBER
+			"win":
+				line = "%s: %s. BEATS THE DEALER, SAFE" % [h["name"], total_text]
+				color = Palette.GOLD
+			"lose":
+				line = "%s: %s. LOSES" % [h["name"], total_text]
+				color = Palette.PINK
+			_:
+				line = "%s: %s. PUSH" % [h["name"], total_text]
+		box.add_child(_label(line, 24, color))
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 4)
+		for c in h["cards"]:
+			var cv := CardView.new()
+			cv.setup(c, Vector2(52, 76))
+			cv.trump = game.is_trump(c)
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			flow.add_child(cv)
+		box.add_child(flow)
+	var shooters: Array = r.get("shooters", [])
+	if shooters.is_empty():
+		box.add_child(_label(str(r.get("reason", "Nobody shoots.")), 26, Palette.INK, true))
+	else:
+		var losers := []
+		for s in r.get("losers", []):
+			losers.append(_name(s))
+		var n: int = shooters[0][1]
+		box.add_child(_label("THE DEALER GETS %d SHELL%s TO SHOOT %s" % [n, "" if n == 1 else "S", ", ".join(losers)], 28, Palette.RED.lightened(0.3), true))
+		box.add_child(_label("(1 shell for each player who lost, 2 at most. Only players who lost can be shot.)", 20, Palette.DIM, true))
+	_add_result_buttons(box, int(game.gun["holder"]) if game.gun != null else -1)
+
+
+# ================================================================ AI players
+
+## Seconds the AI waits after each kind of move, so you can follow along.
+const AI_PACE := {"throw": 0.5, "use_item": 1.3, "draw_stock": 0.9, "draw_discard": 1.0, "meld": 1.1, "lay_off": 1.0, "discard": 1.4, "shoot": 2.2, "flip": 2.3, "finish": 1.5}
+
+
+# ---------------------------------------------------------------- pinch to zoom
+
+var _touches := {} # finger -> where it is on screen
+var _pinch_gap := 0.0
+var _pinching := false
+var _pinch_ended := 0
+
+
+## Two fingers on the table: spread them to zoom in there, pinch to zoom out.
+func _input(event: InputEvent) -> void:
+	if _computer_key(event):
+		get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+	else:
+		_touches[event.index] = event.position
+	if _touches.size() == 2:
+		var pts: Array = _touches.values()
+		var gap: float = (pts[0] as Vector2).distance_to(pts[1])
+		if not _pinching:
+			_pinching = true
+			_pinch_gap = gap
+			return
+		if game != null and round_label != null and overlay_layer.get_child_count() == 0 and _pinch_gap > 1.0 and not Games.is_party(game.kind):
+			var mid: Vector2 = ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
+			world.zoom_at(_to_view(mid), (gap / _pinch_gap - 1.0) * 5.0)
+		_pinch_gap = gap
+	elif _pinching:
+		_pinching = false
+		_pinch_ended = Time.get_ticks_msec()
+
+
+func _process(delta: float) -> void:
+	_drive_lessons(delta)
+	_drive_demo(delta)
+	_drive_ai(delta)
+
+
+## The AI seat that has a move to make right now, or -1.
+func _ai_seat() -> int:
+	if game == null or round_label == null:
+		return -1
+	if game.phase == "shoot" and game.gun != null:
+		var holder := int(game.gun["holder"])
+		return holder if _is_bot(holder) else -1
+	if (game.phase == "draw" or game.phase == "play") and _is_bot(game.turn):
+		return game.turn
+	return -1
+
+
+## Plays the AIs, one move at a time. In pass-and-play this phone runs them;
+## online the host does, and everyone sees the moves like anyone else's.
+func _drive_ai(delta: float) -> void:
+	if game == null or round_label == null or (_online() and not session.is_host()) or _humans_out:
+		return
+	if game.kind == "snap":
+		_drive_snaps(delta)
+	var seat := _ai_seat()
+	if game.phase != _ai_phase:
+		_ai_phase = game.phase
+		if game.phase == "shoot":
+			# let everyone read the result first
+			_ai_wait = 3.5 if _online() else 1.2
+	if seat < 0:
+		_ai_wait = maxf(_ai_wait, 0.8)
+		return
+	if world.dealing or world.fx_busy or _pending_cb.is_valid() or _lesson_showing():
+		return
+	if mode_ui != null and mode_ui.has_method("revealing") and mode_ui.revealing():
+		return # Snap: wait for the card to finish turning over
+	if game.kind == "snap" and game.snap_ready():
+		# a match is showing: give everyone time to snap before the next flip
+		_snap_hold += delta
+		if _snap_hold < SnapBot.MATCH_HOLD:
+			return
+	else:
+		_snap_hold = 0.0
+	if not _online():
+		# wait while the rules, log or menu are open, and for the gun to come out
+		if game.phase == "shoot":
+			if _overlay_kind != "gun" or overlay_layer.get_child_count() == 0:
+				return
+		elif overlay_layer.get_child_count() > 0:
+			return
+	_ai_wait -= delta
+	if _ai_wait > 0.0:
+		return
+	var memory: Dictionary = _ai_memory.get_or_add(seat, {})
+	var act: Array
+	if not _ai_held.is_empty():
+		act = _ai_held
+		_ai_held = []
+	else:
+		act = Bot.next_action(game, seat, game.players[seat].bot, memory)
+		if act.is_empty():
+			_ai_wait = 0.5
+			return
+		if mode_ui != null and mode_ui.has_method("preview_bot") and mode_ui.preview_bot(seat, act):
+			_ai_held = act # its aim plays out first (darts)
+			return
+	_ai_wait = float(AI_PACE.get(act[0], 1.0))
+	if egg_on("turbo"):
+		_ai_wait *= 0.45 # TURBO: too much coffee
+	_ai_wait *= float({"SLOW": 1.6, "NORMAL": 1.0, "FAST": 0.55}.get(ai_speed, 1.0))
+	if demo_stage == "watch":
+		_ai_wait *= 1.5 # slow enough to follow
+	elif _people_alive() == 0:
+		_ai_wait *= 0.4 # nobody left to watch closely
+	var res: Dictionary
+	if _online():
+		res = session.act_as(seat, act[0], act[1])
+	else:
+		res = Session.perform(game, seat, act[0], act[1], true)
+	if not res.get("ok", false):
+		Bot.note_failure(memory, act)
+		_ai_wait = 0.1
+		if not _online():
+			_after_action()
+		return
+	if _online():
+		return # the update has already redrawn everything
+	if act[0] == "shoot":
+		_after_fire(res, seat, int(act[1][0]))
+	else:
+		_after_action()
+
+
+var _snap_flips := -1
+var _snap_timers := {} # AI seat -> seconds until it snaps
+
+
+## Snap: the AIs snap out of turn. Each flip gives every AI a reaction time;
+## the quickest one snaps (easy ones sometimes snap at nothing).
+var _snap_hold := 0.0 # how long the current match has been showing
+
+
+func _drive_snaps(delta: float) -> void:
+	if game.phase != "play" or world.dealing or _pending_cb.is_valid():
+		return
+	if not _online() and overlay_layer.get_child_count() > 0:
+		return
+	if game.flips != _snap_flips:
+		_snap_flips = game.flips
+		_snap_timers = {}
+		for p in game.players:
+			if not p.alive or p.bot == "":
+				continue
+			if game.snap_ready():
+				_snap_timers[p.seat] = SnapBot.reaction(game, p.bot) # from the moment it's face up
+			elif game.rng.randf() < SnapBot.false_snap_chance(p.bot):
+				_snap_timers[p.seat] = game.rng.randf_range(0.4, 1.0)
+	if not game.snap_ready() and game.discard_pile.size() < 2:
+		_snap_timers = {}
+	if mode_ui != null and mode_ui.has_method("revealing") and mode_ui.revealing():
+		return # the card's still turning over: nobody can see it yet
+	for s in _snap_timers.keys():
+		_snap_timers[s] -= delta
+		if _snap_timers[s] <= 0.0:
+			_snap_timers = {}
+			if _online():
+				session.act_as(s, "snap", [])
+			else:
+				Session.perform(game, s, "snap", [], true)
+				_after_action()
+			return
+
+
+# ================================================================ table
+
+func _build_table() -> void:
+	if game != null:
+		_play_music(game.kind) # each game has its own twist on the tune
+	_close_overlay()
+	_clear(screen)
+	world.set_menu_mode(false)
+
+	# taps that don't land on a button go to the 3D table
+	var catcher := _full(Control.new())
+	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	catcher.gui_input.connect(_on_table_input)
+	screen.add_child(catcher)
+
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 36)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	screen.add_child(_full(margin))
+	hud = margin
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+
+	# top bar
+	var top := HBoxContainer.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_theme_constant_override("separation", 22)
+	round_label = _label("", 24, Palette.DIM)
+	round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	round_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	round_label.clip_text = true
+	top.add_child(round_label)
+	for b in [_button("MENU", _show_menu, 26)]: # rules, settings and the rest are in here
+		b.custom_minimum_size = Vector2(0, 46)
+		Palette.accent(b, Palette.AMBER)
+		top.add_child(b)
+	col.add_child(top)
+
+	status_label = _label("", 26, Palette.AMBER, true)
+	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	status_label.add_theme_constant_override("outline_size", 8)
+	status_label.custom_minimum_size = Vector2(0, 62)
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# a soft dark band behind it, so it reads over the players' name tags
+	var band := Palette.box(Color(0.02, 0.015, 0.01, 0.55), Color(0, 0, 0, 0), 0, 14, 6)
+	band.content_margin_left = 14
+	band.content_margin_right = 14
+	status_label.add_theme_stylebox_override("normal", band)
+	col.add_child(status_label)
+
+	go_out_label = _label("", 30, Palette.GOLD, true)
+	go_out_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	go_out_label.add_theme_constant_override("outline_size", 8)
+	go_out_label.visible = false
+	col.add_child(go_out_label)
+
+	# tutorial tips
+	coach_label = _label("", 24, Palette.INK, true)
+	coach_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	coach_label.add_theme_constant_override("outline_size", 8)
+	coach_label.visible = false
+	col.add_child(coach_label)
+
+	# the 3D table, your items and your hand show through here
+	var gap := Control.new()
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(gap)
+
+	var me_row := HBoxContainer.new()
+	me_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	me_row.add_theme_constant_override("separation", 12)
+	me_name = _label("", 30)
+	me_name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	me_row.add_child(me_name)
+	me_hp = HBoxContainer.new()
+	me_hp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	me_row.add_child(me_hp)
+	deadwood_label = _label("", 22, Palette.DIM)
+	deadwood_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	deadwood_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	me_row.add_child(deadwood_label)
+	col.add_child(me_row)
+
+	var buttons := HBoxContainer.new()
+	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buttons.add_theme_constant_override("separation", 8)
+	meld_btn = _button("MELD", _meld_selected)
+	use_btn = _button("USE ITEM", _use_selected_item)
+	discard_btn = _button("DISCARD", _discard_selected)
+	Palette.accent(use_btn, Palette.PURPLE)
+	Palette.accent(discard_btn, Palette.RED)
+	for b in [meld_btn, use_btn, discard_btn]:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(b)
+	col.add_child(buttons)
+
+	var minor := HBoxContainer.new()
+	minor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	minor.alignment = BoxContainer.ALIGNMENT_CENTER
+	minor.add_theme_constant_override("separation", 16)
+	sort_btn = _button("SORT: SUIT", _toggle_sort, 22)
+	for b in [sort_btn]: # hints live in SETTINGS
+		b.custom_minimum_size = Vector2(200, 46)
+		minor.add_child(b)
+	col.add_child(minor)
+	if _blackjack():
+		meld_btn.text = "HIT"
+		discard_btn.text = "STAND"
+		minor.visible = false
+	if mode_ui != null and mode_ui.has_method("clear"):
+		mode_ui.clear()
+	mode_ui = _make_mode_ui()
+	if not game.options["shotgun"]:
+		use_btn.visible = false # normal mode has no items
+	if mode_ui != null:
+		minor.visible = false
+		if mode_ui.has_method("book"):
+			# poker's hand book: what beats what, and what you're holding
+			minor.visible = true
+			sort_btn.visible = false
+			minor.add_child(_bubble("HAND BOOK", mode_ui.book, FLOAT_YELLOW, 30))
+		var specs: Array = mode_ui.buttons()
+		var btns := [meld_btn, use_btn, discard_btn]
+		for i in range(btns.size()):
+			var b: Button = btns[i]
+			var spec: Array = specs[i] if i < specs.size() else ["", Callable(), null]
+			for c in b.pressed.get_connections():
+				b.pressed.disconnect(c["callable"])
+			b.text = spec[0]
+			b.visible = spec[0] != "" and (b != use_btn or game.options["shotgun"])
+			b.pressed.connect(_sound.bind("tick"))
+			if spec[1].is_valid():
+				b.pressed.connect(spec[1])
+			if spec[2] != null:
+				Palette.accent(b, spec[2])
+
+
+## The table screen for games that bring their own (scripts/ui/modes).
+func _make_mode_ui():
+	match game.kind:
+		"gofish":
+			return GoFishUI.new(self)
+		"cheat":
+			return CheatUI.new(self)
+		"hearts", "spades":
+			return TricksUI.new(self)
+		"snap":
+			return SnapUI.new(self)
+		"president":
+			return PresidentUI.new(self)
+		"poker":
+			return PokerUI.new(self)
+		"crazy8":
+			return Crazy8UI.new(self)
+		"darts":
+			return DartsUI.new(self)
+		"timber":
+			return TimberUI.new(self)
+	return null
+
+
+## A tap on the table: find the card under it in 3D. The scroll wheel (and a
+## trackpad pinch) zooms in and out where the mouse is.
+func _on_table_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		if game != null and overlay_layer.get_child_count() == 0:
+			world.zoom_at(_to_view(event.position), 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0)
+		return
+	if event is InputEventMagnifyGesture:
+		if game != null and overlay_layer.get_child_count() == 0:
+			world.zoom_at(_to_view(event.position), (event.factor - 1.0) * 6.0)
+		return
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _pinching or Time.get_ticks_msec() - _pinch_ended < 250:
+		return # the first finger of a pinch isn't a tap
+	if _aiming and _overlay_kind == "gun":
+		_aim_tap(event.position)
+		return
+	if game == null or overlay_layer.get_child_count() > 0 or world.dealing or world.fx_busy:
+		return
+	if mode_ui != null and mode_ui.has_method("table_tap") and mode_ui.table_tap(event.position):
+		return
+	var hit: Dictionary = world.pick(_to_view(event.position))
+	if _item_pick_tap(hit, _to_view(event.position)):
+		return
+	if mode_ui != null:
+		mode_ui.on_pick(hit)
+		return
+	if _blackjack():
+		match hit.get("kind", ""):
+			"item":
+				_toggle_item(hit["id"])
+			"stock":
+				_hit()
+		return
+	match hit.get("kind", ""):
+		"hand":
+			_toggle_card(hit["id"])
+		"item":
+			_toggle_item(hit["id"])
+		"stock":
+			_draw_stock()
+		"discard":
+			_draw_discard()
+		"meld":
+			if selected.is_empty():
+				message = "Select cards from your hand first, then tap the meld."
+				_refresh()
+			else:
+				_lay_off_on(hit["id"])
+
+
+var _refresh_queued := false
+
+
+## A refresh at the end of this frame (from inside a refresh, say).
+func refresh_later() -> void:
+	if _refresh_queued:
+		return
+	_refresh_queued = true
+	(func() -> void:
+		_refresh_queued = false
+		if game != null:
+			_refresh()).call_deferred()
+
+
+func _refresh() -> void:
+	if not _item_pick.is_empty() and (game == null or not _my_turn() or game.turn != _item_pick_seat or overlay_layer.get_child_count() > 0):
+		_item_pick = {}
+		_item_pick_players = []
+		_hide_pick_bar()
+		if world != null:
+			world._item_pick = {}
+			world.mark_targets([])
+	_refresh_body()
+	_tint_actions()
+
+
+## The buttons at the bottom wear the colours of the game's cartridge.
+func _tint_actions() -> void:
+	if game == null:
+		return
+	var scheme: Array = Games.scheme(game.kind)
+	var btns := [meld_btn, use_btn, discard_btn, sort_btn]
+	for i in range(btns.size()):
+		var b: Button = btns[i]
+		if b == null or not is_instance_valid(b):
+			continue
+		var c: Color = scheme[i]
+		b.add_theme_color_override("font_color", c)
+		b.add_theme_color_override("font_hover_color", c.lightened(0.3))
+		b.add_theme_color_override("font_pressed_color", c.lightened(0.5))
+		b.add_theme_color_override("font_disabled_color", Color(c.darkened(0.5), 0.75)) # not yet: a dim shade of its own colour
+
+
+func _refresh_body() -> void:
+	if game == null or round_label == null:
+		return
+	_refresh_coach()
+	if mode_ui != null:
+		mode_ui.refresh()
+		return
+	if _blackjack():
+		_refresh_blackjack()
+		return
+	var seat := _me()
+	var me = game.players[seat]
+	var my_turn := _my_turn()
+
+	round_label.text = "ROUND %d · %s DEALS" % [game.round_num, _name(game.dealer)]
+
+	var can_draw := my_turn and game.phase == "draw"
+	var sel_cards := _selected_cards()
+	var can_play := my_turn and game.phase == "play"
+
+	# current player
+	me_name.text = me.name + _flags(me)
+	_clear(me_hp)
+	me_hp.add_child(_hp_bar(me))
+	var best: Dictionary = Cards.best_partition(me.hand, game.trump_rank)
+	deadwood_label.text = "DEADWOOD %d" % best["points"]
+
+	var hand: Array = me.hand.duplicate()
+	if sort_by_rank:
+		Cards.sort_by_rank(hand)
+	else:
+		Cards.sort_by_suit(hand)
+	# hints: gold outline = makes a meld in your hand, gold + = fits a meld
+	# already on the table
+	var meld_ids := {}
+	var lay_ids := {}
+	if hints:
+		for meld_cards in best["melds"]:
+			for c in meld_cards:
+				meld_ids[c["id"]] = true
+		if game.can_lay_off(seat):
+			for c in best["deadwood"]:
+				for m in game.melds:
+					if Cards.can_lay_off(m, [c], game.trump_rank):
+						lay_ids[c["id"]] = true
+	var targets := {}
+	if can_play and game.can_place(seat) and not sel_cards.is_empty():
+		for m in game.melds:
+			if (game.can_lay_off(seat) and Cards.can_lay_off(m, sel_cards, game.trump_rank)) or not game.find_swap(seat, m["id"], selected).is_empty():
+				targets[m["id"]] = true
+	world.sync({
+		"game": game, "viewer": seat, "hand": hand, "selected": selected, "selected_item": selected_item,
+		"meld_hints": meld_ids, "lay_hints": lay_ids, "lit": lit_card, "can_draw": can_draw, "targets": targets,
+		"hide_hand": _hand_hidden,
+	})
+
+	# buttons
+	var valid_meld := can_play and game.can_place(seat) and sel_cards.size() >= 3 and Cards.meld_type(sel_cards, game.trump_rank) != ""
+	meld_btn.disabled = not valid_meld
+	use_btn.disabled = not (my_turn and selected_item != "" and game.item_blocker(seat, selected_item) == "")
+	discard_btn.disabled = not (can_play and sel_cards.size() == 1 and game.can_discard(seat, sel_cards[0]["id"]))
+	sort_btn.text = "SORT: RANK" if sort_by_rank else "SORT: SUIT"
+
+	status_label.add_theme_color_override("font_color", Palette.PINK if message != "" else Palette.AMBER)
+	status_label.text = _status_text(sel_cards, valid_meld)
+
+	# tell the player when they can go out, and shout when it's rummy
+	var out: Dictionary = game.go_out_check(seat)
+	go_out_label.visible = hints and out["can"]
+	if out["rummy"]:
+		go_out_label.text = "RUMMY IS ON! GO OUT NOW FOR DOUBLE POINTS"
+	else:
+		go_out_label.text = "YOU CAN GO OUT THIS TURN"
+
+
+## "ACES", "SEVENS", "KINGS"...
+static func trump_name(rank: int) -> String:
+	const NAMES := ["", "ACES", "TWOS", "THREES", "FOURS", "FIVES", "SIXES", "SEVENS", "EIGHTS", "NINES", "TENS", "JACKS", "QUEENS", "KINGS"]
+	return NAMES[rank] if rank >= 1 and rank <= 13 else ""
+
+
+func _status_text(sel_cards: Array, valid_meld: bool) -> String:
+	if message != "":
+		return message.to_upper()
+	if mode_ui != null:
+		return mode_ui.status()
+	if _blackjack():
+		return _status_blackjack()
+	if game.phase != "draw" and game.phase != "play":
+		return "ROUND OVER"
+	var seat := _me()
+	if world.dealing:
+		return "SHUFFLING AND DEALING..."
+	if not _my_turn():
+		if _is_bot(game.turn):
+			return "%s IS THINKING..." % _name(game.turn)
+		return "WAITING FOR %s..." % _name(game.turn)
+	if selected_item != "":
+		var item := game.find_item(seat, selected_item)
+		if not item.is_empty():
+			var def := Items.def(item["item"])
+			var blocker := game.item_blocker(seat, selected_item)
+			return "%s: %s%s" % [str(def["name"]).to_upper(), def["text"], " (%s)" % blocker if blocker != "" else ""]
+	var first := not game.can_place(seat)
+	var me = game.players[seat]
+	if game.phase == "draw" and me.extra_draws > 0:
+		return "DOUBLE DOWN: DRAW 2 CARDS THIS TURN"
+	if game.phase == "draw" and _drawing_again:
+		return "DOUBLE DOWN: DRAW 1 MORE CARD"
+	if game.phase == "draw":
+		if first:
+			return "%s, YOUR FIRST TURN: DRAW, THEN DISCARD (NO MELDING YET)" % _name(seat)
+		return "%s, DRAW: TAP THE STOCK OR THE DISCARD PILE" % _name(seat)
+	if first:
+		return "FIRST TURN: NO MELDING YET. DISCARD 1 CARD TO END YOUR TURN" if sel_cards.size() != 1 else "PRESS DISCARD TO END YOUR TURN"
+	if sel_cards.is_empty() and me.ultimatum and not game.placed_this_turn:
+		return "REVOLVER: PUT CARDS DOWN THIS TURN OR SPIN THE CYLINDER"
+	if sel_cards.is_empty():
+		return "MELD, LAY OFF, USE ITEMS, THEN DISCARD 1 CARD"
+	if valid_meld:
+		return "VALID MELD. PRESS MELD"
+	for m in game.melds:
+		if Cards.can_lay_off(m, sel_cards, game.trump_rank):
+			if not game.can_lay_off(seat):
+				return "PUT DOWN A MELD OF YOUR OWN FIRST, THEN YOU CAN ADD TO THE TABLE'S"
+			return "TAP A GLOWING MELD TO LAY OFF"
+	for m in game.melds:
+		if not game.find_swap(seat, m["id"], selected).is_empty():
+			return "TAP THE GLOWING MELD TO SWAP FOR ITS TRUMP AND MELD IT"
+	if sel_cards.size() == 1:
+		var blocked := game.discard_blocker(seat, sel_cards[0]["id"])
+		return blocked.to_upper() if blocked != "" else "PRESS DISCARD TO END YOUR TURN"
+	return "NOT A VALID MELD"
+
+
+func _selected_cards() -> Array:
+	var out := []
+	if game == null:
+		return out
+	for c in game.players[_me()].hand:
+		if selected.has(c["id"]):
+			out.append(c)
+	return out
+
+
+# ================================================================ actions
+
+func _draw_stock() -> void:
+	if not _my_turn() or game.phase != "draw":
+		return
+	_act("draw_stock", [], _after_draw_stock)
+
+
+func _after_draw_stock(res: Dictionary) -> void:
+	if not _handle(res):
+		return
+	if res.get("round_over", false):
+		_after_action()
+		return
+	var card: Dictionary = res["card"]
+	_drawing_again = res.get("again", _drawing_again) # items don't use up a Double Down draw
+	_refresh()
+	if res["item"]:
+		var text := "%s It's yours. Now draw again: the stock or the discard pile." % Items.def(card["item"])["text"]
+		_show_reveal("YOU DREW AN ITEM", card, text, _after_action)
+	else:
+		lit_card = card["id"]
+		_show_reveal("YOU DREW", card, Cards.card_name(card) + (" (TRUMP)" if game.is_trump(card) else ""), _after_action)
+
+
+func _draw_discard() -> void:
+	if not _my_turn() or game.phase != "draw" or game.discard_pile.is_empty():
+		return
+	_act("draw_discard", [], _after_draw_discard)
+
+
+func _after_draw_discard(res: Dictionary) -> void:
+	if _handle(res):
+		_drawing_again = res.get("again", false)
+		lit_card = res["card"]["id"]
+		_after_action()
+
+
+func _after_simple(res: Dictionary) -> void:
+	if _handle(res):
+		_after_action()
+
+
+func _toggle_card(id: String) -> void:
+	_sound("tap")
+	if not _my_turn():
+		message = "It's %s's turn." % _name(game.turn)
+	elif game.phase == "draw":
+		message = "Draw a card first. (You can use an item before drawing.)"
+	elif game.phase == "play":
+		if selected.has(id):
+			selected.erase(id)
+		else:
+			selected.append(id)
+		message = ""
+	_refresh()
+
+
+func _toggle_item(id: String) -> void:
+	_sound("pick_item")
+	if not _my_turn():
+		message = "It's %s's turn." % _name(game.turn)
+		_refresh()
+		return
+	selected_item = "" if selected_item == id else id
+	message = ""
+	_refresh()
+
+
+func _meld_selected() -> void:
+	if _blackjack():
+		_hit()
+	elif _my_turn():
+		_act("meld", [selected.duplicate()], _after_simple)
+
+
+func _lay_off_on(meld_id: String) -> void:
+	if not _my_turn() or game.phase != "play" or selected.is_empty():
+		return
+	var m := game.find_meld(meld_id)
+	if not m.is_empty() and not Cards.can_lay_off(m, _selected_cards(), game.trump_rank):
+		var swap := game.find_swap(_me(), meld_id, selected)
+		if not swap.is_empty():
+			_act("swap", [meld_id, swap["natural"], swap["trump"], swap["rest"]], _after_simple)
+			return
+	_act("lay_off", [selected.duplicate(), meld_id], _after_simple)
+
+
+func _discard_selected() -> void:
+	if _blackjack():
+		_stand()
+		return
+	if not _my_turn() or selected.size() != 1:
+		return
+	lit_card = ""
+	_act("discard", [selected[0]], _after_simple)
+
+
+func _use_selected_item() -> void:
+	if not _item_pick.is_empty():
+		_cancel_item_pick()
+		return
+	if selected_item == "" or not _my_turn():
+		return
+	var item := game.find_item(_me(), selected_item)
+	if item.is_empty():
+		return
+	match Items.needs(item["item"]):
+		"player":
+			_show_target_picker(item)
+		"meld_card", "hand_card", "table_card":
+			_show_card_picker(item)
+		_:
+			_use_item(item, -1)
+
+
+func _use_item(item: Dictionary, target: int, choice: String = "") -> void:
+	_act("use_item", [item["id"], target, choice], _after_use_item.bind(item, target))
+
+
+func _after_use_item(res: Dictionary, item: Dictionary, target: int) -> void:
+	if not res["ok"]:
+		message = res["error"]
+		_refresh()
+		return
+	selected_item = ""
+	message = ""
+	var shown: Dictionary = res.get("reveal", {})
+	var text := str(res["text"]) + "."
+	match item["item"]:
+		"magnifier":
+			text = "Top of the stock:"
+		"phone":
+			text = ("%s's face-down card:" if _blackjack() else "%s is holding:") % _name(target)
+		"adrenaline":
+			text = "You stole:"
+		"joker_paint":
+			text = "A trump for the rest of the round: it's worth whatever you need." if _blackjack() else "Wild until your turn ends. Meld it to keep it wild."
+		"sticky_fingers":
+			text = str(res["text"]) + ". It's in your hand."
+	if shown.is_empty():
+		shown = item
+	_refresh()
+	# let the item's animation play before the pop-up
+	await get_tree().create_timer(1.4).timeout
+	if game == null:
+		return
+	if overlay_layer.get_child_count() > 0 or not (game.phase == "draw" or game.phase == "play"):
+		_after_action() # the round moved on while the animation played
+		return
+	_show_reveal("%s USES %s" % [_name(_me()), str(Items.def(item["item"])["name"]).to_upper()], shown, text, _after_action)
+
+
+func _toggle_sort() -> void:
+	sort_by_rank = not sort_by_rank
+	_refresh()
+
+
+func _toggle_hints() -> void:
+	hints = not hints
+	_refresh()
+
+
+# ================================================================ overlays
+
+## Opens a full-screen overlay. Returns the content box; add buttons with
+## _overlay_buttons. Scrolls when the content is long.
+func _open_overlay(opacity: float = 0.94, scroll: bool = false, kind: String = "", bottom: bool = false) -> VBoxContainer:
+	if kind != "pass" and kind != "gun":
+		_sound("open")
+	_close_overlay()
+	_overlay_kind = kind
+	if hud != null and is_instance_valid(hud):
+		hud.visible = false # the overlay's words, not the top bar's, while it's up
+	if world != null:
+		world.set_tags_shown(false) # nor the players' name tags
+	var bg := ColorRect.new()
+	if kind != "pass" and kind != "rules" and kind != "log":
+		opacity = minf(opacity, 0.62) # the table shows through; the words float over it
+	bg.color = Color(0, 0, 0, opacity)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay_layer.add_child(_full(bg))
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 28)
+	margin.add_theme_constant_override("margin_top", 48)
+	margin.add_theme_constant_override("margin_bottom", 32)
+	bg.add_child(_full(margin))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	if scroll:
+		var sc := ScrollContainer.new()
+		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		margin.add_child(sc)
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sc.add_child(box)
+	elif bottom:
+		# docked at the bottom so the 3D table stays in view, on a soft dark
+		# backing so it reads over the cards in your hand
+		var outer := VBoxContainer.new()
+		outer.alignment = BoxContainer.ALIGNMENT_END
+		outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(outer)
+		var backing := PanelContainer.new()
+		backing.add_theme_stylebox_override("panel", _soft_panel())
+		outer.add_child(backing)
+		backing.add_child(box)
+	else:
+		var center := CenterContainer.new()
+		margin.add_child(center)
+		box.custom_minimum_size = Vector2(minf(660.0, get_viewport_rect().size.x - 56.0), 0)
+		center.add_child(box)
+	return box
+
+
+func _close_overlay() -> void:
+	if _aiming:
+		_stop_aiming()
+	if overlay_layer != null:
+		_clear(overlay_layer)
+	_overlay_kind = ""
+	if hud != null and is_instance_valid(hud):
+		hud.visible = true
+	if world != null:
+		world.set_tags_shown(true)
+
+
+func _closing(then: Callable) -> Callable:
+	return func() -> void:
+		_close_overlay()
+		if then.is_valid():
+			then.call()
+
+
+func _title(text: String, color: Color = Palette.INK) -> Label:
+	return _label(text, 46, color, true)
+
+
+func _show_pass_screen() -> void:
+	_sound("pass_phone")
+	var seat := game.turn
+	var box := _open_overlay(1.0, false, "pass")
+	box.add_child(_label("PASS THE PHONE TO", 28, Palette.DIM, true))
+	box.add_child(_title(_name(seat), Palette.AMBER))
+	var hp_row := _hp_bar(game.players[seat])
+	hp_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(hp_row)
+	if game.trump_rank > 0:
+		box.add_child(_label("TRUMP THIS ROUND: %s" % trump_name(game.trump_rank), 26, Palette.GOLD, true))
+	var start: int = seen_upto.get(seat, 0)
+	var news := log_lines.slice(maxi(start, log_lines.size() - 8))
+	if not news.is_empty():
+		box.add_child(_label("SINCE YOUR LAST TURN", 22, Palette.DIM, true))
+		for line in news:
+			box.add_child(_label(line, 22, Palette.INK, true))
+	box.add_child(_button("I'M %s. SHOW MY CARDS" % _name(seat), _closing(_on_pass_ready), 30))
+
+
+func _on_pass_ready() -> void:
+	_hand_hidden = false
+	_mark_turn_seen()
+	_refresh()
+
+
+## The pass screen waits until the cards have been dealt, so everyone sees
+## the shuffle and the deal.
+func _pass_after_deal() -> void:
+	if _waiting_for_deal:
+		return
+	if world.dealing:
+		_waiting_for_deal = true
+		await world.deal_finished
+		_waiting_for_deal = false
+	if game != null and (game.phase == "draw" or game.phase == "play") and shown_turn != turn_counter:
+		_show_pass_screen()
+
+
+func _on_deal_finished() -> void:
+	if game != null and round_label != null and overlay_layer.get_child_count() == 0:
+		_refresh()
+
+
+func _show_reveal(title: String, card: Dictionary, text: String, then: Callable) -> void:
+	var box := _open_overlay(0.94, false, "reveal")
+	box.add_child(_title(title, Palette.AMBER))
+	var holder := CenterContainer.new()
+	var cv := CardView.new()
+	cv.setup(card, Vector2(150, 216))
+	cv.trump = not card.is_empty() and game.is_trump(card)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(cv)
+	box.add_child(_label(text, 28, Palette.INK, true))
+	box.add_child(holder)
+	box.add_child(_button("CONTINUE", _closing(then)))
+
+
+## An item that picks a player (Handcuffs, Spotlight...): no menu, like the
+## shotgun: everyone you can pick gets a marker, and you tap them.
+func _show_target_picker(item: Dictionary) -> void:
+	var targets: Array = game.item_targets(_me(), item["item"])
+	if targets.is_empty():
+		message = "Nobody to use it on."
+		_refresh()
+		return
+	_item_pick = item
+	_item_pick_seat = game.turn
+	_item_pick_players = targets
+	world.mark_targets(targets)
+	var def := Items.def(item["item"])
+	_show_pick_bar("%s: TAP A PLAYER" % str(def["name"]).to_upper())
+	_sound("open")
+
+
+## Pick a card for Sticky Fingers (from a meld), Joker Paint (from your
+## hand) and the like: no menu, you just tap the card at the table. The cards
+## you can pick glow; tap USE ITEM again (or CANCEL) to put the item away.
+var _item_pick := {} # the item being used while you pick its card
+var _item_pick_seat := -1 # whose turn it was
+var _item_pick_players: Array = [] # an item that picks a player: who you can tap
+var _pick_bar: Control
+
+
+func _show_card_picker(item: Dictionary) -> void:
+	var choices: Array = game.item_choices(_me(), item["item"])
+	if choices.is_empty():
+		message = "Nothing to use it on."
+		_refresh()
+		return
+	_item_pick = item
+	_item_pick_seat = game.turn
+	world.set_item_pick(choices)
+	var def := Items.def(item["item"])
+	var where: String = {"hand_card": "IN YOUR HAND", "meld_card": "IN A MELD", "table_card": "IN SOMEONE'S HAND"}.get(Items.needs(item["item"]), "")
+	_show_pick_bar("%s: TAP A GLOWING CARD %s" % [str(def["name"]).to_upper(), where])
+	_sound("open")
+
+
+func _show_pick_bar(title: String) -> void:
+	_hide_pick_bar()
+	_pick_bar = VBoxContainer.new()
+	_pick_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	(_pick_bar as VBoxContainer).alignment = BoxContainer.ALIGNMENT_CENTER
+	add_child(_pick_bar)
+	move_child(_pick_bar, settings_layer.get_index()) # under the settings, over the table
+	var vs := get_viewport_rect().size
+	_pick_bar.position = Vector2(16, vs.y * 0.17)
+	_pick_bar.size = Vector2(vs.x - 32, 0)
+	_pick_bar.custom_minimum_size = Vector2(vs.x - 32, 0)
+	var head := _label(title, 34, FLOAT_YELLOW, true)
+	head.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+	head.add_theme_constant_override("outline_size", 12)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pick_bar.add_child(head)
+	var cancel := _bubble("CANCEL", _cancel_item_pick, Palette.RED, 40)
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_pick_bar.add_child(cancel)
+
+
+func _hide_pick_bar() -> void:
+	if _pick_bar != null and is_instance_valid(_pick_bar):
+		_pick_bar.queue_free()
+	_pick_bar = null
+
+
+func _cancel_item_pick() -> void:
+	if _item_pick.is_empty():
+		return
+	_item_pick = {}
+	_item_pick_players = []
+	world.mark_targets([])
+	_hide_pick_bar()
+	world.set_item_pick([])
+	_refresh()
+
+
+## Use the item being picked on this player, if they're one you can pick.
+func _item_pick_player(seat: int) -> bool:
+	if _item_pick.is_empty() or not _item_pick_players.has(seat):
+		return false
+	var item := _item_pick
+	_item_pick = {}
+	_item_pick_players = []
+	_hide_pick_bar()
+	world.mark_targets([])
+	_use_item(item, seat)
+	return true
+
+
+## A tap while picking: a glowing card uses the item on it; tapping the item
+## again puts it away. Returns true if the tap was used.
+func _item_pick_tap(hit: Dictionary, at := Vector2(-1, -1)) -> bool:
+	if _item_pick.is_empty():
+		return false
+	if not _item_pick_players.is_empty():
+		# picking a player: tap them (or the item again to put it away)
+		if hit.get("kind", "") == "item":
+			_cancel_item_pick()
+			return true
+		if at.x >= 0.0:
+			_item_pick_player(world.pick_seat(at))
+		return true
+	var kind: String = hit.get("kind", "")
+	if kind == "item_pick":
+		var item := _item_pick
+		_item_pick = {}
+		_hide_pick_bar()
+		world.set_item_pick([])
+		_use_item(item, -1, str(hit["id"]))
+	elif kind == "item":
+		_cancel_item_pick()
+	return true
+
+
+func _show_round_result() -> void:
+	if _blackjack():
+		_show_blackjack_result()
+		return
+	if mode_ui != null:
+		var mbox := _open_overlay(0.94, true, "result")
+		mode_ui.show_result(mbox)
+		_add_result_buttons(mbox, int(game.gun["holder"]) if game.gun != null else int(game.last_result.get("winner", -1)))
+		return
+	var r := game.last_result
+	var box := _open_overlay(0.94, true, "result")
+	var w: int = r["winner"]
+	if w < 0:
+		box.add_child(_title("DEAD DECK"))
+		box.add_child(_label("The stock ran out. Nobody gets the shotgun.", 26, Palette.INK, true))
+	else:
+		if r["rummy"]:
+			box.add_child(_label("RUMMY!", 96, Palette.GOLD, true))
+		box.add_child(_title("%s GOES OUT" % _name(w), Palette.AMBER))
+		if r["rummy"]:
+			box.add_child(_label("Out in a single turn. Points doubled.", 26, Palette.GOLD, true))
+		box.add_child(_label("%d points = %d shell%s in the shotgun." % [r["points"], r["shells"], "" if r["shells"] == 1 else "s"], 28, Palette.INK, true))
+		box.add_child(_label("(1 shell, or 2 for a RUMMY: going out in one go)", 20, Palette.DIM, true))
+	for h in r["hands"]:
+		if h["seat"] == w:
+			continue
+		box.add_child(_label("%s was left holding %d:" % [h["name"], h["points"]], 24, Palette.INK))
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 4)
+		for c in h["cards"]:
+			var cv := CardView.new()
+			cv.setup(c, Vector2(52, 76))
+			cv.trump = game.is_trump(c)
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			flow.add_child(cv)
+		box.add_child(flow)
+	_add_result_buttons(box, w)
+
+
+## The shotgun (or what's next) under a round's result.
+func _add_result_buttons(box: VBoxContainer, w: int) -> void:
+	if game.gun != null:
+		var mine: bool = (not _online() or int(game.gun["holder"]) == _me()) and not _is_bot(int(game.gun["holder"]))
+		var b := _button("%s, PICK UP THE SHOTGUN" % _name(w) if mine else "WATCH %s SHOOT" % _name(w), _show_gun)
+		Palette.accent(b, Palette.RED)
+		box.add_child(b)
+	elif game.phase == "match_over":
+		box.add_child(_button("CONTINUE", _show_match_end))
+	else:
+		_add_next_round(box)
+
+
+## NEXT ROUND button, or a waiting note on phones that aren't the host.
+func _add_next_round(box: VBoxContainer, auto: bool = false) -> void:
+	if demo_stage == "practice" and game.round_num >= DEMO_ROUNDS:
+		box.add_child(_button("FINISH THE DEMO", _closing(_finish_demo)))
+		return
+	if demo_stage == "watch":
+		box.add_child(_label("The demo carries on by itself...", 24, Palette.DIM, true))
+		return
+	if not _online() or session.is_host():
+		if auto and auto_next:
+			# the gun's empty: the next round deals itself in a few seconds,
+			# counted down big at the top of the screen
+			var count := _label("", 64, FLOAT_YELLOW, true)
+			count.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+			count.add_theme_constant_override("outline_size", 16)
+			count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			overlay_layer.add_child(count)
+			count.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+			count.offset_top = get_viewport_rect().size.y * 0.13
+			count.offset_bottom = count.offset_top + 80
+			_auto_next_round(count)
+		box.add_child(_button("NEXT ROUND", _next_round))
+	else:
+		box.add_child(_label("Waiting for the host to deal the next round...", 24, Palette.DIM, true))
+		box.add_child(_button("BACK TO THE TABLE", _closing(_refresh)))
+
+
+const AUTO_ROUND_SECONDS := 3
+var _auto_round_token := 0
+
+
+## Counts down on `label`, then deals the next round, unless something else
+## happened first (NEXT ROUND pressed, the menu opened, the match ended).
+func _auto_next_round(label: Label) -> void:
+	_auto_round_token += 1
+	var token := _auto_round_token
+	var round_was: int = game.round_num
+	for left in range(AUTO_ROUND_SECONDS, 0, -1):
+		if not is_instance_valid(label):
+			return
+		label.text = "NEXT ROUND IN %d" % left
+		await get_tree().create_timer(1.0).timeout
+		if token != _auto_round_token or game == null or game.round_num != round_was:
+			return
+	if not is_instance_valid(label) or _overlay_kind != "gun" or game.phase != "round_over" or game.gun != null:
+		return # the overlay moved on (a menu, the rules...): leave it to NEXT ROUND
+	_next_round()
+
+
+func _next_round() -> void:
+	_auto_round_token += 1 # no countdown deals it a second time
+	_close_overlay()
+	_act("next_round", [], _ignore_result)
+
+
+func _show_gun(last_text: String = "") -> void:
+	var holder := -1
+	var shells := 0
+	var total: int = game.last_result.get("shells", 0)
+	if game.gun != null:
+		holder = game.gun["holder"]
+		shells = game.gun["shells"]
+		total = int(game.gun.get("total", total))
+	var box := _open_overlay(0.2, false, "gun", true)
+	var shooter: int = holder if holder >= 0 else int(game.last_result["winner"])
+	box.add_child(_title("%s HAS THE SHOTGUN" % _name(shooter), Palette.RED))
+	var shell_row := HBoxContainer.new()
+	shell_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	shell_row.add_theme_constant_override("separation", 10)
+	for i in range(total):
+		var sh := ColorRect.new()
+		sh.custom_minimum_size = Vector2(18, 40)
+		sh.color = Palette.RED if i < shells else Palette.HP_EMPTY
+		shell_row.add_child(sh)
+	box.add_child(shell_row)
+	if last_text != "":
+		box.add_child(_label(last_text, 34, Palette.PINK, true))
+
+	if holder >= 0 and ((_online() and holder != _me()) or _is_bot(holder)):
+		var waiting := "%s is picking a target..." % _name(holder) if _is_bot(holder) else "Waiting for %s to pick a target..." % _name(holder)
+		box.add_child(_label(waiting, 26, Palette.INK, true))
+		for p in game.players:
+			var row := HBoxContainer.new()
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			row.add_theme_constant_override("separation", 12)
+			row.add_child(_tag(p.name, 26, Palette.INK if p.alive else Palette.DIM))
+			if p.alive:
+				row.add_child(_hp_bar(p, Vector2(20, 14)))
+			else:
+				row.add_child(_tag("OUT", 26, Palette.RED))
+			box.add_child(row)
+	elif holder >= 0:
+		# no buttons: you tap (or click) the person you want to shoot
+		var note := "TAP WHO TO SHOOT"
+		if game.players[holder].sawed:
+			note = "SAWN-OFF: THE NEXT SHELL HITS FOR 2. TAP WHO TO SHOOT"
+		var aim := _label(note, 34, FLOAT_YELLOW, true)
+		aim.add_theme_constant_override("outline_size", 12)
+		box.add_child(aim)
+		var allowed: Array = game.gun.get("targets", []) if game.gun != null else []
+		if not allowed.is_empty():
+			box.add_child(_label("You can only shoot players who stayed in." if game.kind == "poker" else "You can only shoot players who lost to you.", 22, Palette.DIM, true))
+		var targets := _gun_targets()
+		for t in targets:
+			var row := HBoxContainer.new()
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			row.add_theme_constant_override("separation", 12)
+			row.add_child(_tag(_name(t), 26, Palette.INK))
+			row.add_child(_hp_bar(game.players[t], Vector2(20, 14)))
+			box.add_child(row)
+		_aim_at(targets)
+	else:
+		for p in game.players:
+			var row := HBoxContainer.new()
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			row.add_theme_constant_override("separation", 12)
+			row.add_child(_tag(p.name, 26, Palette.INK if p.alive else Palette.DIM))
+			if p.alive:
+				row.add_child(_hp_bar(p, Vector2(20, 14)))
+			else:
+				row.add_child(_tag("OUT", 26, Palette.RED))
+			box.add_child(row)
+		if game.phase == "match_over":
+			box.add_child(_button("CONTINUE", _show_match_end))
+		else:
+			box.add_child(_label("The shotgun goes back on the wall.", 24, Palette.DIM, true))
+			_add_next_round(box, true)
+
+
+func _fire(shooter: int, target: int) -> void:
+	_stop_aiming()
+	_act("shoot", [target], _after_fire.bind(shooter, target))
+
+
+var _aiming := false # you hold the gun: tap someone at the table to shoot them
+
+
+## Who the gun in your hands can shoot.
+func _gun_targets() -> Array:
+	var out := []
+	if game == null or game.gun == null:
+		return out
+	var holder: int = game.gun["holder"]
+	var allowed: Array = game.gun.get("targets", [])
+	for p in game.others(holder):
+		if p.alive and (allowed.is_empty() or allowed.has(p.seat)):
+			if game.has_method("protected") and game.protected(p.seat):
+				continue # a Blackjack protects them
+			out.append(p.seat)
+	return out
+
+
+## The gun's yours: the overlay lets taps through to the table, and the
+## people you can shoot get a marker over their heads.
+func _aim_at(targets: Array) -> void:
+	_aiming = true
+	for c in overlay_layer.get_children():
+		_let_taps_through(c)
+	world.mark_targets(targets)
+
+
+func _let_taps_through(n: Node) -> void:
+	if n is Control and not (n is BaseButton):
+		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_let_taps_through(c)
+
+
+func _stop_aiming() -> void:
+	_aiming = false
+	if world != null:
+		world.mark_targets([])
+
+
+## A tap while aiming: if it's on someone you can shoot, bang.
+func _aim_tap(at: Vector2) -> void:
+	if game == null or game.gun == null:
+		return
+	if not _shoot_seat(world.pick_seat(_to_view(at))):
+		_sound("click")
+
+
+## Shoot this player, if the gun in your hands can. Returns whether it fired.
+func _shoot_seat(seat: int) -> bool:
+	if not _aiming or game == null or game.gun == null or not _gun_targets().has(seat):
+		return false
+	_fire(int(game.gun["holder"]), seat)
+	return true
+
+
+func _after_fire(res: Dictionary, shooter: int, target: int) -> void:
+	if not res["ok"]:
+		return
+	var blank: bool = int(res["damage"]) == 0
+	if not _online():
+		world.fire(shooter, target, blank)
+		if not blank:
+			_flash(Color.WHITE)
+			_shake()
+	var text := "BANG. %s takes %d." % [_name(target), res["damage"]]
+	if blank:
+		text = "CLICK. A BLANK. %s lives." % _name(target)
+	if not game.players[target].alive:
+		text = "BANG. %s is out." % _name(target)
+	_last_shot_text = text
+	_refresh()
+	_show_gun(text)
+
+
+var _humans_out := false # playing AIs and every person here is out: the match is over for you
+
+
+## Against AIs (on this phone), once every person at the table is out there's
+## nothing left to watch: the match ends for you there and then.
+func _check_humans_out() -> void:
+	if game == null or _online() or tutorial or demo_stage != "" or _humans_out:
+		return
+	var people := 0
+	var people_alive := 0
+	for p in game.players:
+		if p.bot == "":
+			people += 1
+			if p.alive:
+				people_alive += 1
+	if people == 0 or people_alive > 0 or game.phase == "match_over":
+		return
+	_humans_out = true
+	# the match counts (as a loss) for your stats
+	tried_kinds[game.kind] = true
+	_bump({"matches": 1, "games_tried": tried_kinds.size() - int(stats.get("games_tried", 0))})
+	await get_tree().create_timer(2.2).timeout # let the shot land
+	if game == null or not _humans_out:
+		return
+	_show_out_screen()
+
+
+func _show_out_screen() -> void:
+	var box := _open_overlay(0.97, true, "match")
+	box.add_child(_title("YOU'RE OUT", Palette.RED))
+	box.add_child(_label("The AIs can finish it without you.", 26, Palette.INK, true))
+	box.add_child(_label("Rounds played: %d" % game.round_num, 24, Palette.DIM, true))
+	for p in game.players:
+		box.add_child(_label("%s: %d rounds won, %d points%s" % [p.name, p.rounds_won, p.score, "" if p.alive else " (out)"], 24, Palette.INK, true))
+	box.add_child(_button("PLAY AGAIN", _closing(start_match)))
+	box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
+	box.add_child(_button("BACK TO THE ROOM", show_menu))
+
+
+func _show_match_end() -> void:
+	if demo_stage == "practice":
+		_finish_demo()
+		return
+	var box := _open_overlay(0.97, true, "match")
+	if game.winner >= 0:
+		box.add_child(_title("%s WALKS OUT" % _name(game.winner), Palette.AMBER))
+		box.add_child(_label("Everyone else signed the waiver for nothing.", 26, Palette.INK, true))
+	else:
+		box.add_child(_title("NOBODY WALKS OUT", Palette.RED))
+	box.add_child(_label("Rounds played: %d" % game.round_num, 24, Palette.DIM, true))
+	for p in game.players:
+		box.add_child(_label("%s: %d rounds won, %d points%s" % [p.name, p.rounds_won, p.score, "" if p.alive else " (out)"], 24, Palette.INK, true))
+	if _online():
+		if session.is_host():
+			box.add_child(_button("PLAY AGAIN", _play_again_online))
+		else:
+			box.add_child(_label("The host can start another game.", 24, Palette.DIM, true))
+		box.add_child(_button("LEAVE", show_menu))
+	else:
+		box.add_child(_button("PLAY AGAIN", _closing(start_match)))
+		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
+		box.add_child(_button("BACK TO THE ROOM", show_menu))
+
+
+func _play_again_online() -> void:
+	_close_overlay()
+	_act("play_again", [], _ignore_result)
+
+
+func _show_rules() -> void:
+	var box := _open_overlay(0.96, true, "rules")
+	box.add_child(_title("RULES"))
+	var lines: Array = mode_ui.rules() if mode_ui != null else (BLACKJACK_RULES if _blackjack() else [
+		"THE TABLE. 2 to 6 players, either passing one phone around (PASS & PLAY) or each on their own phone in a lobby on the same Wi-Fi. One player deals each round and the player to their left goes first. Next round the deal moves one seat to the right, so whoever dealt goes first.",
+		"THE DEAL. Everyone gets 7 playing cards. Nobody starts with items: a random few item cards are shuffled into the stock each round (sometimes none, sometimes lots), so a draw from it can now and then give you an item instead of a playing card.",
+		"YOUR TURN. Draw 1 card from the stock or the top of the discard pile. If you draw an item, keep it and draw again until you get a playing card. Meld, lay off and use items as much as you like, then discard 1 card to end your turn. You can't discard the card you just took from the discard pile.",
+		"MELDS. A set is 3 or 4 cards of the same rank (7 7 7). A run is 3 or more cards in a row of the same suit (4 5 6 of hearts). Aces are low: A-2-3 counts, Q-K-A doesn't.",
+		"LAYING OFF. Once you've put down a meld of your own this round, add cards to any meld on the table, yours or anyone's: select them, then tap the glowing meld.",
+		"GOING OUT. Empty your hand of playing cards to win the round (items don't count). You score the cards everyone else is still holding: A = 1, 2-10 = face value, J/Q/K = 10. Going out in a single turn without having melded before is RUMMY and doubles it.",
+		"THE SHOTGUN. The winner gets the shotgun with 1 shell (2 for a RUMMY: going out all in one turn), and picks who to shoot with each shell. Each shell takes 1 health. Everyone starts with 4. Health carries over between rounds. Hit 0 and you're out. Last one standing walks out.",
+		"TRUMP CARDS. Each round one rank is trump: aces in round 1, twos in round 2, and so on up to kings in round 13, then back to aces. A trump card (gold star) can stand in for any card of any suit in any set or run: in round 1, 2 3 A 5 of clubs is a run.",
+		"SWAPPING A TRUMP. If a meld on the table has a trump in it and you hold the real card it stands for, you can swap that card in and take the trump, but only if you meld the trump straight away with 2 or more of your own cards. Select the real card plus the cards for your new meld, then tap the glowing meld.",
+		"FIRST TURN. Nobody can put cards down on their first turn of a round: just draw and discard.",
+		"NO DISCARDING TRUMPS. You can't discard a trump card; meld it or lay it off. (If you're holding nothing but trumps, you may.)",
+		"HINTS. A gold outline means the card makes a meld in your hand. A gold underline means it fits a meld on the table. A gold banner tells you when you can go out, and when it would be RUMMY. DEADWOOD is what you'd be caught holding if someone went out now.",
+	])
+	box.add_child(_title(_game_title(game.kind, not game.options["shotgun"])))
+	if not game.options["shotgun"]:
+		lines = lines.duplicate()
+		lines.append("NORMAL MODE. No items and no shotgun: win the round to score, and the first to %d rounds wins the match." % game.options["rounds_to_win"])
+	for line in lines:
+		box.add_child(_label(line, 24, Palette.INK))
+	# (no item list: each item card says what it does when you pick it)
+	box.add_child(_button("BACK", _show_menu))
+
+
+func _pause_sound() -> void:
+	_toggle_sound()
+	_close_overlay()
+	_show_menu()
+
+
+func _show_log() -> void:
+	var box := _open_overlay(0.96, true, "log")
+	box.add_child(_title("LOG"))
+	for i in range(log_lines.size() - 1, maxi(-1, log_lines.size() - 120), -1):
+		box.add_child(_label(log_lines[i], 22, Palette.INK))
+	box.add_child(_button("BACK", _closing(_after_action)))
+
+
+var settings_layer: Control
+
+
+## The SETTINGS menu: a panel of tabs (DISPLAY, AUDIO, GAMEPLAY, PROFILE,
+## EXTRAS), the same at the bar and at the table. At the table it floats over
+## the game, which carries on underneath.
+const SETTINGS_TABS := ["DISPLAY", "AUDIO", "GAMEPLAY", "PROFILE", "EXTRAS"]
+var _settings_tab := ""
+var _settings_from_bar := false
+var _settings_from_menu := false # opened from the pause menu: BACK returns to it
+
+
+func _show_settings() -> void:
+	_sound("open")
+	_settings_from_bar = false
+	if _settings_tab == "":
+		_settings_tab = "DISPLAY"
+	_build_settings()
+
+
+## dB for a 0..10 volume (0 is silent).
+static func _vol_db(v: int) -> float:
+	return -80.0 if v <= 0 else linear_to_db(v / 10.0)
+
+
+func _music_db() -> float:
+	return MUSIC_DB + _vol_db(music_vol)
+
+
+## Puts the settings into effect (after loading, and after every change).
+func _apply_settings() -> void:
+	AudioServer.set_bus_volume_db(0, _vol_db(master_vol))
+	if _music_player != null and _music_player.playing:
+		_music_player.volume_db = _music_db()
+	if world != null:
+		world.shake_on = screen_shake
+		world.zoom_on = table_zoom
+		if not table_zoom:
+			world.zoom_reset()
+	if not OS.has_feature("mobile") and not OS.has_feature("web") and DisplayServer.get_name() != "headless":
+		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+		if DisplayServer.window_get_mode() != want and not (want == DisplayServer.WINDOW_MODE_WINDOWED and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED):
+			DisplayServer.window_set_mode(want)
+
+
+func _settings_changed() -> void:
+	_save_settings()
+	_apply_settings()
+	_build_settings()
+
+
+func _build_settings() -> void:
+	_clear(settings_layer)
+	if world != null:
+		world.set_tags_shown(false) # the players' name tags would show through the words
+	var vs := get_viewport_rect().size
+	var phone := vs.x < 700.0
+	var panel := PanelContainer.new()
+	# no box: just the words floating over the room or the table
+	var st := StyleBoxEmpty.new()
+	st.content_margin_left = 20
+	st.content_margin_right = 20
+	st.content_margin_top = 12
+	st.content_margin_bottom = 12
+	panel.add_theme_stylebox_override("panel", st)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	settings_layer.add_child(panel)
+	panel.child_entered_tree.connect(_float_settings_text)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	panel.add_child(col)
+	var title := _label("SETTINGS", 52 if phone else 56, Palette.GOLD, true)
+	title.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.02))
+	title.add_theme_constant_override("outline_size", 14)
+	col.add_child(title)
+	# the tabs
+	var tabs := HFlowContainer.new()
+	tabs.alignment = FlowContainer.ALIGNMENT_CENTER
+	tabs.add_theme_constant_override("h_separation", 18)
+	col.add_child(tabs)
+	for tab in SETTINGS_TABS:
+		var on: bool = tab == _settings_tab
+		var b := _bubble(tab, func() -> void:
+			_settings_tab = tab
+			_sound("tick")
+			_build_settings(), Palette.GOLD if on else Palette.DIM, 30 if phone else 32)
+		tabs.add_child(b)
+	var line := ColorRect.new()
+	line.color = Color(Palette.GOLD, 0.35)
+	line.custom_minimum_size = Vector2(0, 2)
+	col.add_child(line)
+	# the tab's settings
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 2)
+	col.add_child(rows)
+	match _settings_tab:
+		"DISPLAY":
+			_set_choice(rows, "GRAPHICS", graphics, GRAPHICS.keys(), func(v: String) -> void: graphics = v; _fit_view(), "PS2: chunky and gritty. PS3: crisper. SHARP: full resolution.")
+			if not OS.has_feature("mobile") and not OS.has_feature("web"):
+				_set_toggle(rows, "FULLSCREEN", fullscreen, func(v: bool) -> void: fullscreen = v)
+			_set_toggle(rows, "SCREEN SHAKE", screen_shake, func(v: bool) -> void: screen_shake = v, "The camera jolts when you're shot.")
+			_set_toggle(rows, "FLASHES", flashes, func(v: bool) -> void: flashes = v, "The screen flashing on shots and big moments.")
+			_set_toggle(rows, "TABLE ZOOM", table_zoom, func(v: bool) -> void: table_zoom = v, "Pinch, or the mouse wheel, to zoom in on the table.")
+		"AUDIO":
+			_set_toggle(rows, "SOUND", sound_on, func(v: bool) -> void:
+				sound_on = v
+				if not v and _jingle_player != null:
+					_jingle_player.stop()
+				_play_music(_music_id, true), "Everything: effects and music.")
+			_set_volume(rows, "MASTER VOLUME", master_vol, func(v: int) -> void: master_vol = v)
+			_set_volume(rows, "EFFECTS", sfx_vol, func(v: int) -> void: sfx_vol = v)
+			_set_toggle(rows, "MUSIC", music_on, func(v: bool) -> void:
+				music_on = v
+				_play_music(_music_id, true))
+			_set_volume(rows, "MUSIC VOLUME", music_vol, func(v: int) -> void: music_vol = v)
+			_set_toggle(rows, "CARTRIDGE JINGLES", jingles_on, func(v: bool) -> void: jingles_on = v, "The little tune when you pick a cartridge.")
+		"GAMEPLAY":
+			_set_toggle(rows, "HINTS", hints, func(v: bool) -> void:
+				hints = v
+				if game != null:
+					_refresh(), "Gold outlines on cards that make melds, and tips.")
+			_set_choice(rows, "AI SPEED", ai_speed, ["SLOW", "NORMAL", "FAST"], func(v: String) -> void: ai_speed = v, "How quickly the AI players take their turns.")
+			_set_toggle(rows, "AUTO NEXT ROUND", auto_next, func(v: bool) -> void: auto_next = v, "Deal the next round by itself 3 seconds after the gun's empty.")
+			_set_choice(rows, "SORT HAND BY", "RANK" if sort_by_rank else "SUIT", ["SUIT", "RANK"], func(v: String) -> void:
+				sort_by_rank = v == "RANK"
+				if game != null:
+					_refresh())
+			_set_toggle(rows, "HIDE HANDS", hide_hands, func(v: bool) -> void: hide_hands = v, "Passing one phone round: hide your hand between turns.")
+		"PROFILE":
+			var name_row := _set_row(rows, "NAME")
+			if game == null:
+				name_row.add_child(_bubble(profile_name, func() -> void:
+					_hide_settings()
+					_change_name(), FLOAT_YELLOW, 32))
+			else:
+				name_row.add_child(_tag(profile_name, 30, FLOAT_YELLOW))
+			var cards_row := _set_row(rows, "CARDS")
+			cards_row.add_child(_settings_link(CardSkins.skin_name(card_skin), show_card_skins))
+			var gun_row := _set_row(rows, "SHOTGUN")
+			gun_row.add_child(_settings_link(GunSkins.skin_name(gun_skin), show_gun_skins))
+			var char_row := _set_row(rows, "CHARACTER")
+			char_row.add_child(_settings_link(str(my_look.get("name", "CUSTOM")), _open_customiser))
+			if game != null:
+				rows.add_child(_label("Change your name and look back in the room.", 20, Palette.DIM, true))
+			rows.add_child(_label("MATCHES %d · WON %d · ROUNDS WON %d · KNOCKOUTS %d · COINS %d" % [int(stats.get("matches", 0)), int(stats.get("match_wins", 0)), int(stats.get("round_wins", 0)), int(stats.get("knockouts", 0)), coins], 20, Palette.INK, true))
+		"EXTRAS":
+			var any := false
+			for id in Secrets.EGGS:
+				if Secrets.egg_found(id, owned):
+					any = true
+					_set_toggle(rows, str(Secrets.EGGS[id]["name"]), bool(eggs_on.get(id, false)), func(v: bool) -> void:
+						eggs_on[id] = v
+						_apply_eggs(), str(Secrets.EGGS[id]["text"]))
+			if not any:
+				rows.add_child(_label("Easter eggs you find show up here. Look for codes at the arcade.", 22, Palette.DIM, true))
+			rows.add_child(_label("CODES FOUND: %d/%d" % [Secrets.found(owned).size(), Secrets.CODES.size()], 22, Palette.INK, true))
+	var back := _bubble("BACK", _close_settings, Palette.RED, 40)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(back)
+	var w := minf(vs.x - 20.0, 660.0)
+	panel.custom_minimum_size = Vector2(w, 0)
+	var place := func() -> void:
+		if not is_instance_valid(panel):
+			return
+		var sz := panel.get_combined_minimum_size()
+		panel.size = sz
+		panel.position = Vector2((vs.x - sz.x) * 0.5, maxf(40.0, (vs.y - sz.y) * (0.5 if _settings_from_bar else 0.35)))
+	place.call()
+	place.call_deferred() # again once its rows have their real sizes
+
+
+## With no box behind them, every word in the settings gets a thick dark
+## edge so it reads over whatever's behind (and anything added later too).
+func _float_settings_text(node: Node) -> void:
+	if node is Label or node is Button:
+		var c := node as Control
+		c.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.01))
+		c.add_theme_constant_override("outline_size", maxi(c.get_theme_constant("outline_size"), 12))
+	for ch in node.get_children():
+		_float_settings_text(ch)
+	if node is Container and not node.child_entered_tree.is_connected(_float_settings_text):
+		node.child_entered_tree.connect(_float_settings_text)
+
+
+## A row: the setting's name on the left, its control on the right.
+func _set_row(rows: Container, label: String, hint: String = "") -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	rows.add_child(row)
+	var l := _tag(label, 30, Palette.INK)
+	l.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+	l.add_theme_constant_override("outline_size", 8)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	if hint != "":
+		rows.add_child(_label(hint, 19, Color(0.82, 0.78, 0.7)))
+	return row
+
+
+func _set_toggle(rows: Container, label: String, value: bool, set_to: Callable, hint: String = "") -> void:
+	var row := _set_row(rows, label, hint)
+	row.add_child(_bubble("ON" if value else "OFF", func() -> void:
+		set_to.call(not value)
+		_settings_changed(), Color(0.45, 1.0, 0.5) if value else Palette.DIM, 34))
+
+
+func _set_choice(rows: Container, label: String, value: String, options: Array, set_to: Callable, hint: String = "") -> void:
+	var row := _set_row(rows, label, hint)
+	var at := options.find(value)
+	row.add_child(_bubble("◀", func() -> void:
+		set_to.call(options[posmod(at - 1, options.size())])
+		_settings_changed(), Palette.DIM, 30))
+	var v := _tag(value, 30, FLOAT_YELLOW)
+	v.custom_minimum_size = Vector2(110, 0)
+	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(v)
+	row.add_child(_bubble("▶", func() -> void:
+		set_to.call(options[posmod(at + 1, options.size())])
+		_settings_changed(), Palette.DIM, 30))
+
+
+func _set_volume(rows: Container, label: String, value: int, set_to: Callable) -> void:
+	var row := _set_row(rows, label)
+	row.add_child(_bubble("-", func() -> void:
+		set_to.call(maxi(0, value - 1))
+		_settings_changed()
+		_sound("tick"), Palette.DIM, 34))
+	var bar := _tag("■".repeat(value) + "□".repeat(10 - value), 22, Palette.AMBER)
+	bar.custom_minimum_size = Vector2(150, 0)
+	bar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(bar)
+	row.add_child(_bubble("+", func() -> void:
+		set_to.call(mini(10, value + 1))
+		_settings_changed()
+		_sound("tick"), Palette.DIM, 34))
+
+
+## A setting that opens another screen (only from the room, not mid-game).
+func _settings_link(text: String, go: Callable) -> Control:
+	if game != null:
+		return _tag(text, 26, FLOAT_YELLOW)
+	return _bubble(text + " ▶", func() -> void:
+		_hide_settings()
+		go.call(), FLOAT_YELLOW, 28)
+
+
+## BACK: at the bar, back to the room; at the table, back to the game.
+func _close_settings() -> void:
+	_hide_settings()
+	if _settings_from_bar:
+		_settings_from_bar = false
+		show_menu()
+	elif _settings_from_menu:
+		_settings_from_menu = false
+		if game != null:
+			_show_menu()
+
+
+func _hide_settings() -> void:
+	if settings_layer != null:
+		_clear(settings_layer)
+	if world != null and overlay_layer != null and overlay_layer.get_child_count() == 0:
+		world.set_tags_shown(true)
+
+
+func _settings_open() -> bool:
+	return settings_layer != null and settings_layer.get_child_count() > 0
+
+
+func _show_menu() -> void:
+	var box := _open_overlay(0.94, false, "menu")
+	box.add_child(_title("PAUSED"))
+	box.add_child(_button("RESUME", _closing(_after_action)))
+	box.add_child(_button("RULES", _show_rules))
+	box.add_child(_button("SETTINGS", func() -> void:
+		_close_overlay() # the menu goes; BACK brings it back
+		_settings_from_menu = true
+		_show_settings()))
+	if _online():
+		box.add_child(_label("Leaving ends the game for everyone.", 24, Palette.DIM, true))
+		box.add_child(_button("LEAVE THE GAME", show_menu))
+	else:
+		box.add_child(_button("RESTART MATCH", _closing(start_match)))
+		box.add_child(_button("NEW PLAYERS", _closing(_new_players)))
+		box.add_child(_button("BACK TO THE ROOM", show_menu))
