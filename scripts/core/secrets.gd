@@ -68,6 +68,10 @@ const CODES := [
 		"prizes": ["gun:ghost"],
 		"message": "It's here. Then it isn't.",
 		"hint": "Sneak through the wall like a ghost: down, left, four times over."},
+	{"id": "darts", "code": "UDUDABAB", "name": "BULLSEYE",
+		"prizes": ["game:darts"],
+		"message": "The dartboard by the door's open for business. 3 games, 1 shotgun.",
+		"hint": "Aim high, aim low, twice over (up, down, up, down), then throw: A, B, A, B."},
 ]
 
 ## Easter eggs: switch them on and off at the computer once found.
@@ -90,12 +94,12 @@ static func code_by_id(id: String) -> Dictionary:
 	return {}
 
 
-## Every prize that only a code gives.
+## Every prize that only a code gives (skins: not the eggs or the games).
 static func secret_prizes() -> Dictionary:
 	var out := {}
 	for c in CODES:
 		for p in c["prizes"]:
-			if not str(p).begins_with("egg:"):
+			if not str(p).begins_with("egg:") and not str(p).begins_with("game:"):
 				out[p] = c["id"]
 	return out
 

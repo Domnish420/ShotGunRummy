@@ -1,6 +1,6 @@
-# Shotgun Party
+# Shotgun Cards
 
-Party games, starting with a shelf of card games, for 2–6 players at a 3D table under a hanging lamp, on one phone or
+Card games for 2–6 players at a 3D table under a hanging lamp, on one phone or
 over the same Wi-Fi, with AI players to fill the seats. Every game plays by the
 same house rules: a dealer that moves round the table, item cards shuffled into
 the deck that bend the rules, health, and a shotgun for whoever wins the hand.
@@ -54,21 +54,19 @@ thing itself) and you walk over:
 - **ARCADE**, the cabinet in the front-left corner. It won't start until
   you've finished a match of every game. Then it takes cheat codes (see
   below).
-- **PARTY ROOM**, the purple door in the back wall: through it (the screen
-  fades over) is a second room for the party games. Inside: **PLAY DARTS** at
-  the dartboard on the back wall, **BOARD GAMES** on the shelf on the right
-  (TIMBER, the tower game; the other boxes are still in their shrink-wrap), a
-  rectangular wooden table for the board games, a jukebox, string lights, and the **BAR** door on the left
-  to go back.
+- **DARTS**, the board on the back wall left of the exit, with its own red
+  neon. It's closed until you type the **BULLSEYE** code at the arcade
+  (below).
 
 ### The arcade: cheat codes and easter eggs
 
 Type codes on the cabinet itself: tap the joystick (up, down, left, right)
 and the **A** and **B** buttons on its control panel (on a computer, the arrow
 keys and A and B work too). Later on it will unlock secret cartridges as well.
-There are 14 codes. Each one unlocks a **secret skin** that never comes out
+There are 15 codes. Each one unlocks a **secret skin** that never comes out
 of the gacha machine (decks, shotguns, hats and outfits), an **easter egg**,
 or both. You know the first one already: it's the most famous code in gaming.
+One of them, **BULLSEYE**, opens the dartboard on the back wall.
 
 **HINTS** has a riddle for every code you haven't found, and the full code
 for the ones you have. **EGGS** switches the easter eggs you've found on and
@@ -277,9 +275,9 @@ The window opens at phone shape (portrait). To try it alone, use
 `export_presets.cfg` has two ready-made exports (Godot's export templates
 need installing once: **Editor → Manage Export Templates → Download**):
 
-- **Windows Desktop**: one `ShotgunParty.exe` with everything packed inside.
+- **Windows Desktop**: one `ShotgunCards.exe` with everything packed inside.
   **Project → Export → Windows Desktop → Export Project**, or
-  `godot --headless --export-release "Windows Desktop" build/windows/ShotgunParty.exe`
+  `godot --headless --export-release "Windows Desktop" build/windows/ShotgunCards.exe`
 - **Web**: for itch.io and other sites that run games in the browser.
   `godot --headless --export-release "Web" build/web/index.html`, then zip
   what's in `build/web/` and upload it. Browsers can't open the connections
@@ -540,7 +538,8 @@ trick (the first one played, if there's more than one).
 
 ## How to play Darts
 
-The first party game, at the board in the party room. Everything's set up
+The board on the back wall of the bar, once the arcade's opened it (the
+BULLSEYE code: **UP DOWN UP DOWN A B A B**). Everything's set up
 round the board itself: the game above it, **TAKE AIM!** on the bull, and
 below it how many AIs (PUB, LEAGUE, PRO or MIXED), shotgun or normal, pass the
 phone, host, join or the demo. Nobody sits down: everyone stands in a ring in
@@ -562,46 +561,6 @@ The board's cleared before each thrower.
   finish someone off.
 - No items in darts. The board: double ring outside, treble ring in the
   middle, 25 round the bull, the bull 50.
-
-## How to play TIMBER
-
-The first board game, from the shelf in the party room, played at the
-rectangular table. Board games are elimination: no health, no items. One shot
-and you're out; last one standing wins.
-
-- **The tower.** 18 layers of 3 wooden blocks, every one a real physics body.
-  Some are loose and slide right out; some carry the weight, and pushing those
-  drags the tower with them.
-- **Your turn.** Tap a block (not the bottom layer, the top layer, nor the one
-  under it while the top's unfinished). The camera goes round to its end once
-  and the skeleton hand comes up.
-- **One finger moves the hand**, level with that block, as you see it: drag up
-  the screen to push away from you, sideways to move across. It follows on a
-  spring with a limited push, so a steady finger is a steady push and a
-  twitchy one shoves. Push it right out the far side and it drops onto the
-  table. Nobody catches it for you: tap it to pick it up, drag up the screen
-  to carry it to the top of the tower, slide it into place, **TURN** it if you like,
-  **SET IT DOWN** (a gold mark shows where it'll land), then **DONE**. ✕ lets go of a block to try another.
-- **Two fingers move the camera**: drag to walk round the tower and look up and
-  down it, pinch to come closer or back off (right-drag and the scroll wheel
-  on a computer). ◀ ▶ step round a quarter at a time.
-- **Feel it.** A faint ghost shows where your finger wants the hand; the line
-  from it to the real finger goes red, the hand trembles and the phone buzzes
-  when the block fights back. The round window up top is a camera over the
-  hand's shoulder.
-- **The hand.** POKE (one finger), TWO (two fingers, firmer), PINCH (grips the
-  end that sticks out: hold and drag back; yank too hard and it slips) and
-  SWIPE (the flat hand: drag it across the layer yourself; let go and
-  whatever's out of that layer is gone for good. A massive risk, and it thins
-  the tower for everyone after you).
-- **The shotgun.** Whoever's turn it is has the gun lying in front of them; it
-  moves left with the turn. Bring the tower down and the player on your right
-  shoots you. The tower's built again and the player on your left goes first.
-  Always.
-- **AIs** (SHAKY, STEADY, SURGEON) test a block with a finger and back off if
-  it's tight or the tower moves; out of options, they lean on one harder.
-- Local only for now (VS AI or pass the phone): the tower's physics isn't sent
-  over the network.
 
 ## How to play Poker
 
@@ -677,11 +636,8 @@ Use as many as you like on your turn. Copies are in brackets; tune them in
 | `scripts/core/poker.gd`, `poker_bot.gd` | Poker's rules (with the hand rankings) and AI. |
 | `scripts/core/crazy8.gd`, `crazy8_bot.gd` | Crazy Eights' rules (with the saloon cards) and AI. |
 | `scripts/core/darts.gd`, `darts_bot.gd` | Darts: the board's scoring, the three games and their stakes, and the AI (it aims with the same two lines). |
-| `scripts/three/party_room.gd`, `dartboard3d.gd` | The party room, and the dartboard on its wall (face painted in code, darts that stick). |
+| `scripts/three/dartboard3d.gd` | The dartboard on the bar's back wall (face painted in code, darts that stick). |
 | `scripts/ui/darts_aim.gd` | The two-line aim drawn over the board. |
-| `scripts/core/timber.gd` | TIMBER's turns and shotgun (the board-game elimination rule). |
-| `scripts/three/tower3d.gd`, `hand3d.gd`, `timber_driver.gd` | The physics tower, the skeleton hand (force-limited fingertip), and the AI's hand. |
-| `scripts/ui/modes/timber_ui.gd` | TIMBER's controls (one finger the hand, two the camera) and the hand cam. |
 | `scripts/audio/chiptune.gd` | Every sound and jingle, made in code (stand-ins for the real audio). |
 | `scripts/core/games.gd` | The cartridges: every game, its colour, and normal mode. |
 | `scripts/ui/modes/` | Each newer game's table screen (buttons, taps, results, rules, tutorial tips). |
@@ -739,18 +695,12 @@ rule gets explained:
 godot --headless --path . -s tests/ui_demo_check.gd
 ```
 
-`tests/ui_darts_check.gd` walks through to the party room and plays each
+`tests/ui_darts_check.gd` finds the board locked, opens it with the code at
+the arcade, and plays each
 darts game through the real screens (tapping to stop the dots), then the demo:
 
 ```
 godot --headless --path . -s tests/ui_darts_check.gd
-```
-
-`tests/ui_timber_check.gd` plays a TIMBER match through the real screens
-(a scripted thumb taps blocks and drags to push), then the demo:
-
-```
-godot --headless --path . -s tests/ui_timber_check.gd
 ```
 
 `tests/ui_blackjack_check.gd` plays Blackjack solo against two AIs

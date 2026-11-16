@@ -1,5 +1,5 @@
 extends Control
-## Shotgun Party UI (phone first): the room, the table and every game.
+## Shotgun Cards UI (phone first): the room, the table and every game.
 ##
 ## Screens are built in code: main menu -> lobby (same Wi-Fi) or pass-and-play
 ## setup -> table, with overlays on top for "pass the phone", item reveals,
@@ -32,7 +32,6 @@ const PresidentUI = preload("res://scripts/ui/modes/president_ui.gd")
 const PokerUI = preload("res://scripts/ui/modes/poker_ui.gd")
 const Crazy8UI = preload("res://scripts/ui/modes/crazy8_ui.gd")
 const DartsUI = preload("res://scripts/ui/modes/darts_ui.gd")
-const TimberUI = preload("res://scripts/ui/modes/timber_ui.gd")
 const DartsT = preload("res://scripts/core/darts.gd")
 const SnapBot = preload("res://scripts/core/snap_bot.gd")
 const Unlocks = preload("res://scripts/core/unlocks.gd")
@@ -122,7 +121,7 @@ var _ai_memory := {} # seat -> what that AI remembers this turn
 var _ai_phase := ""
 var _ai_held: Array = [] # an AI move held back while its aim plays out (darts)
 var darts_mode := "shootout" # which darts game: shootout, clock or 301
-var _card_kind := "rummy" # the last cartridge, for coming back from the party room
+var _card_kind := "rummy" # the last cartridge, for coming back from darts
 var _ip_edit: LineEdit
 var _name_edit: LineEdit
 
@@ -727,7 +726,7 @@ func show_name_screen() -> void:
 	world.hide_carousel()
 	world.set_menu_mode(true)
 	var box := _paper()
-	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("WHO'S PLAYING?", 34, Palette.CARD_INK, true))
 	if menu_message != "":
 		box.add_child(_label(menu_message, 24, Palette.CARD_RED, true))
@@ -775,7 +774,7 @@ func show_menu() -> void:
 		return
 	if Games.LIST.has(game_kind):
 		world.set_cartridge(game_kind)
-	_play_music("party" if world.room_id == "party" else "room")
+	_play_music("room")
 	_room_hud()
 	if not tutorial_offered:
 		tutorial_offered = true
@@ -837,7 +836,7 @@ func _room_hud() -> void:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 6)
 	margin.add_child(col)
-	var title := _label("THE PARTY ROOM" if world.room_id == "party" else "SHOTGUN PARTY", 44, Color(0.75, 0.4, 1.0) if world.room_id == "party" else Color(0.85, 0.15, 0.1), true)
+	var title := _label("SHOTGUN CARDS", 44, Color(0.85, 0.15, 0.1), true)
 	var who := _label("%s · %d GACHA COIN%s" % [profile_name, coins, "" if coins == 1 else "S"], 24, Palette.INK, true)
 	var parts: Array = [title, who]
 	if menu_message != "":
@@ -892,37 +891,24 @@ func _go_station(id: String) -> void:
 			show_door()
 		"computer":
 			show_computer()
-		"party":
-			_walk_to_room("party")
-		"back":
-			_walk_to_room("bar")
 		"darts":
-			show_darts()
-		"boxes":
-			show_board_games()
+			if darts_unlocked():
+				show_darts()
+			else:
+				show_darts_locked()
 
 
-## Through a door to the other room: walk up to it, the screen fades out, the
-## other room's swapped in, and it fades back up.
-func _walk_to_room(id: String) -> void:
-	_clear(screen)
-	world.focus_station("party" if id == "party" else "back")
-	await get_tree().create_timer(0.75).timeout
-	var black := ColorRect.new()
-	black.color = Color(0, 0, 0, 0)
-	black.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_full(black))
-	var t := black.create_tween()
-	t.tween_property(black, "color:a", 1.0, 0.3)
-	await t.finished
-	world.goto_room(id)
-	world.enter_room()
-	_play_music("party" if id == "party" else "room")
-	_room_hud()
-	var back := black.create_tween()
-	back.tween_property(black, "color:a", 0.0, 0.4)
-	await back.finished
-	black.queue_free()
+## Darts is a secret: a code at the arcade cabinet opens the board.
+func darts_unlocked() -> bool:
+	return owned.has("game:darts")
+
+
+func show_darts_locked() -> void:
+	world.focus_station("darts_menu")
+	var box := _station_panel("DARTS")
+	box.add_child(_label("A sign on the board: CLOSED. Somebody's put a code on the arcade cabinet that opens it.", 26, Palette.INK, true))
+	var back := _panel_button(box, "BACK", show_menu, 30)
+	Palette.accent(back, Palette.DIM)
 
 
 ## The dartboard: everything about a game of darts, round the board itself.
@@ -1068,101 +1054,6 @@ func _set_darts_normal(on: bool) -> void:
 	normal_mode = on and _normal_unlocked("darts")
 	_save_settings()
 	show_darts()
-
-
-## The board game shelf. TIMBER's the box on top: everything about it
-## floats over the shelf in its own colours. (The rest are still wrapped.)
-const TIMBER_LEVELS := [["easy", "SHAKY"], ["normal", "STEADY"], ["hard", "SURGEON"], ["mixed", "MIXED"]]
-
-
-func show_board_games() -> void:
-	world.focus_station("boxes")
-	_close_overlay()
-	_clear(screen)
-	game_kind = "timber"
-	if not _normal_unlocked("timber"):
-		normal_mode = false
-	var wood := Color(0.95, 0.78, 0.5)
-	var col := VBoxContainer.new()
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_theme_constant_override("separation", 4)
-	screen.add_child(_full(col))
-	var gap_top := Control.new()
-	gap_top.custom_minimum_size = Vector2(0, 40)
-	gap_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(gap_top)
-	var title := _label("TIMBER!", 66, wood, true)
-	title.add_theme_color_override("font_outline_color", Color(0.2, 0.1, 0.04))
-	title.add_theme_constant_override("outline_size", 14)
-	col.add_child(title)
-	for line in ["Pull a block. Put it on top. Don't bring it down.", "Bring it down and the player on your right shoots you." if not normal_mode else "Bring it down and you're out."]:
-		var l := _label(line, 24, Color(0.95, 0.9, 0.8), true)
-		l.add_theme_color_override("font_outline_color", Color.BLACK)
-		l.add_theme_constant_override("outline_size", 8)
-		col.add_child(l)
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(spacer) # the shelf shows through here
-	var who := HBoxContainer.new()
-	who.alignment = BoxContainer.ALIGNMENT_CENTER
-	who.add_theme_constant_override("separation", 14)
-	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	who.add_child(_bubble("◀", _change_timber_count.bind(-1), wood, 44))
-	var count := _label("YOU + %d AI" % solo_opponents, 34, wood, true)
-	count.autowrap_mode = TextServer.AUTOWRAP_OFF
-	count.add_theme_color_override("font_outline_color", Color.BLACK)
-	count.add_theme_constant_override("outline_size", 8)
-	who.add_child(count)
-	who.add_child(_bubble("▶", _change_timber_count.bind(1), wood, 44))
-	col.add_child(who)
-	var levels := HBoxContainer.new()
-	levels.alignment = BoxContainer.ALIGNMENT_CENTER
-	levels.add_theme_constant_override("separation", 22)
-	levels.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for pair in TIMBER_LEVELS:
-		levels.add_child(_bubble(pair[1], _set_timber_level.bind(pair[0]), Color(0.45, 0.9, 0.5) if solo_level == pair[0] else Palette.DIM, 32 if solo_level == pair[0] else 26))
-	col.add_child(levels)
-	var mode_row := HBoxContainer.new()
-	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	mode_row.add_theme_constant_override("separation", 36)
-	mode_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mode_row.add_child(_bubble("SHOTGUN", _set_timber_normal.bind(false), Palette.RED if not normal_mode else Palette.DIM, 30))
-	var plain := _bubble("NORMAL" if _normal_unlocked("timber") else "NORMAL 🔒%d/%d" % [int(played.get("timber", 0)), Games.UNLOCK_NORMAL_AFTER], _set_timber_normal.bind(true), Palette.AMBER if normal_mode else Palette.DIM, 30)
-	plain.disabled = not _normal_unlocked("timber")
-	mode_row.add_child(plain)
-	col.add_child(mode_row)
-	col.add_child(_bubble("STACK 'EM!", _start_solo, Palette.GOLD, 66))
-	var more := HBoxContainer.new()
-	more.alignment = BoxContainer.ALIGNMENT_CENTER
-	more.add_theme_constant_override("separation", 30)
-	more.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	more.add_child(_bubble("PASS THE PHONE", _on_pass_and_play_pressed, Palette.AMBER, 28))
-	more.add_child(_bubble("DEMO", _start_tutorial, Color(0.55, 0.85, 1.0), 28))
-	col.add_child(more)
-	col.add_child(_bubble("BACK", show_menu, Palette.DIM, 30))
-	var gap_bottom := Control.new()
-	gap_bottom.custom_minimum_size = Vector2(0, 26)
-	gap_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(gap_bottom)
-
-
-func _change_timber_count(delta: int) -> void:
-	solo_opponents = clampi(solo_opponents + delta, 1, MAX_PLAYERS - 1)
-	_save_settings()
-	show_board_games()
-
-
-func _set_timber_level(level: String) -> void:
-	solo_level = level
-	_save_settings()
-	show_board_games()
-
-
-func _set_timber_normal(on: bool) -> void:
-	normal_mode = on and _normal_unlocked("timber")
-	_save_settings()
-	show_board_games()
 
 
 ## The options a new game of `kind` starts with (which darts game, say).
@@ -1941,11 +1832,9 @@ func _start_solo() -> void:
 ## NEW PLAYERS after a game on this phone: back to whichever setup it came from.
 func _new_players() -> void:
 	_stop_match() # the match is over: nothing carries on behind the setup
-	_play_music("party" if world.room_id == "party" else "room")
+	_play_music("room")
 	if game_kind == "darts" and local_mode == "solo":
-		show_darts() # the party games pick their players at their own station
-	elif game_kind == "timber" and local_mode == "solo":
-		show_board_games()
+		show_darts() # darts picks its players at the board
 	elif local_mode == "solo":
 		show_solo()
 	else:
@@ -2463,7 +2352,7 @@ func show_setup() -> void:
 	_fit_setup_looks()
 	var box := _paper()
 	box.add_theme_constant_override("separation", 10)
-	box.add_child(_label("SHOTGUN\nPARTY", 76, Color(0.36, 0.06, 0.05), true))
+	box.add_child(_label("SHOTGUN\nCARDS", 76, Color(0.36, 0.06, 0.05), true))
 	box.add_child(_label("GENERAL RELEASE OF LIABILITY", 24, Palette.CARD_INK, true))
 	box.add_child(_label("The undersigned agree to a game of %s." % Games.label(game_kind).capitalize() + " Strange things are dealt with the cards. Whoever wins a hand gets the shotgun. Everyone has 4 lives. Only one leaves.", 24, Palette.CARD_INK))
 
@@ -4175,8 +4064,6 @@ func _make_mode_ui():
 			return Crazy8UI.new(self)
 		"darts":
 			return DartsUI.new(self)
-		"timber":
-			return TimberUI.new(self)
 	return null
 
 

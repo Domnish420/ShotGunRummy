@@ -1,5 +1,5 @@
 extends RefCounted
-## The cartridges: every game in Shotgun Party, in shelf order.
+## The cartridges: every game in Shotgun Cards, in shelf order.
 ##
 ## Each game is a rules engine built on game.gd (players, items, health and
 ## the shotgun). To add one: write its engine (and an AI in its own file),
@@ -20,7 +20,6 @@ const President = preload("res://scripts/core/president.gd")
 const Poker = preload("res://scripts/core/poker.gd")
 const Crazy8 = preload("res://scripts/core/crazy8.gd")
 const Darts = preload("res://scripts/core/darts.gd")
-const Timber = preload("res://scripts/core/timber.gd")
 
 const LIST := {
 	"rummy": {"name": "RUMMY", "color": Color(0.55, 0.12, 0.1), "min": 2, "max": 6},
@@ -35,10 +34,10 @@ const LIST := {
 	"crazy8": {"name": "CRAZY EIGHTS", "color": Color(0.42, 0.48, 0.07), "min": 2, "max": 6},
 }
 
-## The party games: in the party room, not on cartridges.
+## The party games: not on cartridges. Darts is on the wall by the door,
+## once a code at the arcade cabinet opens it.
 const PARTY := {
 	"darts": {"name": "DARTS", "color": Color(0.6, 0.1, 0.12), "min": 2, "max": 6},
-	"timber": {"name": "TIMBER", "color": Color(0.62, 0.42, 0.2), "min": 2, "max": 6},
 }
 
 ## Shotgun matches of a game to finish before its normal mode unlocks.
@@ -57,7 +56,7 @@ static func _info(kind: String) -> Dictionary:
 	return LIST.get(kind, PARTY.get(kind, {"name": "?", "color": Color.GRAY}))
 
 
-## A game's name, as it's shown everywhere ("Shotgun Party" already says
+## A game's name, as it's shown everywhere ("Shotgun Cards" already says
 ## the rest).
 static func title(kind: String) -> String:
 	return label(kind)
@@ -113,8 +112,6 @@ static func make(kind: String, normal: bool = false) -> Game:
 			g = Crazy8.new()
 		"darts":
 			g = Darts.new()
-		"timber":
-			g = Timber.new()
 		_:
 			g = Game.new()
 	if normal:

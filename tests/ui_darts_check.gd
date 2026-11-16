@@ -1,5 +1,6 @@
 extends SceneTree
-## Walks into the party room and plays darts through the real screens: each
+## Finds the dartboard locked, opens it with the code at the arcade, and
+## plays darts through the real screens: each
 ## game (shootout, around the clock, 301) as a shotgun match against AIs,
 ## tapping to stop the dots like a person, then the demo.
 ##   godot --headless --path . -s tests/ui_darts_check.gd [-- shootout ...]
@@ -36,13 +37,20 @@ func _initialize() -> void:
 	main.profile_name = "SAM"
 	main.tutorial_offered = true
 	main.show_menu()
-	check(main.world.room_pick(Vector2(-1, -1)) == "" and main.world.room_id == "bar", "you start in the bar")
-	main._go_station("party")
-	for i in range(240):
-		await process_frame
-		if main.world.room_id == "party":
-			break
-	check(main.world.room_id == "party" and main.world._party_set.visible and not main.world._bar_set.visible, "through the purple door: the party room")
+	main.owned.erase("game:darts")
+	main.owned.erase("code:darts")
+	check(not main.darts_unlocked(), "darts starts locked")
+	main._go_station("darts")
+	check(main.game_kind != "darts", "a locked board doesn't open the darts menu")
+	# the code, on the arcade stick
+	for k in main.Games.kinds():
+		main.tried_kinds[k] = true # every card game played: the cabinet's on
+	main.show_computer()
+	var code: Dictionary = main.Secrets.code_by_id("darts")
+	for ch in str(code["code"]):
+		main._code_press(ch)
+	check(main.darts_unlocked(), "the BULLSEYE code opens the board")
+	main.show_menu()
 	var only := OS.get_cmdline_user_args()
 	for m in Darts.MODES:
 		if not only.is_empty() and not only.has(m):
@@ -57,7 +65,6 @@ func _initialize() -> void:
 		check(main.game.kind == "darts" and main.game.mode() == m, "%s: the match is that game" % m)
 		await _play(m)
 		main.show_menu()
-		check(main.world.room_id == "party", "%s: back in the party room after" % m)
 	if only.is_empty() or only.has("demo"):
 		main._go_station("darts")
 		main._start_tutorial()
@@ -77,12 +84,6 @@ func _initialize() -> void:
 				left += 1
 		check(main.demo_stage == "practice" and left == 0, "demo: every rule explained, then over to you (%d left)" % left)
 		print("darts demo: %d lessons, %d rounds watched" % [shown, g.round_num])
-	main._go_station("back")
-	for i in range(240):
-		await process_frame
-		if main.world.room_id == "bar":
-			break
-	check(main.world.room_id == "bar" and main.world._bar_set.visible, "and back to the bar")
 	print("DARTS CHECK OK" if fails == 0 else "%d failures" % fails)
 	quit(1 if fails > 0 else 0)
 

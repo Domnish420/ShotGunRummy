@@ -1,5 +1,5 @@
 extends Node3D
-## The dartboard on the party room wall: a low-res face painted in code
+## The dartboard on the back wall: a low-res face painted in code
 ## (128 px across, so it looks like a PS2 texture up close), the numbers round
 ## the edge, and the darts stuck in it. Facing +z; the board's own units are
 ## board radii (darts.gd): (0, 0) the bull, 1.0 the edge of the doubles.

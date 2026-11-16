@@ -1,5 +1,5 @@
 extends "res://scripts/core/game.gd"
-## Shotgun Darts, the first party game (it lives on the party room wall, not
+## Shotgun Darts, the first party game (it lives on the wall by the door, not
 ## on a cartridge). Same players, health and shotgun as the card games; no
 ## cards and no items. Three ways to play, each with its own stakes:
 ##

@@ -205,6 +205,8 @@ static func prize_name(k: String) -> String:
 			return "%s OUTFIT" % Looks.OUTFITS[int(pv[1])]["name"]
 		"eyes":
 			return "GLOWING EYES"
+		"game":
+			return "%s, BY THE DOOR" % str(pv[1]).to_upper()
 		"egg":
 			return "EASTER EGG: %s" % str(Secrets.EGGS.get(pv[1], {}).get("name", str(pv[1]).to_upper()))
 	return k

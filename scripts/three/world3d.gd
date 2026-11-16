@@ -23,9 +23,7 @@ const GunSkins = preload("res://scripts/core/gun_skins.gd")
 const Gacha3D = preload("res://scripts/three/gacha3d.gd")
 const Games = preload("res://scripts/core/games.gd")
 const CartridgeArt = preload("res://scripts/three/cartridge_art.gd")
-const PartyRoom = preload("res://scripts/three/party_room.gd")
-const Tower3D = preload("res://scripts/three/tower3d.gd")
-const Hand3D = preload("res://scripts/three/hand3d.gd")
+const Dartboard3D = preload("res://scripts/three/dartboard3d.gd")
 
 const TABLE_TOP := 0.03
 const FLOOR_Y := -0.78
@@ -105,16 +103,13 @@ const STATIONS := {
 	"gacha": {"sign": Vector3(2.35, 0.95, -1.7), "spot": Vector3(2.35, 0.1, -1.7), "name": "GACHA"},
 	"door": {"sign": Vector3(0.9, 1.75, -3.0), "spot": Vector3(0.9, 0.25, -3.05), "name": "EXIT"},
 	"computer": {"sign": Vector3(-2.6, 1.35, 1.75), "spot": Vector3(-2.6, 0.5, 1.75), "name": "ARCADE"},
-	"party": {"sign": Vector3(-1.35, 1.85, -3.0), "spot": Vector3(-1.35, 0.25, -3.05), "name": "PARTY ROOM"},
-	# the party room
-	"darts": {"sign": Vector3(0.0, 0.42, -3.0), "spot": Vector3(0.0, 0.95, -3.05), "name": "PLAY DARTS", "room": "party"},
-	"boxes": {"sign": Vector3(2.8, 1.55, -1.2), "spot": Vector3(2.9, 0.4, -1.2), "name": "BOARD GAMES", "room": "party"},
-	"back": {"sign": Vector3(-2.95, 0.95, 1.4), "spot": Vector3(-3.0, 0.25, 1.4), "name": "BACK TO THE BAR", "room": "party"},
+	"darts": {"sign": Vector3(-1.35, 0.42, -3.0), "spot": Vector3(-1.35, 0.95, -3.05), "name": "DARTS"},
 }
 var _bar_set: Node3D
-var _party_set: Node3D
-var dartboard: Node3D # the party room's board (dartboard3d.gd)
-var room_id := "bar" # which room you're in: "bar" or "party"
+var dartboard: Node3D # the board on the back wall (dartboard3d.gd)
+var room_id := "bar" # (there's just the one room for now)
+## The dartboard, on the back wall left of the door: bull at the right height.
+const BOARD_POS := Vector3(-1.35, FLOOR_Y + 1.73, -3.1)
 
 
 ## Is this station in the room you're in?
@@ -122,30 +117,6 @@ func _here(station: String) -> bool:
 	return str(STATIONS[station].get("room", "bar")) == room_id
 
 
-## Through a door: the other room is swapped in (main.gd fades the screen
-## over it). You come in at the middle, looking round.
-func goto_room(id: String) -> void:
-	room_id = id
-	_bar_set.visible = id == "bar"
-	_party_set.visible = id == "party"
-	if _console != null:
-		_console.visible = id == "bar" # the cartridge slot's for the card games
-	if _cartridge != null:
-		_cartridge.visible = id == "bar"
-	_set_door(false)
-	var party_hinge := _bar_set.get_node_or_null("PartyHinge") as Node3D
-	if party_hinge != null:
-		party_hinge.rotation.y = 0.0
-	_yaw = 0.0
-	_pitch = -0.12
-	_view_yaw = 0.0
-	_view_pitch = -0.12
-	if _room:
-		_focus = ""
-		_room_hold = 0.0
-		camera.global_transform = _hub_transform(0.0, -0.12)
-		for k in _signs:
-			_signs[k].visible = _here(k)
 var _gacha_light: SpotLight3D
 const PREVIEW_CAM := Vector3(-1.75, 1.15, 2.0) # from the spot: the gap beside the table
 
@@ -258,18 +229,12 @@ func _build_room() -> void:
 	we.environment = env
 	add_child(we)
 
-	# two rooms in the same spot, one shown at a time: the bar, and the party
-	# room through the purple door. The table in the middle is in both.
 	_bar_set = Node3D.new()
 	_bar_set.name = "BarRoom"
 	add_child(_bar_set)
 	Props.build_room(_bar_set, TABLE_TOP, TABLE_RX, TABLE_RZ)
 	Props.build_table(_bar_set, TABLE_TOP, TABLE_RX, TABLE_RZ)
-	_party_set = Node3D.new()
-	_party_set.name = "PartyRoom"
-	add_child(_party_set)
-	dartboard = PartyRoom.build(_party_set)["board"]
-	_party_set.visible = false
+	_build_dart_corner()
 
 	# the lamp over the table
 	var cord := CylinderMesh.new()
@@ -504,8 +469,6 @@ func _fit_camera() -> void:
 	if _darts_on:
 		camera.global_transform = darts_camera()
 		return
-	if _timber_on:
-		return # the tower camera drives itself
 	if not _preview.is_empty():
 		_aim_preview()
 		return
@@ -554,7 +517,6 @@ var _disco_t := 0.0
 
 func _process(delta: float) -> void:
 	_spin_carousel(delta)
-	_process_timber(delta)
 	if egg_disco and lamp != null:
 		_disco_t += delta
 		lamp.light_color = Color.from_hsv(fmod(_disco_t * 0.35, 1.0), 0.75, 1.0)
@@ -765,19 +727,6 @@ func focus_station(id: String) -> void:
 		"door":
 			camera.fov = 56.0 if not _landscape else 48.0
 			_move_camera(Transform3D(Basis(), Vector3(0.75, 0.45, -1.0)).looking_at(Vector3(0.9, 0.3, -3.1), Vector3.UP), 0.7)
-		"party":
-			# walk up to the purple door; it swings open
-			camera.fov = 56.0 if not _landscape else 48.0
-			var hinge := _bar_set.get_node_or_null("PartyHinge") as Node3D
-			if hinge != null:
-				var t := hinge.create_tween()
-				t.tween_property(hinge, "rotation:y", 1.35, 0.6).set_trans(Tween.TRANS_SINE)
-			sfx.emit("open")
-			_move_camera(Transform3D(Basis(), Vector3(-1.35, 0.4, -1.6)).looking_at(Vector3(-1.35, 0.3, -3.2), Vector3.UP), 0.8)
-		"back":
-			camera.fov = 56.0 if not _landscape else 48.0
-			sfx.emit("open")
-			_move_camera(Transform3D(Basis(), Vector3(-1.6, 0.4, 1.4)).looking_at(Vector3(-3.2, 0.3, 1.4), Vector3.UP), 0.8)
 		"darts":
 			_move_camera(darts_camera(), 0.7)
 		"darts_menu":
@@ -785,9 +734,6 @@ func focus_station(id: String) -> void:
 			var close := darts_camera()
 			var back := dartboard.global_position + (close.origin - dartboard.global_position) * 1.75
 			_move_camera(Transform3D(close.basis, back + Vector3(0, -0.24 if not _landscape else 0.0, 0)), 0.7)
-		"boxes":
-			camera.fov = 52.0 if not _landscape else 44.0
-			_move_camera(Transform3D(Basis(), Vector3(1.2, 0.45, -0.6)).looking_at(Vector3(3.0, 0.3, -1.2), Vector3.UP), 0.7)
 		"computer":
 			# in front of the cabinet: the screen up top, the controls below it
 			camera.fov = 52.0 if not _landscape else 44.0
@@ -1078,7 +1024,6 @@ func set_menu_mode(on: bool) -> void:
 		leave_room()
 	if on:
 		set_standing(false)
-		timber_off()
 		_darts_on = false
 		_darts_round = -1
 		if dartboard != null:
@@ -1108,8 +1053,8 @@ func set_menu_mode(on: bool) -> void:
 # ================================================================ seats
 
 ## Darts: nobody sits. Everyone stands in a ring in front of the board.
-const STAND_CENTER := Vector3(0.0, 0.0, -1.9)
-const STAND_R := 0.95
+const STAND_CENTER := Vector3(-1.35, 0.0, -2.25) # in front of the board, clear of the card table
+const STAND_R := 0.72
 var _stand := false
 
 
@@ -1208,7 +1153,7 @@ func _sync_figures(game, viewer: int) -> void:
 		var lines := [p.name + (" (D)" if p.seat == game.dealer else "")]
 		if p.alive:
 			var life := "HP %d/%d" % [p.hp, p.max_hp] if game.options.get("shotgun", true) else "WINS %d" % p.rounds_won
-			lines.append(life if game.kind == "darts" else ("STILL IN" if game.kind == "timber" else "%s  %d CARDS" % [life, p.hand.size()]))
+			lines.append(life if game.kind == "darts" else "%s  %d CARDS" % [life, p.hand.size()])
 			if game.has_method("table_note"):
 				lines.append(game.table_note(p.seat))
 			var flags := []
@@ -1337,9 +1282,6 @@ func sync(s: Dictionary) -> void:
 	var viewer: int = s["viewer"]
 	if game.kind == "darts":
 		_sync_darts(game, viewer)
-		return
-	if game.kind == "timber":
-		_sync_timber(game, viewer)
 		return
 	var new_round: bool = game.round_num != _round_seen and (game.phase == "draw" or game.phase == "play")
 	if dealing and not new_round:
@@ -2617,200 +2559,39 @@ func _sync_darts(game, viewer: int) -> void:
 	_sync_gun(game, viewer)
 
 
-# ================================================================ timber
-
-var tower: Node3D # tower3d.gd, while TIMBER's on
-var landing: MeshInstance3D # the mark under a block you're holding
-var hand: Node3D # hand3d.gd
-var _timber_on := false # the camera's on the tower
-var _timber_round := -1
-var tower_yaw := 0.0 # where round the tower the camera stands (radians, 0 = your seat side)
-var tower_focus := Vector3(0, 0.3, 0) # what the camera looks at
-var tower_dist := 0.95
-var tower_rise := 0.32 # how far above what it looks at
-var _cam_goal := Transform3D()
-var _ghost: MeshInstance3D # where your thumb wants the fingertip
-var _strain_line: MeshInstance3D # from the ghost to the real fingertip
-var _strain_mat: StandardMaterial3D
-
-
-## The tower and the hand, built the first time TIMBER's played.
-func timber_ready() -> void:
-	if tower != null:
-		return
-	tower = Tower3D.new()
-	add_child(tower)
-	hand = Hand3D.new()
-	add_child(hand)
-	# where a block you're holding will come down
-	var lm := StandardMaterial3D.new()
-	lm.albedo_color = Color(1.0, 0.85, 0.3, 0.4)
-	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var lb := BoxMesh.new()
-	lb.size = Vector3(tower.L, 0.004, tower.W)
-	landing = MeshInstance3D.new()
-	landing.mesh = lb
-	landing.material_override = lm
-	landing.visible = false
-	add_child(landing)
-	var gm := StandardMaterial3D.new()
-	gm.albedo_color = Color(1, 1, 1, 0.35)
-	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	gm.no_depth_test = true
-	var sm := SphereMesh.new()
-	sm.radius = 0.012
-	sm.height = 0.024
-	sm.radial_segments = 8
-	sm.rings = 4
-	_ghost = MeshInstance3D.new()
-	_ghost.mesh = sm
-	_ghost.material_override = gm
-	_ghost.visible = false
-	add_child(_ghost)
-	_strain_mat = StandardMaterial3D.new()
-	_strain_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_strain_mat.no_depth_test = true
-	_strain_mat.albedo_color = Color(1, 1, 1)
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.0025
-	cm.bottom_radius = 0.0025
-	cm.height = 1.0
-	cm.radial_segments = 4
-	_strain_line = MeshInstance3D.new()
-	_strain_line.mesh = cm
-	_strain_line.material_override = _strain_mat
-	_strain_line.visible = false
-	add_child(_strain_line)
-
-
-func timber_off() -> void:
-	_timber_on = false
-	_timber_round = -1
-	Engine.physics_ticks_per_second = 60
-	if tower != null:
-		tower.clear()
-		tower.visible = false # its lights too
-		landing.visible = false
-		hand.park()
-		_ghost.visible = false
-		_strain_line.visible = false
-
-
-func _sync_timber(game, viewer: int) -> void:
-	timber_ready()
-	tower.visible = true
-	# small stacked blocks need a fine time step; only while TIMBER's on
-	Engine.physics_ticks_per_second = 240
-	set_standing(false)
-	_viewer = viewer
-	dealing = false
-	_round_seen = game.round_num
-	_clear_labels()
-	for id in _cards:
-		_cards[id].queue_free()
-	_cards.clear()
-	_sync_figures(game, viewer)
-	if _dealer_chip != null:
-		_dealer_chip.visible = false
-	if game.round_num != _timber_round:
-		_timber_round = game.round_num
-		tower.build()
-		tower.set_watch(false)
-		get_tree().create_timer(1.6).timeout.connect(func() -> void:
-			if tower != null:
-				tower.set_watch(true))
-	if game.phase == "play":
-		_timber_on = true
-		set_tags_shown(false) # nothing floating over the tower while it's played
-		_gun_on_table(game.turn, viewer, game.players.size())
-	else:
-		if _timber_on:
-			_timber_on = false
-			set_tags_shown(true)
-			hand.park()
-			_ghost.visible = false
-			_strain_line.visible = false
-			_move_camera(_cam_home, 0.6)
-		_sync_gun(game, viewer)
-
-
-## TIMBER: the shotgun lies on the table in front of whoever's turn it is.
-func _gun_on_table(seat: int, viewer: int, count: int) -> void:
-	_hold_gun(-1)
-	var spot := seat_position(seat, viewer, count)
-	var at := spot.lerp(Vector3.ZERO, 0.52)
-	at.y = TABLE_TOP + 0.03
-	var across := Vector3.UP.cross(spot.normalized()).normalized()
-	var xf := Transform3D(Basis.looking_at(across, Vector3.UP) * Basis(Vector3.FORWARD, PI * 0.5), at)
-	if _gun_pose != "table%d" % seat:
-		_gun_pose = "table%d" % seat
-		if not shotgun.visible:
-			shotgun.transform = xf.translated(Vector3(0, -0.3, 0))
-			shotgun.visible = true
-		_tween(shotgun, "transform", xf, 0.0, 0.45)
-
-
-## Where the camera stands to look at the tower.
-func tower_camera() -> Transform3D:
-	var flat := Vector3(sin(tower_yaw), 0, cos(tower_yaw))
-	var from := tower_focus + flat * tower_dist + Vector3(0, tower_rise, 0)
-	return Transform3D(Basis.looking_at(tower_focus - from, Vector3.UP), from)
-
-
-func _process_timber(delta: float) -> void:
-	if not _timber_on or _room:
-		return
-	var goal := tower_camera()
-	camera.global_transform = camera.global_transform.interpolate_with(goal, minf(1.0, delta * 6.0))
-	camera.fov = 58.0 if not _landscape else 50.0
-
-
-## The ghost fingertip and the strain line between it and the real one:
-## white when it's easy, red when the block's fighting back.
-func show_strain(on: bool) -> float:
-	if hand == null:
-		return 0.0
-	_ghost.visible = on
-	_strain_line.visible = on
-	if not on:
-		return 0.0
-	var a: Vector3 = hand.target
-	var b: Vector3 = hand.tip.global_position
-	_ghost.global_position = a
-	var gap := a.distance_to(b)
-	var strain := clampf(gap / 0.03, 0.0, 1.0)
-	_strain_mat.albedo_color = Color(1, 1, 1).lerp(Color(1, 0.15, 0.1), strain)
-	if gap > 0.002:
-		var mid := (a + b) * 0.5
-		var up := (a - b).normalized()
-		var side := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
-		_strain_line.global_transform = Transform3D(Basis(side, up, side.cross(up)).scaled(Vector3(1, gap, 1)), mid)
-		_strain_line.visible = true
-	else:
-		_strain_line.visible = false
-	return strain
-
-
-## The block under a tap (in the 3D view's pixels), or null.
-func pick_block(at: Vector2) -> RigidBody3D:
-	if tower == null:
-		return null
-	var from := camera.project_ray_origin(at)
-	var dir := camera.project_ray_normal(at)
-	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 5.0, 1)
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	if hit.is_empty() or not (hit["collider"] is RigidBody3D) or not tower.blocks.has(hit["collider"]):
-		return null
-	return hit["collider"]
-
-
-## A screen point (3D view pixels) on the flat plane at height `y`.
-func on_plane(at: Vector2, y: float) -> Vector3:
-	var from := camera.project_ray_origin(at)
-	var dir := camera.project_ray_normal(at)
-	if absf(dir.y) < 0.0001:
-		return from
-	var t := (y - from.y) / dir.y
-	return from + dir * maxf(t, 0.0)
+## The darts corner: the board on the back wall, a spotlight on it, a red
+## neon DARTS over it, and a brass oche on the floor.
+func _build_dart_corner() -> void:
+	dartboard = Dartboard3D.new()
+	dartboard.position = BOARD_POS
+	_bar_set.add_child(dartboard)
+	var spot := SpotLight3D.new()
+	_bar_set.add_child(spot)
+	spot.look_at_from_position(BOARD_POS + Vector3(0, 0.75, 0.75), BOARD_POS, Vector3.UP)
+	spot.light_color = Color(1.0, 0.92, 0.78)
+	spot.light_energy = 3.0
+	spot.spot_range = 2.0
+	spot.spot_angle = 30.0
+	var neon := Label3D.new()
+	neon.text = "DARTS"
+	neon.font = _font
+	neon.font_size = 128
+	neon.pixel_size = 0.0026
+	neon.modulate = Color(1.0, 0.25, 0.3)
+	neon.outline_size = 0
+	neon.position = BOARD_POS + Vector3(0, 0.58, 0.04)
+	_bar_set.add_child(neon)
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(1.0, 0.25, 0.3)
+	glow.light_energy = 0.6
+	glow.omni_range = 1.4
+	glow.position = neon.position + Vector3(0, -0.05, 0.25)
+	_bar_set.add_child(glow)
+	Props.box(_bar_set, Vector3(0.6, 0.012, 0.04), Props.tex_mat("metal", Color(0.95, 0.75, 0.35), 4.0, 0.35, 0.85), Vector3(BOARD_POS.x, FLOOR_Y + 0.006, BOARD_POS.z + 2.37))
+	# light over where everyone stands
+	var ring := OmniLight3D.new()
+	ring.position = STAND_CENTER + Vector3(0, FLOOR_Y + 2.3, 0)
+	ring.light_color = Color(1.0, 0.85, 0.7)
+	ring.light_energy = 1.4
+	ring.omni_range = 2.4
+	_bar_set.add_child(ring)

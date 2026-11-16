@@ -1,4 +1,4 @@
-# Shotgun Party: item card art prompts
+# Shotgun Cards: item card art prompts
 
 The item cards are **playing cards first**. The game draws the card itself: its
 black body, purple border, a thin inner frame, the item "suit" star in two
@@ -115,58 +115,3 @@ simple: if you can't tell what it is from a thumbnail, it isn't working.
 - Ask for a square image. The game puts it in the card's panel, so anything
   near the very edge may be trimmed; keep the object in the middle.
 - No text anywhere in the picture. If Gemini adds some, say "remove all text".
-
-## Board game box lids
-
-Each board game on the party room shelf is a box with its lid art facing the
-room. Ask for one square picture, 512 x 512 px, and save it as
-`textures/boxes/<game>.png`. Lid art **has the game's name in it** (it's the
-box's logo), so when the file's there the game doesn't print its own name over
-it. With no file, the game paints a lid and puts the name on itself.
-
-**`timber.png`** (TIMBER, the tower game)
-> Board game box lid art, square, in the style of a PlayStation 2 era game
-> from around 2002: low-polygon 3D with flat faces and hard edges, small
-> blurry low-resolution textures, simple warm lighting, slight colour banding,
-> no modern photo-realism. A tall tower of pale pine wooden blocks stacked in
-> alternating layers of three, standing on a dark wooden table, lit by one
-> warm spotlight from above. One block sticks halfway out of the middle of the
-> tower and another is tumbling off the top. Behind it, a smoky dark red-brown
-> saloon background with a faint purple glow. Across the top of the lid, the
-> word "TIMBER" in big chunky blocky letters made of the same pale wood, with
-> dark outlines, slightly 3D. Only that one word: no exclamation mark, no
-> other text, no numbers, no logos, no borders.
-
-If the letters come out wrong, ask again with: *"Spell it exactly T-I-M-B-E-R,
-one word, no punctuation."* Or ask for the art with **no text at all**, save
-that instead, and tell me: I'll switch the box back to printing the name over
-it.
-
-### A 3D box instead (Meshy)
-
-A full box model can replace the box the game builds: export it from Meshy as
-**GLB** (textures embedded), save it as `models/boxes/<game>.glb` (for TIMBER,
-`models/boxes/timber.glb`) and open the project in Godot once. The game sizes
-it to the shelf (42 cm tall), stands it up and turns its front (the model's
-+Z) to the room, and doesn't print the name over it.
-
-**Meshy, Image to 3D** (best: upload the lid art from above as the front):
-> Board game box standing upright, this image is the front of the lid, flat
-> square box about 5 times wider than deep, deep red cardboard sides with worn
-> corners, low poly PS2 style.
-
-**Meshy, Text to 3D:**
-> A board game box standing upright, a flat square cardboard box about 5 times
-> as wide as it is deep, with a slightly larger lid sitting on it. Lid front: a
-> tall tower of pale pine wooden blocks in alternating layers of three, one
-> block sticking halfway out, one tumbling off the top, on a red-orange
-> background with a warm spotlight. Across the top of the lid front, the word
-> "TIMBER" in chunky blocky pale-wood letters with dark outlines. Box sides
-> deep red cardboard with worn corners. PlayStation 2 era game asset, low poly,
-> hard edges, small low-resolution hand-painted texture, slightly faded and
-> scuffed.
-
-Negative prompt: *exclamation mark, extra text, misspelled letters, logos,
-people, hands, open box, photorealistic, high detail, smooth subdivided
-surfaces, blurry text.* Settings: Realistic style, low polycount (about
-500-2,000), textures on.

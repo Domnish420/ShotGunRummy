@@ -28,7 +28,7 @@ func _initialize() -> void:
 	theme_holder.theme = Palette.make_theme()
 	theme_holder.size = Vector2(SIZE)
 	vp.add_child(theme_holder)
-	var lines := ["SHOTGUN PARTY ITEM CARDS", "Draw each face at 512 x 736 px (PNG) and name it <id>.png.", "The whole face is yours: picture, name, border. Rounded corners are fine (transparent outside).", ""]
+	var lines := ["SHOTGUN CARDS ITEM CARDS", "Draw each face at 512 x 736 px (PNG) and name it <id>.png.", "The whole face is yours: picture, name, border. Rounded corners are fine (transparent outside).", ""]
 	for id in Items.DEFS:
 		for c in theme_holder.get_children():
 			c.queue_free()
