@@ -31,6 +31,8 @@ var _thumb := [] # [base, end]
 var _wrist: Node3D
 var _palm: Node3D
 var _speed := 0.0
+var solid := false # a person's hand: the whole finger and the fist are solid, and it touches everything
+var soft := false # up against something it shouldn't shove (the fist on the tower's face): it just rests there
 var boost := 1.0 # pushing harder than a finger likes to (an AI out of options)
 
 
@@ -55,7 +57,15 @@ func _ready() -> void:
 	two.size = Vector3(0.05, 0.02, 0.022) # across both fingers
 	var flat := BoxShape3D.new()
 	flat.size = Vector3(0.016, 0.026, 0.22) # the hand's edge, along the blocks
-	for pair in [["poke", poke], ["two", two], ["flat", flat]]:
+	# the rest of the finger, and the fist behind it (a person's hand only)
+	var finger := CapsuleShape3D.new()
+	finger.radius = 0.009
+	finger.height = 0.085
+	var fist := BoxShape3D.new()
+	fist.size = Vector3(0.075, 0.055, 0.07)
+	tip.contact_monitor = true
+	tip.max_contacts_reported = 8
+	for pair in [["poke", poke], ["two", two], ["flat", flat], ["finger", finger], ["fist", fist]]:
 		var cs := CollisionShape3D.new()
 		cs.shape = pair[1]
 		tip.add_child(cs)
@@ -72,7 +82,33 @@ func set_tool(t: String) -> void:
 	tool = t
 	for k in _shapes:
 		_shapes[k].disabled = k != t
+	var body: bool = solid and t in ["poke", "two"]
+	_shapes["finger"].disabled = not body
+	_shapes["fist"].disabled = not body
+	tip.collision_mask = 1 if solid else 2 # everything, or just the block an AI's working
+	_aim_shapes()
 	_pose()
+
+
+## Which way the fingers point. The solid parts turn with it.
+func set_facing(f: Vector3) -> void:
+	f.y = 0.0
+	if f.length() < 0.01:
+		return
+	facing = f.normalized()
+	_aim_shapes()
+
+
+func _aim_shapes() -> void:
+	if _shapes.is_empty():
+		return
+	var b := Basis.looking_at(facing, Vector3.UP)
+	_shapes["two"].basis = b
+	_shapes["flat"].basis = b
+	_shapes["finger"].basis = b * Basis(Vector3.RIGHT, PI / 2.0) # the capsule lies along the finger
+	_shapes["finger"].position = -facing * 0.05
+	_shapes["fist"].basis = b
+	_shapes["fist"].position = -facing * 0.135
 
 
 ## Put the hand somewhere straight away (no pushing through the tower).
@@ -81,7 +117,7 @@ func jump_to(at: Vector3, face: Vector3) -> void:
 	target = at
 	tip.global_position = at
 	tip.linear_velocity = Vector3.ZERO
-	_shapes["two"].global_basis = Basis.looking_at(facing, Vector3.UP)
+	_aim_shapes()
 	_place_bones()
 
 
@@ -110,7 +146,7 @@ func _physics_process(delta: float) -> void:
 		# the pinch doesn't push: the tower holds the block; the hand just goes
 		tip.linear_velocity = (target - tip.global_position) * 20.0
 		return
-	var most: float = STRENGTH.get(tool, 5.0) * boost
+	var most: float = STRENGTH.get(tool, 5.0) * boost * (0.12 if soft else 1.0)
 	var to := target - tip.global_position
 	var top_speed := 0.8 if tool != "flat" else 1.6
 	var want := (to * 14.0).limit_length(top_speed) # slows as it arrives
@@ -227,7 +263,8 @@ func _place_bones() -> void:
 	var b := Basis.looking_at(f, Vector3.UP) # -z along `facing`, palm down
 	match tool:
 		"poke", "two":
-			b = b * Basis(Vector3.RIGHT, TILT)
+			if not solid: # a person's finger goes in level with the block
+				b = b * Basis(Vector3.RIGHT, TILT)
 		"flat":
 			b = b * Basis(Vector3(0, 0, 1), -PI / 2.0) # on its edge
 		"pinch":
@@ -240,8 +277,7 @@ func _place_bones() -> void:
 	global_transform = Transform3D(b, tip.global_position)
 	var at := working_point()
 	global_position += tip.global_position - at
-	if tool == "flat":
-		_shapes["flat"].global_basis = Basis.looking_at(f, Vector3.UP)
+	pass
 
 
 ## The end of a finger joint chain, in the world.

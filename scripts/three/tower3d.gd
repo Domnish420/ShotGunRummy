@@ -311,12 +311,6 @@ func place_on_top(b: RigidBody3D) -> float:
 	if top_blocks.size() >= 3:
 		layer = top + 1
 		top_blocks = []
-	var used := top_blocks.map(func(o): return int(o.get_meta("slot")))
-	var slot := 1
-	for s in [1, 0, 2]:
-		if not used.has(s):
-			slot = s
-			break
 	# line up with the layer it lies on: across it, centred on it, just above
 	var under: Array = (ls[layer - 1] if layer >= 1 and layer - 1 < ls.size() else []).filter(func(o): return o != b)
 	var center := Vector3.ZERO
@@ -340,6 +334,16 @@ func place_on_top(b: RigidBody3D) -> float:
 	if top_blocks.size() > 0:
 		axis = block_axis(top_blocks[0])
 	var across := Vector3(-axis.z, 0, axis.x)
+	# the first free place, by where the blocks up there really are (people
+	# put theirs down by hand): the middle, then a side
+	var used := {}
+	for o in top_blocks:
+		used[clampi(int(round((o.global_position - center).dot(across) / (W + GAP))), -1, 1)] = true
+	var slot := 1
+	for k in [0, -1, 1]:
+		if not used.has(k):
+			slot = k + 1
+			break
 	var target := Vector3(center.x, high + float(b.get_meta("height")) * 0.5 + 0.002, center.z) + across * ((slot - 1) * (W + GAP))
 	b.set_meta("layer", layer)
 	b.set_meta("slot", slot)
@@ -464,13 +468,61 @@ func set_down(b: RigidBody3D, layer: int) -> float:
 	t.tween_property(b, "global_position", target, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	t.tween_callback(func() -> void:
 		b.collision_layer = 1
-		b.collision_mask = 1
+		b.collision_mask = 1 | 4
+		(b.physics_material_override as PhysicsMaterial).friction = GRIP
+		moving.erase(b)
+		removed.erase(b)
 		b.freeze = false
 		b.linear_velocity = Vector3.ZERO
 		b.angular_velocity = Vector3.ZERO
 		if active == b:
 			active = null)
 	return 0.4
+
+
+## A person's hand touches everything (an AI's only the block it's working).
+func set_free_hand(on: bool) -> void:
+	for o in blocks:
+		o.collision_layer = 1
+		o.collision_mask = 1 | (4 if on else 0)
+		if not on:
+			(o.physics_material_override as PhysicsMaterial).friction = GRIP
+	if not on:
+		moving = {}
+
+
+## The block under your finger slides (its own friction); let go and it
+## grips like the rest again.
+func set_slide(b: RigidBody3D, on: bool) -> void:
+	(b.physics_material_override as PhysicsMaterial).friction = float(b.get_meta("slide", 0.15)) if on else GRIP
+	if on:
+		moving[b] = true
+	else:
+		moving.erase(b)
+
+
+## How far a point is from a block's surface (0 inside it).
+func surface_dist(b: RigidBody3D, p: Vector3) -> float:
+	var l: Vector3 = b.to_local(p)
+	var half := Vector3(L, float(b.get_meta("height")), W) * 0.5
+	var d := Vector3(maxf(absf(l.x) - half.x, 0.0), maxf(absf(l.y) - half.y, 0.0), maxf(absf(l.z) - half.z, 0.0))
+	return d.length()
+
+
+## Is this block out of the tower (not in among the others)?
+func clear_of(b: RigidBody3D) -> bool:
+	var d := b.global_position - tower_center()
+	d.y = 0.0
+	return d.length() > L * 1.02
+
+
+## Let go of a lifted block where it is: it falls (onto the table, say).
+func drop(b: RigidBody3D) -> void:
+	b.collision_layer = 1
+	b.collision_mask = 1 | 4
+	b.freeze = false
+	b.linear_velocity = Vector3.ZERO
+	b.angular_velocity = Vector3.ZERO
 
 
 ## Take a block out of the game (swiped off the tower).
@@ -519,7 +571,7 @@ func _fallen() -> bool:
 		removed[off[0]] = true
 		dropped.emit(off[0])
 		return false
-	fall_reason = "%d off the tower (L%d)" % [off.size(), int(off[0].get_meta("layer"))]
+	fall_reason = "%d off the tower (L%d s%d at %s, up %.2f, centre %s)" % [off.size(), int(off[0].get_meta("layer")), int(off[0].get_meta("slot")), off[0].global_position, off[0].global_transform.basis.y.y, center]
 	return true
 
 
@@ -537,7 +589,7 @@ func shake() -> float:
 func height() -> float:
 	var h := TOP_Y
 	for b in blocks:
-		if not removed.has(b):
+		if not removed.has(b) and b != active: # (not one being carried over it)
 			h = maxf(h, b.global_position.y)
 	return h
 

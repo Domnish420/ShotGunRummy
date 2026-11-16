@@ -76,6 +76,7 @@ func _play() -> void:
 			print("  turn: seat %d at %.1fs" % [d["seat"], Time.get_ticks_msec() / 1000.0]))
 	var vs: Vector2 = main.get_viewport_rect().size
 	var tried := {}
+	var busy := [false] # your hand's mid-turn
 	var push_frames := 0
 	var lift_y := 0.0
 	var top_at := Vector3.ZERO
@@ -100,64 +101,102 @@ func _play() -> void:
 			if pick != null and step % 5 == 0:
 				pick.pressed.emit()
 			continue
-		if ui.state == "choose" and ui._my_turn():
-			# pick a block: a middle one we haven't tried this tower
-			# like a person: a middle block from low down first (they're often loose)
-			var b = null
-			var best := 1e9
-			for o in main.world.tower.blocks:
-				if main.world.tower.takeable(o) and not tried.has(o):
-					var score: float = int(o.get_meta("layer")) + (0.0 if int(o.get_meta("slot")) == 1 else 30.0)
-					if score < best:
-						best = score
-						b = o
-			if b == null:
-				tried.clear()
-				continue
-			tried[b] = true
-			if OS.get_environment("V") != "":
-				print("  you pick L%d s%d" % [b.get_meta("layer"), b.get_meta("slot")])
-			ui._choose(b)
-			push_frames = 0
-			thumb_y = vs.y * 0.75
-			top_at = main.world.tower.blocks[-1].global_position
-			ui._press(Vector2(vs.x * 0.5, thumb_y))
-		elif ui.state == "pickup" and ui._my_turn():
-			if step % 20 == 0:
-				ui._pick_up()
-				lift_y = vs.y * 0.8
-				ui._press(Vector2(vs.x * 0.5, lift_y))
-		elif ui.state == "lift" and ui._my_turn():
-			lift_y -= 6.0 # carry it up
-			if lift_y < 20.0:
-				ui._release(Vector2(vs.x * 0.5, lift_y))
-				lift_y = vs.y * 0.8
-				ui._press(Vector2(vs.x * 0.5, lift_y))
-			ui._drag(Vector2(vs.x * 0.5, lift_y))
-		elif ui.state == "place" and ui._my_turn():
-			# it's out: slide it a touch, turn it twice (back the same way), set it down
-			if step % 30 == 0:
-				# slide it over the free place first, like you would
-				var spot: Vector3 = ui._spot["start"]
-				ui.block.global_position = Vector3(spot.x, ui.block.global_position.y, spot.z)
-				ui._set_it_down()
-		elif ui.state == "placed" and ui._my_turn():
-			if step % 30 == 0:
-				ui._done()
-		elif ui.state == "work" and ui._my_turn():
-			push_frames += 1
-			thumb_y -= 2.0 # a slow, steady thumb
-			ui._drag(Vector2(vs.x * 0.5, thumb_y))
-			var strain: float = (main.world.hand.target - main.world.hand.tip.global_position).length()
-			if OS.get_environment("V") != "" and push_frames % 20 == 0:
-				print("    f%d target %s tip %s blk %s strain %.3f top %s" % [push_frames, main.world.hand.target, main.world.hand.tip.global_position, ui.block.global_position, strain, main.world.tower.blocks[-1].global_position])
-			# watching the tower: if the top moves, or it won't go, back off
-			var sway: float = main.world.tower.blocks[-1].global_position.distance_to(top_at)
-			if push_frames > 20 and (strain > 0.015 or sway > 0.008) or push_frames > 900:
-				# it won't go: let go and try another
-				ui._release(Vector2(vs.x * 0.5, thumb_y))
-				ui._let_go_block()
+		if ui.state == "work" and ui._my_turn() and not busy[0]:
+			busy[0] = true
+			_take_turn(ui, busy)
 	check(g.phase == "match_over" or main._humans_out, "the match finishes (tower %d, phase %s)" % [g.round_num, g.phase])
 	check(n["placed"] > 0, "blocks came out and went on top (%d)" % n["placed"])
 	check(n["toppled"] > 0, "towers came down (%d)" % n["toppled"])
 	print("timber: %d towers, %d blocks placed (%d yours), %d came down, winner %s" % [g.round_num, n["placed"], n["mine"], n["toppled"], g.players[g.winner].name if g.winner >= 0 else "-"])
+
+
+## Your turn, played like a person with the free hand: poke a middle block
+## that holds nothing up about halfway, take the hand back out, walk round,
+## GRAB the end (or the block, if it's dropped out), pull it out, carry it up
+## and over the top, let go, DONE.
+func _take_turn(ui, busy: Array) -> void:
+	var w = main.world
+	var t = w.tower
+	var h = w.hand
+	var b = null
+	var best := 1e9
+	for o in t.blocks:
+		if not t.takeable(o):
+			continue
+		var left := {}
+		for q in t.blocks:
+			if q != o and not t.removed.has(q) and int(q.get_meta("layer")) == int(o.get_meta("layer")):
+				left[int(q.get_meta("slot"))] = true
+		var safe: bool = left.has(1) or (left.has(0) and left.has(2))
+		var score: float = int(o.get_meta("layer")) + (0.0 if safe else 100.0)
+		if score < best:
+			best = score
+			b = o
+	if b == null:
+		busy[0] = false
+		return
+	var axis: Vector3 = t.block_axis(b)
+	w.tower_yaw = atan2(-axis.x, -axis.z)
+	for i in range(10): await process_frame
+	var start: Vector3 = b.global_position - axis * (t.L * 0.5 + 0.03)
+	ui._want = start
+	h.jump_to(start, axis)
+	for i in range(200):
+		if ui.state != "work": break
+		ui.push_hand(4.0)
+		await process_frame
+	for i in range(120):
+		if ui.state != "work": break
+		ui.push_hand(-5.0)
+		await process_frame
+	if ui.state != "work":
+		busy[0] = false
+		return
+	w.tower_yaw += PI
+	for i in range(20): await process_frame
+	var at: Vector3 = b.global_position + axis * (t.L * 0.5 + 0.012)
+	if ui.block != null: # it's dropped out already: reach for it where it lies
+		var outward: Vector3 = ui.block.global_position - t.tower_center()
+		outward.y = 0.0
+		at = ui.block.global_position + outward.normalized() * 0.09 + Vector3(0, 0.02, 0)
+	ui._want = at
+	h.jump_to(at, -axis)
+	for i in range(10): await process_frame
+	ui.grab()
+	for i in range(500):
+		if ui.state != "work" or ui._lifted: break
+		ui.push_hand(-2.5)
+		await process_frame
+	if ui.state != "work" or not ui._lifted:
+		busy[0] = false # slipped, or it came down: the main loop tries again
+		return
+	var blk = ui.block
+	for i in range(600):
+		if ui.state != "work" or h.target.y > t.height() + 0.12: break
+		ui.move_hand(Vector2(0, -6))
+		await process_frame
+	for i in range(400):
+		if ui.state != "work": break
+		# over the first free place in the top layer
+		var goal: Vector3 = ui._spot["start"]
+		var f: Vector3 = ui._forward()
+		var right := Vector3(-f.z, 0, f.x)
+		var side: float = (goal - blk.global_position).dot(right)
+		var ahead: float = (goal - blk.global_position).dot(f)
+		if absf(side) > 0.008:
+			ui.move_hand(Vector2(signf(side) * 4.0, 0))
+		elif absf(ahead) > 0.008:
+			ui.push_hand(signf(ahead) * 4.0)
+		else:
+			break
+		await process_frame
+	for i in range(20): await process_frame
+	if OS.get_environment("V") != "":
+		print("    you set it down at %s (spot %s, layer %d), state %s lifted %s" % [blk.global_position, ui._spot["start"], ui._spot["layer"], ui.state, ui._lifted])
+	if ui.state == "work" and ui._lifted:
+		ui.grab() # let go
+	for i in range(60): await process_frame
+	if ui.state == "placed":
+		ui._done()
+	for i in range(30): await process_frame
+	busy[0] = false
